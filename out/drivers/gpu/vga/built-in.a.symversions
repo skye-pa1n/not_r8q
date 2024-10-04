@@ -1,0 +1,6 @@
+__crc_vga_default_device = 0x74078e01;
+__crc_vga_get = 0x0d306c80;
+__crc_vga_tryget = 0x39e78ec5;
+__crc_vga_put = 0xf4c55d9e;
+__crc_vga_set_legacy_decoding = 0xe895bdd9;
+__crc_vga_client_register = 0x0b03ce55;

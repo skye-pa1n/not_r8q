@@ -1,0 +1,10 @@
+__crc_adc_tm5_channel_measure = 0x7496a9f2;
+__crc_adc_tm5_disable_chan_meas = 0x82fd953a;
+__crc_get_adc_tm = 0x1f27d234;
+__crc_therm_fwd_scale = 0x103c63ed;
+__crc_therm_fwd_scale_adc7 = 0xdc207834;
+__crc_adc_tm_scale_therm_voltage_100k = 0x0eb72ee3;
+__crc_adc_tm_scale_therm_voltage_100k_adc7 = 0xd39af00e;
+__crc_adc_tm_absolute_rthr = 0x768f8dc3;
+__crc_adc_tm_absolute_rthr_adc7 = 0x81f4140a;
+__crc_qti_virtual_sensor_register = 0x762751e5;

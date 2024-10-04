@@ -1,0 +1,4 @@
+__crc___tracepoint_mc_event = 0xfc3973d8;
+__crc___tracepoint_non_standard_event = 0x45f1bc79;
+__crc___tracepoint_arm_event = 0xb18110e0;
+__crc_ras_userspace_consumers = 0xcdb6adcc;

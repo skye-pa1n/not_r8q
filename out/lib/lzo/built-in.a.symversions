@@ -1,0 +1,3 @@
+__crc_lzo1x_1_compress = 0x787c882b;
+__crc_lzorle1x_1_compress = 0x79f697e4;
+__crc_lzo1x_decompress_safe = 0x04df8fbc;

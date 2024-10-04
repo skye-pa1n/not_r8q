@@ -1,0 +1,5 @@
+__crc_sec_abc_get_enabled = 0x1f5babc6;
+__crc_sec_abc_send_event = 0x5de7762c;
+__crc_sec_abc_wait_enabled = 0x2d751505;
+__crc_abc_hub_get_enabled = 0x0715c6ff;
+__crc_abc_hub_send_event = 0x02fab049;

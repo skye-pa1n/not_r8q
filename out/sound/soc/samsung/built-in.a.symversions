@@ -1,0 +1,13 @@
+__crc_audio_register_jack_select_cb = 0xc1fcc912;
+__crc_audio_register_jack_state_cb = 0x8cc9e83f;
+__crc_audio_register_key_state_cb = 0x275e012f;
+__crc_audio_register_mic_adc_cb = 0x09f4d505;
+__crc_audio_register_force_enable_antenna_cb = 0xdca01a2e;
+__crc_audio_register_antenna_state_cb = 0x98ed70d4;
+__crc_audio_register_codec_id_state_cb = 0xdd89e807;
+__crc_audio_register_temperature_max_cb = 0xcceff169;
+__crc_audio_register_temperature_keep_max_cb = 0x1dfe817a;
+__crc_audio_register_temperature_overcount_cb = 0xcd6828ab;
+__crc_audio_register_excursion_max_cb = 0xa0b5e79c;
+__crc_audio_register_excursion_overcount_cb = 0x82ea1fa1;
+__crc_register_cirrus_bigdata_cb = 0xd39411f0;

@@ -1,0 +1,5 @@
+__crc_ipa3_get_transport_info = 0x331d8d9a;
+__crc_ipa_debugfs_get_root = 0x024e80d1;
+__crc_ipa3_uc_loaded_check = 0x849793f5;
+__crc_ipa3_uc_register_ready_cb = 0xac3833c8;
+__crc_ipa3_uc_unregister_ready_cb = 0xa0ca4aa6;

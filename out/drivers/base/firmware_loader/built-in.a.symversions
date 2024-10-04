@@ -1,0 +1,9 @@
+__crc_fw_fallback_config = 0xd3ae7756;
+__crc_firmware_config_table = 0x7baac6e7;
+__crc_request_firmware = 0x5990ab7c;
+__crc_firmware_request_nowarn = 0x9653bad0;
+__crc_request_firmware_direct = 0x27705fc2;
+__crc_firmware_request_cache = 0x768ce652;
+__crc_request_firmware_into_buf = 0xe42bfe89;
+__crc_release_firmware = 0x413f76be;
+__crc_request_firmware_nowait = 0x5f0182b5;

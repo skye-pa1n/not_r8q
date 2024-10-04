@@ -1,0 +1,5 @@
+__crc_free_rs = 0x6c23f4ef;
+__crc_init_rs_gfp = 0x4815265d;
+__crc_init_rs_non_canonical = 0xe9fe18b0;
+__crc_encode_rs8 = 0x74f14b6c;
+__crc_decode_rs8 = 0x65f24eea;

@@ -1,0 +1,7 @@
+__crc_hwmon_device_register_with_groups = 0xb5b49841;
+__crc_hwmon_device_register_with_info = 0x5c6174c9;
+__crc_hwmon_device_register = 0x748dffe7;
+__crc_hwmon_device_unregister = 0xd541608e;
+__crc_devm_hwmon_device_register_with_groups = 0xa0a68e51;
+__crc_devm_hwmon_device_register_with_info = 0x219c252c;
+__crc_devm_hwmon_device_unregister = 0xac257a9e;

@@ -1,0 +1,7 @@
+__crc_zlib_inflate_workspacesize = 0xce5ac24f;
+__crc_zlib_inflate = 0x581f98da;
+__crc_zlib_inflateInit2 = 0x35a88f28;
+__crc_zlib_inflateEnd = 0x107e5878;
+__crc_zlib_inflateReset = 0xbb0540aa;
+__crc_zlib_inflateIncomp = 0x424d3620;
+__crc_zlib_inflate_blob = 0x65408378;

@@ -1,0 +1,17 @@
+__crc_rng_is_initialized = 0x3a4f9d28;
+__crc_wait_for_random_bytes = 0x742578a5;
+__crc_get_random_bytes = 0x79aa04a2;
+__crc_get_random_u64 = 0xe3ff2c41;
+__crc_get_random_u32 = 0xd36dc10c;
+__crc_get_random_bytes_arch = 0x9f67c8b7;
+__crc_add_device_randomness = 0xd66c8184;
+__crc_add_hwgenerator_randomness = 0xa1ed9c8b;
+__crc_add_interrupt_randomness = 0x16dfbf36;
+__crc_add_input_randomness = 0x3cd06035;
+__crc_add_disk_randomness = 0xb11db72e;
+__crc_misc_register = 0xa7fc221b;
+__crc_misc_deregister = 0xbbe97eb5;
+__crc_hwrng_register = 0x6741f6ba;
+__crc_hwrng_unregister = 0x7e967cfb;
+__crc_devm_hwrng_register = 0xcf6ac76d;
+__crc_devm_hwrng_unregister = 0xae536be0;

@@ -1,0 +1,9 @@
+__crc_msm_cvp_est_cycles = 0x876b6e07;
+__crc_msm_cvp_poll = 0xd847dee3;
+__crc_msm_cvp_private = 0x676b58d7;
+__crc_msm_cvp_open = 0xe1116234;
+__crc_msm_cvp_close = 0x7f6c1baa;
+__crc_msm_cvp_suspend = 0x75c721b7;
+__crc_msm_cvp_debug = 0x78f62a5c;
+__crc_msm_cvp_debug_out = 0xb3bdb5cf;
+__crc_msm_cvp_load_u32_table = 0x72df008c;

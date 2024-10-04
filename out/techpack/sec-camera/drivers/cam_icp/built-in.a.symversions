@@ -1,0 +1,4 @@
+__crc_cam_a5_soc_info = 0xbc758511;
+__crc_cam_a5_hw_info = 0xb7ab3961;
+__crc_cam_ipe_hw_info = 0x87e124d5;
+__crc_cam_bps_hw_info = 0x070a70c5;

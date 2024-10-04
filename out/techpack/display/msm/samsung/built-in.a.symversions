@@ -1,0 +1,13 @@
+__crc_get_lcd_attached = 0x51ac8036;
+__crc_get_lcd_attached_secondary = 0x07d54703;
+__crc_get_window_color = 0x79a02a13;
+__crc_ss_is_recovery_check = 0x59d4384d;
+__crc_ldi_fps = 0x1d0e0bf0;
+__crc_get_hall_ic_status = 0x34c16b8f;
+__crc_ss_panel_notifier_register = 0x8e1eb9f3;
+__crc_ss_panel_notifier_unregister = 0x1ced6042;
+__crc_ss_panel_notifier_call_chain = 0xf1237493;
+__crc_dpui_logging_notify = 0xcf12297d;
+__crc_dpui_logging_register = 0xcd2d02dd;
+__crc_dpui_logging_unregister = 0x1967c0fe;
+__crc_get_dpui_log = 0x6a6cf819;

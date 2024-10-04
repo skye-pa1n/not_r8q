@@ -1,0 +1,10 @@
+__crc_mbox_chan_received_data = 0x87cd185f;
+__crc_mbox_chan_txdone = 0x7e395b42;
+__crc_mbox_client_txdone = 0x42b89ed1;
+__crc_mbox_client_peek_data = 0xc1f91691;
+__crc_mbox_send_message = 0x132f34d1;
+__crc_mbox_request_channel = 0xbf6eb0f3;
+__crc_mbox_request_channel_byname = 0x7fc139af;
+__crc_mbox_free_channel = 0xa3e86543;
+__crc_mbox_controller_register = 0x82ebf337;
+__crc_mbox_controller_unregister = 0x28271d13;

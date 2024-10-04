@@ -1,0 +1,15 @@
+__crc_qpnp_pon_set_restart_reason = 0x8ae70ff0;
+__crc_qpnp_pon_check_hard_reset_stored = 0x5b7ed15e;
+__crc_qpnp_pon_system_pwr_off = 0xb2a86526;
+__crc_qpnp_pon_modem_pwr_off = 0x1d143659;
+__crc_qpnp_pon_is_warm_reset = 0xfbdabedb;
+__crc_qpnp_pon_wd_config = 0x58ebb07b;
+__crc_qpnp_pon_trigger_config = 0xfd34a99b;
+__crc_get_resin_keycode = 0x318d5203;
+__crc_get_pkey_press = 0x07ee515f;
+__crc_get_resinkey_press = 0xdd14fe74;
+__crc_pkey_pressed_count = 0x569e7901;
+__crc_resinkey_pressed_count = 0x758abb1e;
+__crc_qpnp_get_s2_reset_onoff = 0x01c49e7b;
+__crc_qpnp_set_resin_wk_int = 0x013c4b85;
+__crc_sec_get_pwrsrc = 0x5bbf8beb;

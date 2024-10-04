@@ -1,0 +1,11 @@
+__crc_hdcp2_force_encryption = 0x1d384434;
+__crc_hdcp2_app_comm = 0xfed9a8ba;
+__crc_hdcp2_open_stream = 0x399d03b1;
+__crc_hdcp2_close_stream = 0x177e5577;
+__crc_hdcp2_init = 0x28ff8398;
+__crc_hdcp2_deinit = 0xa3b22369;
+__crc_qseecom_start_app = 0x802d7623;
+__crc_qseecom_shutdown_app = 0xd516a511;
+__crc_qseecom_send_command = 0x53d35828;
+__crc_qseecom_set_bandwidth = 0x19a18856;
+__crc_qseecom_process_listener_from_smcinvoke = 0xc9dc91db;

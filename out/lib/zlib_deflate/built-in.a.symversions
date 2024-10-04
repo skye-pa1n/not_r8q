@@ -1,0 +1,5 @@
+__crc_zlib_deflate_workspacesize = 0xe9f7149c;
+__crc_zlib_deflate = 0xf2c43f3f;
+__crc_zlib_deflateInit2 = 0x5a0b73d0;
+__crc_zlib_deflateEnd = 0xc890c008;
+__crc_zlib_deflateReset = 0x6aeefac4;

@@ -1,0 +1,15 @@
+__crc_usbpd_get_plug_orientation = 0xf98b83c4;
+__crc_usbpd_register_svid = 0xc746c984;
+__crc_usbpd_unregister_svid = 0xdecee29f;
+__crc_usbpd_send_vdm = 0x787fb023;
+__crc_usbpd_send_svdm = 0xc021df4d;
+__crc_usbpd_vdm_in_suspend = 0x69b0bbb4;
+__crc_devm_usbpd_get_by_phandle = 0xe52abdc3;
+__crc_usbpd_create = 0x94e5d0dd;
+__crc_usbpd_destroy = 0x737fc108;
+__crc_pd_phy_update_roles = 0xf21d8f91;
+__crc_pd_phy_update_frame_filter = 0xba342ef3;
+__crc_pd_phy_open = 0xb62be1b0;
+__crc_pd_phy_signal = 0xa5d145c4;
+__crc_pd_phy_write = 0xb6461b31;
+__crc_pd_phy_close = 0xd98494de;

@@ -1,0 +1,8 @@
+__crc_cam_cdm_get_iommu_handle = 0x25428167;
+__crc_cam_cdm_acquire = 0x2c6dcd04;
+__crc_cam_cdm_release = 0xb6a3e62c;
+__crc_cam_cdm_submit_bls = 0x6f6ce18c;
+__crc_cam_cdm_stream_on = 0x6ad2fee8;
+__crc_cam_cdm_stream_off = 0xd9a5f537;
+__crc_cam_cdm_reset_hw = 0x05065607;
+__crc_cam_cdm_detect_hang_error = 0x93b98818;
