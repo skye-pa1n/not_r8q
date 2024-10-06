@@ -57,9 +57,7 @@
 
 		qcom,initial-pwrlevel = <2>;
 
-		qcom,idle-timeout = <80>; /* msecs */
-
-		qcom,no-nap;
+		qcom,idle-timeout = <58>; /* msecs */
 
 		qcom,highest-bank-bit = <16>;
 
@@ -74,8 +72,6 @@
 		#cooling-cells = <2>;
 
 		qcom,tzone-name = "gpuss-max-step";
-
-		qcom,pm-qos-active-latency = <44>;
 
 		clocks = <&clock_gpucc GPU_CC_CXO_CLK>,
 			<&clock_gcc GCC_DDRSS_GPU_AXI_CLK>,
@@ -114,7 +110,7 @@
 			compatible = "qcom,gpu-bus-table",
 				"qcom,gpu-bus-table-ddr7";
 			qcom,msm-bus,name = "grp3d";
-			qcom,msm-bus,num-cases = <12>;
+			qcom,msm-bus,num-cases = <13>;
 			qcom,msm-bus,num-paths = <1>;
 			qcom,msm-bus,vectors-KBps =
 				<26 512 0 MHZ_TO_KBPS(0, 4)>,    /* index=0  */
@@ -128,14 +124,15 @@
 				<26 512 0 MHZ_TO_KBPS(1353, 4)>, /* index=8  */
 				<26 512 0 MHZ_TO_KBPS(1555, 4)>, /* index=9  */
 				<26 512 0 MHZ_TO_KBPS(1804, 4)>, /* index=10 */
-				<26 512 0 MHZ_TO_KBPS(2092, 4)>; /* index=11 */
+				<26 512 0 MHZ_TO_KBPS(2092, 4)>, /* index=11 */
+				<26 512 0 MHZ_TO_KBPS(2736, 4)>; /* index=12 */
 		};
 
 		qcom,gpu-bus-table-1 {
 			compatible = "qcom,gpu-bus-table",
 				"qcom,gpu-bus-table-ddr8";
 			qcom,msm-bus,name = "grp3d";
-			qcom,msm-bus,num-cases = <12>;
+			qcom,msm-bus,num-cases = <13>;
 			qcom,msm-bus,num-paths = <1>;
 			qcom,msm-bus,vectors-KBps =
 				<26 512 0 MHZ_TO_KBPS(0, 4)>,    /* index=0  */
@@ -149,7 +146,8 @@
 				<26 512 0 MHZ_TO_KBPS(1555, 4)>, /* index=8  */
 				<26 512 0 MHZ_TO_KBPS(1804, 4)>, /* index=9  */
 				<26 512 0 MHZ_TO_KBPS(2092, 4)>, /* index=10 */
-				<26 512 0 MHZ_TO_KBPS(2736, 4)>; /* index=11 */
+				<26 512 0 MHZ_TO_KBPS(2736, 4)>, /* index=11 */
+				<26 512 0 MHZ_TO_KBPS(3033, 4)>; /* index=12 */
 		};
 
 		qcom,l3-pwrlevels {
@@ -171,6 +169,12 @@
 			qcom,l3-pwrlevel@2 {
 				reg = <2>;
 				qcom,l3-freq = <1344000000>;
+				
+			};
+			
+			qcom,l3-pwrlevel@3 {
+				reg = <3>;
+				qcom,l3-freq = <1733000000>;	
 			};
 		};
 

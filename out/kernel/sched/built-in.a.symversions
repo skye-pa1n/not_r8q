@@ -91,4 +91,3 @@ __crc_housekeeping_any_cpu = 0x10075f38;
 __crc_housekeeping_cpumask = 0xc81cf61e;
 __crc_housekeeping_affine = 0x1868e312;
 __crc_housekeeping_test_cpu = 0xfa600a92;
-__crc_core_ctl_set_boost = 0xba4235f0;

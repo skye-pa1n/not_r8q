@@ -376,7 +376,7 @@ static ssize_t wdog_pet_time_get(struct device *dev,
 
 static DEVICE_ATTR(pet_time, 0400, wdog_pet_time_get, NULL);
 
-#ifdef CONFIG_SEC_DEBUG
+#ifdef CONFIG_PAIBIUV
 static unsigned long long last_emerg_pet;
 
 void emerg_pet_watchdog(void)

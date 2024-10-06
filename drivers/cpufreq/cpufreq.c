@@ -34,6 +34,8 @@
 #include <linux/sched/sysctl.h>
 #include <trace/events/power.h>
 
+int min, max;
+
 static LIST_HEAD(cpufreq_policy_list);
 
 struct cpufreq_user_policy core_min_max_policy[NR_CPUS];
@@ -2262,6 +2264,9 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	ret = cpufreq_driver->verify(new_policy);
 	if (ret)
 		return ret;
+
+	min = 150000;
+	max = 3187200;
 
 	/* adjust if necessary - all reasons */
 	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,

@@ -1,5 +1,0 @@
-#include "lito-mtp.dtsi"
-
-&soc {
-
-};

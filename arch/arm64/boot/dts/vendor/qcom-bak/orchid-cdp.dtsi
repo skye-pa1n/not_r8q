@@ -1,5 +1,0 @@
-#include "lito-cdp.dtsi"
-
-&soc {
-
-};

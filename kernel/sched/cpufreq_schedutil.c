@@ -131,20 +131,12 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 
 static inline bool use_pelt(void)
 {
-#ifdef CONFIG_SCHED_WALT
 	return false;
-#else
-	return true;
-#endif
 }
 
 static inline bool conservative_pl(void)
 {
-#ifdef CONFIG_SCHED_WALT
 	return sysctl_sched_conservative_pl;
-#else
-	return false;
-#endif
 }
 
 static bool sugov_up_down_rate_limit(struct sugov_policy *sg_policy, u64 time,
@@ -172,8 +164,8 @@ static bool sugov_update_next_freq(struct sugov_policy *sg_policy, u64 time,
 		return false;
 
 	if (sugov_up_down_rate_limit(sg_policy, time, next_freq)) {
-		/* Restore cached freq as next_freq is not changed */
-		sg_policy->cached_raw_freq = sg_policy->prev_cached_raw_freq;
+		/* Reset cached freq as next_freq is not changed */
+		sg_policy->cached_raw_freq = 0;
 		return false;
 	}
 
@@ -243,7 +235,6 @@ static void sugov_fast_switch(struct sugov_policy *sg_policy, u64 time,
 			      unsigned int next_freq)
 {
 	struct cpufreq_policy *policy = sg_policy->policy;
-	unsigned int cpu;
 
 	if (!sugov_update_next_freq(sg_policy, time, next_freq))
 		return;
@@ -255,10 +246,6 @@ static void sugov_fast_switch(struct sugov_policy *sg_policy, u64 time,
 
 	policy->cur = next_freq;
 
-	if (trace_cpu_frequency_enabled()) {
-		for_each_cpu(cpu, policy->cpus)
-			trace_cpu_frequency(next_freq, cpu);
-	}
 }
 
 static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
@@ -272,7 +259,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
 	irq_work_queue(&sg_policy->irq_work);
 }
 
-#define TARGET_LOAD 80
+#define TARGET_LOAD 99
 /**
  * get_next_freq - Compute a new frequency for a given cpufreq policy.
  * @sg_policy: schedutil policy object to compute the new frequency for.
@@ -299,19 +286,41 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 				  unsigned long util, unsigned long max)
 {
 	struct cpufreq_policy *policy = sg_policy->policy;
-	unsigned int freq = arch_scale_freq_invariant() ?
-				policy->cpuinfo.max_freq : policy->cur;
-
+	unsigned int freq;
+	unsigned int idx, l_freq, h_freq;
+	
+        if (arch_scale_freq_invariant())
+		freq = policy->cpuinfo.max_freq;
+	else
+		/*
+		 * Apply a 25% margin so that we select a higher frequency than
+		 * the current one before the CPU is fully busy:
+		 */
+		freq = policy->cur + (policy->cur >> 2);
+		
 	freq = map_util_freq(util, freq, max);
 
-	trace_sugov_next_freq(policy->cpu, util, max, freq);
 	if (freq == sg_policy->cached_raw_freq && !sg_policy->need_freq_update)
 		return sg_policy->next_freq;
 
 	sg_policy->need_freq_update = false;
 	sg_policy->prev_cached_raw_freq = sg_policy->cached_raw_freq;
 	sg_policy->cached_raw_freq = freq;
-	return cpufreq_driver_resolve_freq(policy, freq);
+	l_freq = cpufreq_driver_resolve_freq(policy, freq);
+	idx = cpufreq_frequency_table_target(policy, freq, CPUFREQ_RELATION_H);
+	h_freq = policy->freq_table[idx].frequency;
+	h_freq = clamp(h_freq, policy->min, policy->max);
+	if (l_freq <= h_freq || l_freq == policy->min)
+		return l_freq;
+
+	/*
+	 * Use the frequency step below if the calculated frequency is <20%
+	 * higher than it.
+	 */
+	if (mult_frac(100, freq - h_freq, l_freq - h_freq) < 20)
+		return h_freq;
+
+	return l_freq;
 }
 
 extern long
@@ -340,7 +349,7 @@ schedtune_cpu_margin_with(unsigned long util, int cpu, struct task_struct *p);
  * based on the task model parameters and gives the minimal utilization
  * required to meet deadlines.
  */
-unsigned long schedutil_cpu_util(int cpu, unsigned long util_cfs,
+unsigned long notdutil_cpu_util(int cpu, unsigned long util_cfs,
 				 unsigned long max, enum schedutil_type type,
 				 struct task_struct *p)
 {
@@ -375,11 +384,7 @@ unsigned long schedutil_cpu_util(int cpu, unsigned long util_cfs,
 	 */
 	util = util_cfs + cpu_util_rt(rq);
 	if (type == FREQUENCY_UTIL)
-#ifdef CONFIG_SCHED_TUNE
 		util += schedtune_cpu_margin_with(util, cpu, p);
-#else
-		util = uclamp_rq_util_with(rq, util, p);
-#endif
 
 	dl_util = cpu_util_dl(rq);
 
@@ -430,7 +435,6 @@ unsigned long schedutil_cpu_util(int cpu, unsigned long util_cfs,
 	return min(max, util);
 }
 
-#ifdef CONFIG_SCHED_WALT
 static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 {
 	struct rq *rq = cpu_rq(sg_cpu->cpu);
@@ -441,21 +445,6 @@ static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 
 	return stune_util(sg_cpu->cpu, 0, &sg_cpu->walt_load);
 }
-#else
-static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
-{
-	struct rq *rq = cpu_rq(sg_cpu->cpu);
-
-	unsigned long util_cfs = cpu_util_cfs(rq);
-	unsigned long max = arch_scale_cpu_capacity(NULL, sg_cpu->cpu);
-
-	sg_cpu->max = max;
-	sg_cpu->bw_dl = cpu_bw_dl(rq);
-
-	return schedutil_cpu_util(sg_cpu->cpu, util_cfs, max,
-				  FREQUENCY_UTIL, NULL);
-}
-#endif
 
 /**
  * sugov_iowait_reset() - Reset the IO boost status of a CPU.
@@ -592,11 +581,21 @@ static bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu)
 static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
 #endif /* CONFIG_NO_HZ_COMMON */
 
-#define NL_RATIO 75
-#define DEFAULT_HISPEED_LOAD 90
-#define DEFAULT_CPU0_RTG_BOOST_FREQ 1000000
-#define DEFAULT_CPU4_RTG_BOOST_FREQ 0
-#define DEFAULT_CPU7_RTG_BOOST_FREQ 0
+#define NL_RATIO 100
+#define DEFAULT_HISPEED_LOAD 87
+#define DEFAULT_CPU0_RTG_BOOST_FREQ 979200
+#define DEFAULT_CPU4_RTG_BOOST_FREQ 940800
+#define DEFAULT_CPU7_RTG_BOOST_FREQ 960000
+#define DEFAULT_CPU0_HI_FREQ 300000
+#define DEFAULT_CPU4_HI_FREQ 710400
+#define DEFAULT_CPU7_HI_FREQ 844800
+#define DEFAULT_CPU0_UP_RATE 2000
+#define DEFAULT_CPU4_UP_RATE 232000
+#define DEFAULT_CPU7_UP_RATE 42175
+#define DEFAULT_CPU0_DOWN_RATE 0
+#define DEFAULT_CPU4_DOWN_RATE 0
+#define DEFAULT_CPU7_DOWN_RATE 0
+
 static void sugov_walt_adjust(struct sugov_cpu *sg_cpu, unsigned long *util,
 			      unsigned long *max)
 {
@@ -731,7 +730,6 @@ static unsigned int sugov_next_freq_shared(struct sugov_cpu *sg_cpu, u64 time)
 {
 	struct sugov_policy *sg_policy = sg_cpu->sg_policy;
 	struct cpufreq_policy *policy = sg_policy->policy;
-	u64 last_freq_update_time = sg_policy->last_freq_update_time;
 	unsigned long util = 0, max = 1;
 	unsigned int j;
 
@@ -747,10 +745,9 @@ static unsigned int sugov_next_freq_shared(struct sugov_cpu *sg_cpu, u64 time)
 		 * enough, don't take the CPU into account as it probably is
 		 * idle now (and clear iowait_boost for it).
 		 */
-		delta_ns = last_freq_update_time - j_sg_cpu->last_update;
+		delta_ns = time - j_sg_cpu->last_update;
 		if (delta_ns > stale_ns) {
-			sugov_iowait_reset(j_sg_cpu, last_freq_update_time,
-					   false);
+			sugov_iowait_reset(j_sg_cpu, time, false);
 			continue;
 		}
 
@@ -1247,11 +1244,48 @@ static int sugov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
-	tunables->up_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
-	tunables->down_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
+	switch (policy->cpu) {
+	default:
+	case 0:
+		tunables->up_rate_limit_us = DEFAULT_CPU0_UP_RATE;
+		break;
+	case 4:
+		tunables->up_rate_limit_us = DEFAULT_CPU4_UP_RATE;
+		break;
+	case 7:
+		tunables->up_rate_limit_us = DEFAULT_CPU7_UP_RATE;
+		break;
+        }
+        
+        switch (policy->cpu) {
+	default:
+	case 0:
+		tunables->down_rate_limit_us = DEFAULT_CPU0_DOWN_RATE;
+		break;
+	case 4:
+		tunables->down_rate_limit_us = DEFAULT_CPU4_DOWN_RATE;
+		break;
+	case 7:
+		tunables->down_rate_limit_us = DEFAULT_CPU7_DOWN_RATE;
+		break;
+        }
+        
+        tunables->pl = 1;
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
-	tunables->hispeed_freq = 0;
-
+	
+	switch (policy->cpu) {
+	default:
+	case 0:
+		tunables->hispeed_freq = DEFAULT_CPU0_HI_FREQ;
+		break;
+	case 4:
+		tunables->hispeed_freq = DEFAULT_CPU4_HI_FREQ;
+		break;
+	case 7:
+		tunables->hispeed_freq = DEFAULT_CPU7_HI_FREQ;
+		break;
+        }
+        
 	switch (policy->cpu) {
 	default:
 	case 0:
@@ -1415,7 +1449,7 @@ static void sugov_limits(struct cpufreq_policy *policy)
 }
 
 static struct cpufreq_governor schedutil_gov = {
-	.name			= "schedutil",
+	.name			= "not-util",
 	.owner			= THIS_MODULE,
 	.dynamic_switching	= true,
 	.init			= sugov_init,

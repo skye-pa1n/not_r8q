@@ -213,7 +213,7 @@ void panic(const char *fmt, ...)
     
 	sec_debug_store_extc_idx(false);
 	/*To prevent watchdog reset during panic handling. */
-	emerg_pet_watchdog();
+	/*emerg_pet_watchdog();*/
 
 	/*
 	 * Disable local interrupts. This will prevent panic_smp_self_stop

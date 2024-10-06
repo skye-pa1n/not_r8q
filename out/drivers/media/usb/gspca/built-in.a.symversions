@@ -1,9 +1,9 @@
 __crc_gspca_debug = 0x9670af2c;
-__crc_gspca_frame_add = 0xd4786106;
-__crc_gspca_dev_probe2 = 0x18de94f8;
-__crc_gspca_dev_probe = 0x33e185e4;
+__crc_gspca_frame_add = 0xd7b2ff85;
+__crc_gspca_dev_probe2 = 0xb64f7eca;
+__crc_gspca_dev_probe = 0xf681f8cd;
 __crc_gspca_disconnect = 0xacb95d64;
 __crc_gspca_suspend = 0xd66bdfd8;
 __crc_gspca_resume = 0x5fea67ca;
-__crc_gspca_expo_autogain = 0xe3dcc85b;
-__crc_gspca_coarse_grained_expo_autogain = 0xff69c583;
+__crc_gspca_expo_autogain = 0xb4f1ef80;
+__crc_gspca_coarse_grained_expo_autogain = 0x758e0308;

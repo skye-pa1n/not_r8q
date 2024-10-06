@@ -40,7 +40,7 @@
 
 &qupv3_se1_i2c {
 	status = "ok";
-	qcom,clk-freq-out = <1000000>;
+	qcom,clk-freq-out = <1500000>;
 	#address-cells = <1>;
 	#size-cells = <0>;
 	nq@28 {
