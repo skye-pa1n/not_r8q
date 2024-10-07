@@ -1,0 +1,5 @@
+__crc_stm_register_device = 0x81671dc0;
+__crc_stm_unregister_device = 0x976cc272;
+__crc_stm_source_register_device = 0xfec6107f;
+__crc_stm_source_unregister_device = 0x969c785e;
+__crc_stm_source_write = 0xcc448fe4;
