@@ -1,4 +1,4 @@
 __crc_get_ese_lock = 0x737648f6;
-__crc_pn547_dev_ioctl = 0xd47afe48;
+__crc_pn547_dev_ioctl = 0x72c92736;
 __crc_do_reset_protection = 0xcd2ac9d0;
 __crc_ese_cold_reset = 0xb5f02d7e;

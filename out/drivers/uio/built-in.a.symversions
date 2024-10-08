@@ -1,3 +1,3 @@
-__crc_uio_event_notify = 0x83f733ef;
-__crc___uio_register_device = 0x7aa59d0b;
-__crc_uio_unregister_device = 0xebd09246;
+__crc_uio_event_notify = 0x2c3cf188;
+__crc___uio_register_device = 0xb605f0e4;
+__crc_uio_unregister_device = 0x391aa9a4;

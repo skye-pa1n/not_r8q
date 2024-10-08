@@ -1,3 +1,3 @@
-__crc_ebt_register_table = 0x7a503a32;
-__crc_ebt_unregister_table = 0x3c2d7fe7;
-__crc_ebt_do_table = 0x548f340f;
+__crc_ebt_register_table = 0x51c5c19e;
+__crc_ebt_unregister_table = 0x1839af54;
+__crc_ebt_do_table = 0x02dda5e6;

@@ -10,4 +10,4 @@ __crc_cam_cpas_stop = 0x084bb3f0;
 __crc_cam_cpas_start = 0x59d3e263;
 __crc_cam_cpas_log_votes = 0x87b8033d;
 __crc_cam_cpas_unregister_client = 0xdc110f9e;
-__crc_cam_cpas_register_client = 0xcfdc8ab6;
+__crc_cam_cpas_register_client = 0x542b43e2;

@@ -1,9 +1,9 @@
 __crc_llc_sap_list = 0x52d7b2fd;
-__crc_llc_sap_find = 0x876456d1;
-__crc_llc_sap_open = 0xe3340b2f;
-__crc_llc_sap_close = 0xed152d55;
-__crc_llc_add_pack = 0x11bb988b;
+__crc_llc_sap_find = 0xbcec3bd6;
+__crc_llc_sap_open = 0xe57d5241;
+__crc_llc_sap_close = 0x698e7232;
+__crc_llc_add_pack = 0x1abd776f;
 __crc_llc_remove_pack = 0x38b92846;
-__crc_llc_set_station_handler = 0x09c7aabc;
-__crc_llc_mac_hdr_init = 0xdd6a3a54;
-__crc_llc_build_and_send_ui_pkt = 0x18febd6b;
+__crc_llc_set_station_handler = 0x6a2d0978;
+__crc_llc_mac_hdr_init = 0x971ea90d;
+__crc_llc_build_and_send_ui_pkt = 0x7854a3b5;

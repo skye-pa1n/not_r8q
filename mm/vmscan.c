@@ -178,9 +178,9 @@ int kswapd_threads_current = DEF_KSWAPD_THREADS_PER_NODE;
 #endif
 
 /*
- * From 0 .. 100.  Higher means more swappy.
+ * From 0 .. 300.  Higher means more swappy.
  */
-int vm_swappiness = 60;
+int vm_swappiness = 260;
 /*
  * The total number of pages which are beyond the high watermark within all
  * zones.
@@ -2707,7 +2707,8 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	 */
 	if (!IS_ENABLED(CONFIG_BALANCE_ANON_FILE_RECLAIM) &&
 	    !inactive_list_is_low(lruvec, true, sc, false) &&
-	    lruvec_lru_size(lruvec, LRU_INACTIVE_FILE, sc->reclaim_idx) >> sc->priority) {
+	    	    lruvec_lru_size(lruvec, LRU_INACTIVE_FILE, sc->reclaim_idx) >> sc->priority &&
+	    (swappiness != 300)) {
 		scan_balance = SCAN_FILE;
 		goto out;
 	}
