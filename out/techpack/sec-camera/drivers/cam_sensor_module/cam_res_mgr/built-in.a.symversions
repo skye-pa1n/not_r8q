@@ -1,11 +1,11 @@
-__crc_cam_res_mgr_led_trigger_register = 0xbd1a35b5;
-__crc_cam_res_mgr_led_trigger_unregister = 0xf9e3c17e;
-__crc_cam_res_mgr_led_trigger_event = 0xb8802afb;
+__crc_cam_res_mgr_led_trigger_register = 0xfc508f58;
+__crc_cam_res_mgr_led_trigger_unregister = 0x6837c5e9;
+__crc_cam_res_mgr_led_trigger_event = 0xa52ebd7e;
 __crc_cam_res_mgr_shared_pinctrl_init = 0x003176f2;
 __crc_cam_res_mgr_shared_pinctrl_put = 0x7d46af3d;
 __crc_cam_res_mgr_shared_pinctrl_select_state = 0x7a0a61f3;
 __crc_cam_res_mgr_shared_pinctrl_post_init = 0xb4ce004f;
-__crc_cam_res_mgr_gpio_request = 0x96f19e81;
-__crc_cam_res_mgr_gpio_free_arry = 0x9ff09883;
+__crc_cam_res_mgr_gpio_request = 0xfc19a56b;
+__crc_cam_res_mgr_gpio_free_arry = 0x4833211a;
 __crc_cam_res_mgr_gpio_set_value = 0x36ee6373;
 __crc_cam_res_mgr_shared_clk_config = 0xf838571e;

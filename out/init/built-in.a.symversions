@@ -7,4 +7,4 @@ __crc_sapa_param_time = 0xa8ae1ae4;
 __crc_init_uts_ns = 0x204524a2;
 __crc_linux_banner_ptr = 0xa914b4b0;
 __crc_name_to_dev_t = 0xc10fddb8;
-__crc_init_task = 0x490f583b;
+__crc_init_task = 0x25e0b46a;

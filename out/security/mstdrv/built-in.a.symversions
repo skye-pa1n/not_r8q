@@ -1,2 +1,2 @@
-__crc_mst_drv_dev = 0xe571c37e;
-__crc_mfc_send_mst_cmd = 0xbf318bf0;
+__crc_mst_drv_dev = 0x3356cf87;
+__crc_mfc_send_mst_cmd = 0x89e912d0;

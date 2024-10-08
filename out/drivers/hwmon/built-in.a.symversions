@@ -1,7 +1,7 @@
-__crc_hwmon_device_register_with_groups = 0xb5b49841;
-__crc_hwmon_device_register_with_info = 0x5c6174c9;
-__crc_hwmon_device_register = 0x748dffe7;
-__crc_hwmon_device_unregister = 0xd541608e;
-__crc_devm_hwmon_device_register_with_groups = 0xa0a68e51;
-__crc_devm_hwmon_device_register_with_info = 0x219c252c;
-__crc_devm_hwmon_device_unregister = 0xac257a9e;
+__crc_hwmon_device_register_with_groups = 0x7f8f0439;
+__crc_hwmon_device_register_with_info = 0x8526e353;
+__crc_hwmon_device_register = 0xb803e878;
+__crc_hwmon_device_unregister = 0x9304fe11;
+__crc_devm_hwmon_device_register_with_groups = 0x87b94ef6;
+__crc_devm_hwmon_device_register_with_info = 0xbf922693;
+__crc_devm_hwmon_device_unregister = 0x2ecd1af4;

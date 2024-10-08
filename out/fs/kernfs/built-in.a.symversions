@@ -1,6 +1,6 @@
-__crc_kernfs_path_from_node = 0xb0e005de;
-__crc_kernfs_get = 0xfeecb224;
-__crc_kernfs_put = 0xad3e0388;
-__crc_kernfs_find_and_get_ns = 0xc4b5bcbe;
-__crc_kernfs_notify = 0xc2cefa43;
-__crc_kernfs_create_link = 0x88f763de;
+__crc_kernfs_path_from_node = 0x363ce336;
+__crc_kernfs_get = 0x1196a44d;
+__crc_kernfs_put = 0x50b3a7ae;
+__crc_kernfs_find_and_get_ns = 0x0b8c14a7;
+__crc_kernfs_notify = 0x82ec6d18;
+__crc_kernfs_create_link = 0x1f5eae63;

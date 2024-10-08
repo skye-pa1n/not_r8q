@@ -1,9 +1,9 @@
 __crc_fw_fallback_config = 0xd3ae7756;
-__crc_firmware_config_table = 0xe263cc45;
-__crc_request_firmware = 0x591b7bcd;
-__crc_firmware_request_nowarn = 0xee4ac739;
-__crc_request_firmware_direct = 0xfcc0bcde;
-__crc_firmware_request_cache = 0xff04ca20;
-__crc_request_firmware_into_buf = 0x2cf3eba4;
-__crc_release_firmware = 0xe8ed2d78;
-__crc_request_firmware_nowait = 0x0b8edd2e;
+__crc_firmware_config_table = 0xb80981ee;
+__crc_request_firmware = 0x4f2e53d5;
+__crc_firmware_request_nowarn = 0xcef84704;
+__crc_request_firmware_direct = 0x50344670;
+__crc_firmware_request_cache = 0xd7a74c07;
+__crc_request_firmware_into_buf = 0x0dada3da;
+__crc_release_firmware = 0x52362e9c;
+__crc_request_firmware_nowait = 0xf32f3245;

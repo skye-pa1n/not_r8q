@@ -1,7 +1,7 @@
 __crc_scaled_ppm_to_ppb = 0x61407a47;
-__crc_ptp_clock_register = 0x7c481e26;
-__crc_ptp_clock_unregister = 0x90a01e36;
-__crc_ptp_clock_event = 0xeee863c4;
-__crc_ptp_clock_index = 0x9f526c50;
-__crc_ptp_find_pin = 0xed648571;
-__crc_ptp_schedule_worker = 0xfb6fe00e;
+__crc_ptp_clock_register = 0x81512994;
+__crc_ptp_clock_unregister = 0x138fe534;
+__crc_ptp_clock_event = 0x2483b4f1;
+__crc_ptp_clock_index = 0xe9d9975e;
+__crc_ptp_find_pin = 0x953037a5;
+__crc_ptp_schedule_worker = 0xc2f6407b;

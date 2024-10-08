@@ -1,5 +1,5 @@
-__crc_sctp_get_sctp_info = 0xd8b62ab2;
-__crc_sctp_for_each_endpoint = 0xaadf7aee;
-__crc_sctp_transport_lookup_process = 0xd96b2e70;
-__crc_sctp_transport_traverse_process = 0x59774a43;
-__crc_sctp_do_peeloff = 0xfe81efcf;
+__crc_sctp_get_sctp_info = 0x01835295;
+__crc_sctp_for_each_endpoint = 0x0ab0a632;
+__crc_sctp_transport_lookup_process = 0xa57238dd;
+__crc_sctp_transport_traverse_process = 0xeecbbeff;
+__crc_sctp_do_peeloff = 0x5b6439ac;

@@ -1,9 +1,9 @@
-__crc_fsverity_ioctl_enable = 0x7788fde9;
-__crc_fsverity_ioctl_measure = 0x3d348288;
-__crc_fsverity_file_open = 0xe87657b9;
-__crc_fsverity_prepare_setattr = 0xea74cfd4;
-__crc_fsverity_cleanup_inode = 0xa9222a8c;
-__crc_fsverity_verify_page = 0x14198a44;
-__crc_fsverity_verify_bio = 0x468973d2;
+__crc_fsverity_ioctl_enable = 0xf963eade;
+__crc_fsverity_ioctl_measure = 0x49a895cc;
+__crc_fsverity_file_open = 0xca17ee22;
+__crc_fsverity_prepare_setattr = 0xb6b6abc1;
+__crc_fsverity_cleanup_inode = 0xda2ee4ab;
+__crc_fsverity_verify_page = 0xd3f994ab;
+__crc_fsverity_verify_bio = 0xf4ce9d92;
 __crc_fsverity_enqueue_verify_work = 0x1124b2a8;
-__crc___fsverity_verify_signature = 0x955a32e4;
+__crc___fsverity_verify_signature = 0xfdbabd86;

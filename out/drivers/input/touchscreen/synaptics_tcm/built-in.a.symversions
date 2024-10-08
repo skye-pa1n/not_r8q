@@ -1,3 +1,3 @@
 __crc_syna_tcm_bus_init = 0x16a831c2;
 __crc_syna_tcm_bus_exit = 0x56c7698e;
-__crc_syna_tcm_add_module = 0xb64a9863;
+__crc_syna_tcm_add_module = 0x4933d063;

@@ -1,6 +1,6 @@
-__crc_register_8022_client = 0x25cb1d6f;
-__crc_unregister_8022_client = 0x0e840807;
-__crc_register_snap_client = 0xbfb25cf3;
-__crc_unregister_snap_client = 0x15bd6164;
-__crc_stp_proto_register = 0xec854a5e;
-__crc_stp_proto_unregister = 0x72cf4943;
+__crc_register_8022_client = 0x2c5d55b3;
+__crc_unregister_8022_client = 0x3fa807e9;
+__crc_register_snap_client = 0x5fcb9391;
+__crc_unregister_snap_client = 0x597f675e;
+__crc_stp_proto_register = 0xbfcad4e3;
+__crc_stp_proto_unregister = 0xb03c965c;

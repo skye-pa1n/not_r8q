@@ -1,6 +1,6 @@
-__crc_ion_walk_heaps = 0xd0e7fe8f;
-__crc_ion_alloc = 0x824a3e29;
-__crc_ion_device_add_heap = 0x2394ab8b;
-__crc_ion_device_create = 0x2f781182;
-__crc_ion_heap_create = 0xc2fd87e5;
+__crc_ion_walk_heaps = 0xc334c0c7;
+__crc_ion_alloc = 0xe90116c3;
+__crc_ion_device_add_heap = 0xbbb11feb;
+__crc_ion_device_create = 0xc762f641;
+__crc_ion_heap_create = 0xcd94c08a;
 __crc_ion_populate_vm_list = 0x52f16063;

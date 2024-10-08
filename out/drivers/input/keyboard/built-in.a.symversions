@@ -1,2 +1,2 @@
-__crc_sec_key = 0x499cefe6;
-__crc_hall_ic = 0x4dabfa42;
+__crc_sec_key = 0x142fd857;
+__crc_hall_ic = 0x1018cdf3;

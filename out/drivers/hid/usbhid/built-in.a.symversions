@@ -1,2 +1,2 @@
-__crc_usb_hid_driver = 0xd692da52;
-__crc_hiddev_hid_event = 0xc5fa0bc8;
+__crc_usb_hid_driver = 0x234b1a3e;
+__crc_hiddev_hid_event = 0x0b9b719e;

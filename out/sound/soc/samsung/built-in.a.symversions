@@ -10,4 +10,4 @@ __crc_audio_register_temperature_keep_max_cb = 0x1dfe817a;
 __crc_audio_register_temperature_overcount_cb = 0xcd6828ab;
 __crc_audio_register_excursion_max_cb = 0xa0b5e79c;
 __crc_audio_register_excursion_overcount_cb = 0x82ea1fa1;
-__crc_register_cirrus_bigdata_cb = 0xd39411f0;
+__crc_register_cirrus_bigdata_cb = 0xe5d0bb87;

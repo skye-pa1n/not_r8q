@@ -1,8 +1,8 @@
-__crc_sde_rotator_inline_open = 0x7e89737d;
+__crc_sde_rotator_inline_open = 0x61f6d2cd;
 __crc_sde_rotator_inline_release = 0x774d1204;
-__crc_sde_rotator_inline_get_dst_pixfmt = 0x8b2b9387;
-__crc_sde_rotator_inline_get_downscale_caps = 0x38a57ed9;
-__crc_sde_rotator_inline_get_maxlinewidth = 0xf6b4a21c;
-__crc_sde_rotator_inline_get_pixfmt_caps = 0x09d8be05;
+__crc_sde_rotator_inline_get_dst_pixfmt = 0xe71bf5ba;
+__crc_sde_rotator_inline_get_downscale_caps = 0x9c99c634;
+__crc_sde_rotator_inline_get_maxlinewidth = 0x20046fdc;
+__crc_sde_rotator_inline_get_pixfmt_caps = 0x2b2986bd;
 __crc_sde_rotator_inline_commit = 0x180aeb91;
-__crc_sde_rotator_inline_reg_dump = 0xe80ff75f;
+__crc_sde_rotator_inline_reg_dump = 0x102d750b;
