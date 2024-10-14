@@ -14,7 +14,7 @@
 #include "kgsl_device.h"
 #include "kgsl_rgmu.h"
 
-#define RGMU_CLK_FREQ 200000000
+#define RGMU_CLK_FREQ 500000000
 
 static int rgmu_irq_probe(struct kgsl_device *device)
 {

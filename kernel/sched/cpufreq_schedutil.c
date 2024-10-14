@@ -256,7 +256,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
 		sg_policy->work_in_progress = true;
 }
 
-#define TARGET_LOAD 99
+#define TARGET_LOAD 95
 /**
  * get_next_freq - Compute a new frequency for a given cpufreq policy.
  * @sg_policy: schedutil policy object to compute the new frequency for.
@@ -457,7 +457,7 @@ static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
 #endif /* CONFIG_NO_HZ_COMMON */
 
 #define NL_RATIO 100
-#define DEFAULT_HISPEED_LOAD 87
+#define DEFAULT_HISPEED_LOAD 1
 #define DEFAULT_CPU0_RTG_BOOST_FREQ 979200
 #define DEFAULT_CPU4_RTG_BOOST_FREQ 940800
 #define DEFAULT_CPU7_RTG_BOOST_FREQ 960000
@@ -465,8 +465,8 @@ static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
 #define DEFAULT_CPU4_HI_FREQ 710400
 #define DEFAULT_CPU7_HI_FREQ 844800
 #define DEFAULT_CPU0_UP_RATE 2000
-#define DEFAULT_CPU4_UP_RATE 232000
-#define DEFAULT_CPU7_UP_RATE 42175
+#define DEFAULT_CPU4_UP_RATE 312450
+#define DEFAULT_CPU7_UP_RATE 82540
 #define DEFAULT_CPU0_DOWN_RATE 0
 #define DEFAULT_CPU4_DOWN_RATE 0
 #define DEFAULT_CPU7_DOWN_RATE 0

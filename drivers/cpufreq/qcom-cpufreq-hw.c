@@ -430,7 +430,7 @@ static int qcom_cpufreq_hw_cpu_init(struct cpufreq_policy *policy)
 		c->is_irq_enabled = true;
 		c->freq_limit_attr.attr.name = "dcvsh_freq_limit";
 		c->freq_limit_attr.show = dcvsh_freq_limit_show;
-		c->freq_limit_attr.attr.mode = 0444;
+		c->freq_limit_attr.attr.mode = 0644;
 		c->dcvsh_freq_limit = U32_MAX;
 		device_create_file(cpu_dev, &c->freq_limit_attr);
 	}
@@ -521,12 +521,14 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 		 domain_index);
 	if (of_find_property(dev->of_node, tbl_name, &of_len) && of_len > 0) {
 		of_len /= sizeof(*of_table);
+
 		of_table = devm_kcalloc(dev, of_len, sizeof(*of_table),
 					GFP_KERNEL);
 		if (!of_table) {
 			ret = -ENOMEM;
 			goto err_cpufreq_table;
 		}
+
 		ret = of_property_read_u32_array(dev->of_node, tbl_name,
 						 of_table, of_len);
 		if (ret)
@@ -548,21 +550,18 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 		data = readl_relaxed(base_volt + i * lut_row_size);
 		volt = (data & GENMASK(11, 0)) * 1000;
 		vc = data & GENMASK(21, 16);
-
+	
 		if (src)
 			c->table[i].frequency = c->xo_rate * lval / 1000;
 		else
 			c->table[i].frequency = c->cpu_hw_rate / 1000;
 
 		cur_freq = c->table[i].frequency;
-
-		// dev_dbg(dev, "index=%d freq=%d, core_count %d\n",
-		    	// i, c->table[i].frequency, core_count);
 		dev_info(dev, "cpu=%lu, index=%d, freq=%d, core_count=%d, src=%d, lval=%d, volt=%d\n",
 		    	cpu, i, c->table[i].frequency, core_count,
 		    	src, lval, volt);
-
-				if (!of_find_freq(of_table, of_len, c->table[i].frequency)) {
+		    	
+		    	if (!of_find_freq(of_table, of_len, c->table[i].frequency)) {
 			c->table[i].frequency = CPUFREQ_ENTRY_INVALID;
 			cur_freq = CPUFREQ_ENTRY_INVALID;
 		} else {
@@ -582,7 +581,7 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 					cur_freq = CPUFREQ_ENTRY_INVALID;
 					c->table[i].flags = CPUFREQ_BOOST_FREQ;
 				}
-		}
+			}
 
 					/*
 		        	 * Two of the same frequencies with the same core counts means
@@ -607,19 +606,30 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 			if (!cpu_dev)
 				continue;
 			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000, volt);
+	                if (cpu == 0) {
+				c->table[i++].frequency = 300000;
+				c->table[i++].frequency = 691200;
+				c->table[i++].frequency = 883200;
+				c->table[i++].frequency = 1171200;
+				c->table[i++].frequency = 1344000;
+				c->table[i++].frequency = 1516800;
+				c->table[i++].frequency = 1708800;
+				c->table[i++].frequency = 1804800;
+                                c->table[i++].frequency = 2054400;
+				c->table[i++].frequency = 2246400;
+			} else if (cpu == 7) {
+                                c->table[i++].frequency = 563200;
+                                c->table[i++].frequency = 758400;
+                                c->table[i++].frequency = 1190400;
+                                c->table[i++].frequency = 1401600;
+                                c->table[i++].frequency = 1862400;
+                                c->table[i++].frequency = 2457600;
+                                c->table[i++].frequency = 2649600;
+                                c->table[i++].frequency = 2841600;
+                                c->table[i++].frequency = 3187200;	
+			}       
 		}
 	}
-
-	if (cpu == 0) {
-			c->table[i++].frequency = 1920000;
-			c->table[i++].frequency = 2016000;
-		} else if (cpu == 4) {
-			c->table[i++].frequency = 2572800;
-			c->table[i++].frequency = 2649600;
-			c->table[i++].frequency = 2745600;
-		} else if (cpu == 7) {
-			c->table[i++].frequency = 3187200;
-		}
 
 	c->lut_max_entries = i;
 	c->table[i].frequency = CPUFREQ_TABLE_END;
@@ -640,11 +650,11 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 
 	return 0;
 
-	err_of_table:
+err_of_table:
 	devm_kfree(dev, of_table);
 err_cpufreq_table:
 	devm_kfree(dev, c->table);
-	return ret;
+	return ret;	
 }
 
 static int qcom_get_related_cpus(int index, struct cpumask *m)

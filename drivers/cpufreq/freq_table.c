@@ -41,8 +41,8 @@ int cpufreq_frequency_table_cpuinfo(struct cpufreq_policy *policy,
 				    struct cpufreq_frequency_table *table)
 {
 	struct cpufreq_frequency_table *pos;
-	unsigned int min_freq = ~0;
-	unsigned int max_freq = 0;
+	unsigned int min_freq = 0;
+	unsigned int max_freq = 3187200;
 	unsigned int freq;
 
 	cpufreq_for_each_valid_entry(pos, table) {

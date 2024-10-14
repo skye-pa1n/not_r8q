@@ -1332,7 +1332,7 @@ endif
 ifneq "$(KERNELVERSION)" "4.19.306"
 include/config/auto.conf: FORCE
 endif
-ifneq "$(CC_VERSION_TEXT)" "Neutron clang version 17.0.0 (https://github.com/llvm/llvm-project.git d8e9a1a12557cd5e80c3d713d9cbbba0f7406882)"
+ifneq "$(CC_VERSION_TEXT)" "Neutron clang version 17.0.0 (https://github.com/llvm/llvm-project.git 7f48154ca11fee6579fe29a51ab2a329424d31c4)"
 include/config/auto.conf: FORCE
 endif
 ifneq "$(srctree)" ".."

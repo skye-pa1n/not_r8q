@@ -92,7 +92,6 @@ __crc_pm_wakeup_dev_event = 0xbbeba6f9;
 __crc_pm_get_active_wakeup_sources = 0x3a8edb31;
 __crc_pm_print_active_wakeup_sources = 0x4065d168;
 __crc_pm_system_wakeup = 0x8c0215f2;
-__crc_wakeup_sources_stats_active = 0x8fe9ff33;
 __crc_dev_pm_genpd_set_performance_state = 0xa45ea500;
 __crc_pm_genpd_syscore_poweroff = 0x46cfd2b9;
 __crc_pm_genpd_syscore_poweron = 0x853be07b;

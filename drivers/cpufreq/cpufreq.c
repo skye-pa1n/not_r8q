@@ -2265,8 +2265,11 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	if (ret)
 		return ret;
 
-	min = 150000;
-	max = 3187200;
+	 /* little, big, prime - min/max freq limit (3.19Ghz) */
+        min = 150000;
+        max = 3187200;
+		cpufreq_verify_within_limits(new_policy, new_policy->min, max);
+
 
 	/* adjust if necessary - all reasons */
 	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
