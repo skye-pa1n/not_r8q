@@ -24,7 +24,7 @@ make -j$(nproc --all) O=out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV Image.gz
 make -j$(nproc --all) O=out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV dtbs
 
 DTB_OUT="out/arch/arm64/boot/dts/vendor/qcom"
-IMAGE="out/arch/arm64/boot/Image"
+IMAGE="out/arch/arm64/boot/Image.gz"
 
 cat $DTB_OUT/*.dtb > AnyKernel3/dtb
 

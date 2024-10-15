@@ -466,7 +466,7 @@ static bool __init is_mpidr_duplicate(unsigned int cpu, u64 hwid)
 
 	for (i = 1; (i < cpu) && (i < NR_CPUS); i++)
 		if (cpu_logical_map(i) == hwid)
-			return true;
+			return true;	
 	return false;
 }
 
@@ -533,6 +533,9 @@ acpi_map_gic_cpu_interface(struct acpi_madt_generic_interrupt *processor)
 		}
 		bootcpu_valid = true;
 		cpu_madt_gicc[0] = *processor;
+		early_map_cpu_to_node(logical_bootcpu_id,
+			acpi_numa_get_nid(0, hwid));
+			
 		return;
 	}
 
@@ -644,7 +647,6 @@ static void __init of_parse_and_init_cpus(void)
 			}
 
 			bootcpu_valid = true;
-			early_map_cpu_to_node(0, of_node_to_nid(dn));
 
 			/*
 			 * cpu_logical_map has already been

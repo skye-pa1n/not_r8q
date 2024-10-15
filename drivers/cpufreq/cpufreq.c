@@ -725,6 +725,9 @@ static ssize_t store_##file_name					\
 	int ret, temp;							\
 	struct cpufreq_policy new_policy;				\
 									\
+	if (likely(&policy->object == &policy->min))			\
+		return count;						\
+									\
 	memcpy(&new_policy, policy, sizeof(*policy));			\
 	new_policy.min = policy->user_policy.min;			\
 	new_policy.max = policy->user_policy.max;			\
@@ -2267,7 +2270,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 
 	 /* little, big, prime - min/max freq limit (3.19Ghz) */
         min = 150000;
-        max = 3187200;
+        max = 3360000;
 		cpufreq_verify_within_limits(new_policy, new_policy->min, max);
 
 

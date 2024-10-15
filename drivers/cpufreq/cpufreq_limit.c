@@ -101,11 +101,11 @@ struct cpufreq_limit_parameter param = {
 	.big_max_freq		= 0,
 	.ltl_min_lock		= 1113600 / 2, /* devide value is ltl_divider */
 
-	.ltl_divider		= 2,
+	.ltl_divider		= 1,
 	.use_hotplug_out	= false,
 
 	.hmp_boost_type		= CONSERVATIVE_BOOST,
-	.hmp_boost_active	= 0,
+	.hmp_boost_active	= 1,
 	.hmp_prev_boost_type = 0,
 
 	.ltl_limit_max_freq	= 1113600,
