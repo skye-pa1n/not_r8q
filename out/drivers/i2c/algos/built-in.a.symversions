@@ -1,3 +1,3 @@
-__crc_i2c_bit_algo = 0xd25414da;
-__crc_i2c_bit_add_bus = 0x2b48a56d;
-__crc_i2c_bit_add_numbered_bus = 0x231858a7;
+__crc_i2c_bit_algo = 0xdbb9f4f4;
+__crc_i2c_bit_add_bus = 0xa1fea8ab;
+__crc_i2c_bit_add_numbered_bus = 0xbeb2d966;

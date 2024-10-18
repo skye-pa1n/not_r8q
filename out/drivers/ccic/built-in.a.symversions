@@ -1,4 +1,4 @@
-__crc_get_ccic_device = 0x128ba7d4;
+__crc_get_ccic_device = 0x896d3bfe;
 __crc_enable_dp_switch_regulator = 0x2b15c603;
 __crc_ccic_misc_init = 0xc2dc40c9;
 __crc_ccic_misc_exit = 0x12826429;

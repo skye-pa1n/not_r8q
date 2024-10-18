@@ -1,2 +1,2 @@
-__crc_verify_pkcs7_signature = 0xf0572cbf;
-__crc_verify_signature_one = 0x42ba5678;
+__crc_verify_pkcs7_signature = 0x9b1a753b;
+__crc_verify_signature_one = 0xf2229a1d;

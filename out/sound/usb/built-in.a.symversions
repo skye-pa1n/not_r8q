@@ -1,9 +1,9 @@
-__crc_find_snd_usb_substream = 0x8656f409;
+__crc_find_snd_usb_substream = 0xca22fcd7;
 __crc_snd_usb_find_csint_desc = 0x0ff2c1e0;
-__crc_snd_usb_enable_audio_stream = 0x1ee2d101;
+__crc_snd_usb_enable_audio_stream = 0x71aec5ad;
 __crc_snd_usbmidi_disconnect = 0xd9d2bb03;
 __crc_snd_usbmidi_input_stop = 0x63343b1d;
 __crc_snd_usbmidi_input_start = 0x16756dc0;
 __crc_snd_usbmidi_suspend = 0xbed43a41;
 __crc_snd_usbmidi_resume = 0xb2af19e1;
-__crc___snd_usbmidi_create = 0xe5afd1c0;
+__crc___snd_usbmidi_create = 0xc72dd1a0;

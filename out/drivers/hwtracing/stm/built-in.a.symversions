@@ -1,5 +1,5 @@
-__crc_stm_register_device = 0x29d1be15;
-__crc_stm_unregister_device = 0x3dea568d;
-__crc_stm_source_register_device = 0xbdb84367;
-__crc_stm_source_unregister_device = 0x9cac3a01;
-__crc_stm_source_write = 0xc534469e;
+__crc_stm_register_device = 0x892a5d72;
+__crc_stm_unregister_device = 0x8955a5bc;
+__crc_stm_source_register_device = 0x03782cd7;
+__crc_stm_source_unregister_device = 0xe71e6c68;
+__crc_stm_source_write = 0x875257ea;

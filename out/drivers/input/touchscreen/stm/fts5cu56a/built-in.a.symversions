@@ -1,3 +1,3 @@
-__crc_fts_get_tsp_test_result = 0xcaea7d54;
-__crc_fts_fw_update_on_probe = 0x65e23ae3;
-__crc_fts_fw_update_on_hidden_menu = 0x9e0c99fc;
+__crc_fts_get_tsp_test_result = 0x37b675a3;
+__crc_fts_fw_update_on_probe = 0x140d195c;
+__crc_fts_fw_update_on_hidden_menu = 0x0f41faef;

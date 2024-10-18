@@ -1,6 +1,6 @@
-__crc_vga_default_device = 0x176c8132;
-__crc_vga_get = 0xbc4bf38c;
-__crc_vga_tryget = 0x49b9a589;
-__crc_vga_put = 0x5625b32d;
-__crc_vga_set_legacy_decoding = 0x16e58a6c;
-__crc_vga_client_register = 0x73acc6a3;
+__crc_vga_default_device = 0xfb572d37;
+__crc_vga_get = 0xb1a87a04;
+__crc_vga_tryget = 0x5601624e;
+__crc_vga_put = 0x3460df3a;
+__crc_vga_set_legacy_decoding = 0x2276f493;
+__crc_vga_client_register = 0xd270225c;

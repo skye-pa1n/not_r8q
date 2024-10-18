@@ -1,10 +1,10 @@
-__crc_dwc3_set_notifier = 0xc574bfef;
-__crc_dwc3_notify_event = 0x527ac771;
-__crc_dwc3_gadget_get_cmply_link_state = 0xb89aa13f;
+__crc_dwc3_set_notifier = 0x3743b921;
+__crc_dwc3_notify_event = 0xd4055d1d;
+__crc_dwc3_gadget_get_cmply_link_state = 0x78829abc;
 __crc_msm_dwc3_reset_dbm_ep = 0x0ce6bcbf;
 __crc_msm_ep_config = 0x78670b87;
 __crc_msm_ep_unconfig = 0x4635783a;
-__crc_msm_dwc3_reset_ep_after_lpm = 0xd32f01ec;
+__crc_msm_dwc3_reset_ep_after_lpm = 0x6c78b072;
 __crc_dwc3_msm_is_suspended = 0xdd269b39;
 __crc_dwc3_msm_is_host_highspeed = 0xd6b45e1e;
 __crc_dwc3_set_selfpowered = 0x593f81e8;

@@ -1,5 +1,5 @@
 __crc_ce_aes_expandkey = 0x68f275ad;
-__crc_ce_aes_setkey = 0xf58049e7;
+__crc_ce_aes_setkey = 0x923d6d68;
 __crc_neon_aes_ecb_encrypt = 0x75837fa1;
 __crc_neon_aes_cbc_encrypt = 0x7b022865;
 __crc_sha256_block_data_order = 0xb455924d;

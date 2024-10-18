@@ -1,4 +1,4 @@
-__crc_msm_vidc_poll = 0x33f69ecc;
+__crc_msm_vidc_poll = 0x4a0303b1;
 __crc_msm_vidc_querycap = 0xd46924a7;
 __crc_msm_vidc_enum_fmt = 0x548702b7;
 __crc_msm_vidc_query_ctrl = 0x46513da0;
@@ -23,4 +23,4 @@ __crc_msm_vidc_close = 0x3e616082;
 __crc_msm_vidc_suspend = 0x7cc6691c;
 __crc_msm_vidc_debug = 0x1fcffcf4;
 __crc_msm_vidc_lossless_encode = 0x47dbba1d;
-__crc_msm_vidc_load_u32_table = 0x585b8d2e;
+__crc_msm_vidc_load_u32_table = 0xc5febdac;
