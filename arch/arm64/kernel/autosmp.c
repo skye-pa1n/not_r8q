@@ -54,27 +54,35 @@ static struct asmp_param_struct {
     bool scroff_single_core;
     unsigned int max_cpus_bc;
     unsigned int max_cpus_lc;
+    unsigned int max_cpus_pr;
     unsigned int min_cpus_bc;
     unsigned int min_cpus_lc;
+    unsigned int min_cpus_pr;
+    unsigned int cpufreq_up_pr;
     unsigned int cpufreq_up_bc;
     unsigned int cpufreq_up_lc;
+    unsigned int cpufreq_down_pr;
     unsigned int cpufreq_down_bc;
     unsigned int cpufreq_down_lc;
     unsigned int cycle_up;
     unsigned int cycle_down;
 } asmp_param = {
-    .delay = 100,
+    .delay = 500,
     .scroff_single_core = true,
-    .max_cpus_bc = 4, /* Max cpu Big cluster ! */
+    .max_cpus_pr = 1, /* Max cpu Prime cluster ! */
+    .max_cpus_bc = 3, /* Max cpu Big cluster ! */
     .max_cpus_lc = 4, /* Max cpu Little cluster ! */
-    .min_cpus_bc = 2, /* Minimum Big cluster online */
-    .min_cpus_lc = 1, /* Minimum Little cluster online */
-    .cpufreq_up_bc = 70,
-    .cpufreq_up_lc = 72,
-    .cpufreq_down_bc = 30,
-    .cpufreq_down_lc = 35,
-    .cycle_up = 1,
-    .cycle_down = 1,
+    .min_cpus_pr = 1, /* Minimum Prime cluster online */
+    .min_cpus_bc = 1, /* Minimum Big cluster online */
+    .min_cpus_lc = 2, /* Minimum Little cluster online */
+    .cpufreq_up_pr = 80,
+    .cpufreq_up_bc = 85,
+    .cpufreq_up_lc = 70,
+    .cpufreq_down_pr = 35,
+    .cpufreq_down_bc = 55,
+    .cpufreq_down_lc = 25,
+    .cycle_up = 0,
+    .cycle_down = 2,
 };
 
 static unsigned int cycle = 0, delay0 = 0;
@@ -143,17 +151,26 @@ static void update_prev_idle(unsigned int cpu)
 
 static void __ref asmp_work_fn(struct work_struct *work) {
     unsigned int cpu = 0, load = 0;
+    unsigned int slow_cpu_pr = 0;
     unsigned int slow_cpu_bc = 0, slow_cpu_lc = 4;
+    unsigned int cpu_load_pr = 0, fast_load_pr = 0;
     unsigned int cpu_load_bc = 0, fast_load_bc = 0;
     unsigned int cpu_load_lc = 0, fast_load_lc = 0;
+    unsigned int slow_load_pr = 100;
     unsigned int slow_load_lc = 100, slow_load_bc = 100;
     unsigned int up_load_lc = 0, down_load_lc = 0;
     unsigned int up_load_bc = 0, down_load_bc = 0;
+    unsigned int up_load_pr = 0, down_load_pr = 0;
+    unsigned int min_cpu_pr = 0;
+    unsigned int max_cpu_pr = 0;
     unsigned int max_cpu_lc = 0, max_cpu_bc = 0;
     unsigned int min_cpu_lc = 0, min_cpu_bc = 0;
+    int nr_cpu_online_pr = 0;
     int nr_cpu_online_lc = 0, nr_cpu_online_bc = 0;
 
-    /* Perform always check cpu 0/4 */
+    /* Perform always check cpu 0/4/7 */
+    if (!cpu_online(7))
+        asmp_online_cpus(7);
     if (!cpu_online(4))
         asmp_online_cpus(4);
     if (!cpu_online(0))
@@ -177,25 +194,23 @@ static void __ref asmp_work_fn(struct work_struct *work) {
     down_load_bc = asmp_param.cpufreq_down_bc;
     max_cpu_bc = asmp_param.max_cpus_bc;
     min_cpu_bc = asmp_param.min_cpus_bc;
+    
+    /* Prime Cluster */
+    up_load_pr   = asmp_param.cpufreq_up_pr;
+    down_load_pr = asmp_param.cpufreq_down_pr;
+    max_cpu_pr = asmp_param.max_cpus_pr;
+    min_cpu_pr = asmp_param.min_cpus_pr;
 
     /* find current max and min cpu freq to estimate load */
     get_online_cpus();
-    cpu_load_lc = get_cpu_loads(4);
+    cpu_load_lc = get_cpu_loads(0);
     fast_load_lc = cpu_load_lc;
-    cpu_load_bc = get_cpu_loads(0);
+    cpu_load_bc = get_cpu_loads(4);
     fast_load_bc = cpu_load_bc;
+    cpu_load_pr = get_cpu_loads(7);
+    fast_load_pr = cpu_load_pr;
     for_each_online_cpu(cpu) {
         if (cpu && cpu < 4) {
-            nr_cpu_online_bc++;
-            load = get_cpu_loads(cpu);
-            if (load < slow_load_bc) {
-                slow_cpu_bc = cpu;
-                slow_load_bc = load;
-            } else if (load > fast_load_bc)
-                fast_load_bc = load;
-        }
-
-        if (cpu > 4) {
             nr_cpu_online_lc++;
             load = get_cpu_loads(cpu);
             if (load < slow_load_lc) {
@@ -204,29 +219,49 @@ static void __ref asmp_work_fn(struct work_struct *work) {
             } else if (load > fast_load_lc)
                 fast_load_lc = load;
         }
+
+        if (cpu > 4) {
+            nr_cpu_online_bc++;
+            load = get_cpu_loads(cpu);
+            if (load < slow_load_bc) {
+                slow_cpu_bc = cpu;
+                slow_load_bc = load;
+            } else if (load > fast_load_bc)
+                fast_load_bc = load;
+        }
+        
+        if (cpu == 7) {
+            nr_cpu_online_pr++;
+            load = get_cpu_loads(cpu);
+            if (load < slow_load_pr) {
+                slow_cpu_pr = cpu;
+                slow_load_pr = load;
+            } else if (load > fast_load_pr)
+                fast_load_pr = load;
+        }
     }
     put_online_cpus();
 
     /********************************************************************
-     *                     Little Cluster cpu(4..7)                     *
+     *                     Little Cluster cpu(0..3)                     *
      ********************************************************************/
     if (cpu_load_lc < slow_load_lc)
         slow_load_lc = cpu_load_lc;
 
-    /* Always check cpu 4 before + up nr */
-    if (cpu_online(4))
+    /* Always check cpu 0 before + up nr */
+    if (cpu_online(0))
         nr_cpu_online_lc += 1;
 
     /* hotplug one core if all online cores are over up_load limit */
     if (slow_load_lc > up_load_lc) {
         if ((nr_cpu_online_lc < max_cpu_lc) &&
             (cycle >= asmp_param.cycle_up)) {
-            cpu = cpumask_next_zero(4, cpu_online_mask);
+            cpu = cpumask_next_zero(0, cpu_online_mask);
             asmp_online_cpus(cpu);
             cycle = 0;
         }
     /* unplug slowest core if all online cores are under down_load limit */
-    } else if ((slow_cpu_lc > 4) && (fast_load_lc < down_load_lc)) {
+    } else if ((slow_cpu_lc > 0) && (fast_load_lc < down_load_lc)) {
         if ((nr_cpu_online_lc > min_cpu_lc) &&
             (cycle >= asmp_param.cycle_down)) {
             asmp_offline_cpus(slow_cpu_lc);
@@ -235,20 +270,20 @@ static void __ref asmp_work_fn(struct work_struct *work) {
     }
 
     /********************************************************************
-     *                      Big Cluster cpu(0..3)                       *
+     *                      Big Cluster cpu(4..6)                       *
      ********************************************************************/
     if (cpu_load_bc < slow_load_bc)
         slow_load_bc = cpu_load_bc;
 
-    /* Always check cpu 0 before + up nr */
-    if (cpu_online(0))
+    /* Always check cpu 4 before + up nr */
+    if (cpu_online(4))
         nr_cpu_online_bc += 1;
 
     /* hotplug one core if all online cores are over up_load limit */
     if (slow_load_bc > up_load_bc) {
         if ((nr_cpu_online_bc < max_cpu_bc) &&
             (cycle >= asmp_param.cycle_up)) {
-            cpu = cpumask_next_zero(0, cpu_online_mask);
+            cpu = cpumask_next_zero(4, cpu_online_mask);
             asmp_online_cpus(cpu);
             cycle = 0;
         }
@@ -261,12 +296,39 @@ static void __ref asmp_work_fn(struct work_struct *work) {
         }
     }
 
+    /********************************************************************
+     *                      Prime Cluster cpu(7)                       *
+     ********************************************************************/
+    if (cpu_load_pr < slow_load_pr)
+        slow_load_pr = cpu_load_pr;
+
+    /* Always check cpu 7 before + up nr */
+    if (cpu_online(7))
+        nr_cpu_online_pr += 1;
+
+    /* hotplug one core if all online cores are over up_load limit */
+    if (slow_load_pr > up_load_pr) {
+        if ((nr_cpu_online_pr < max_cpu_pr) &&
+            (cycle >= asmp_param.cycle_up)) {
+            cpu = cpumask_next_zero(7, cpu_online_mask);
+            asmp_online_cpus(cpu);
+            cycle = 0;
+        }
+    /* unplug slowest core if all online cores are under down_load limit */
+    } else if (slow_cpu_pr && (fast_load_pr < down_load_pr)) {
+        if ((nr_cpu_online_pr > min_cpu_pr) &&
+            (cycle >= asmp_param.cycle_down)) {
+            asmp_offline_cpus(slow_cpu_pr);
+            cycle = 0;
+        }
+    }
+    
     /*
      * Reflect to any users configure about min cpus.
      * give a delay for atleast 2 seconds to prevent
      * wrong cpu loads calculation.
      */
-    if (nr_cpu_online_lc < min_cpu_lc || nr_cpu_online_bc < min_cpu_bc) {
+    if (nr_cpu_online_lc < min_cpu_lc || nr_cpu_online_bc < min_cpu_bc ||nr_cpu_online_pr < min_cpu_pr) {
         for_each_possible_cpu(cpu) {
             /* Online All cores */
             if (!cpu_online(cpu))
@@ -455,12 +517,16 @@ show_one(delay, delay);
 show_one(scroff_single_core, scroff_single_core);
 show_one(min_cpus_lc, min_cpus_lc);
 show_one(min_cpus_bc, min_cpus_bc);
+show_one(min_cpus_pr, min_cpus_pr);
 show_one(max_cpus_lc, max_cpus_lc);
 show_one(max_cpus_bc, max_cpus_bc);
+show_one(max_cpus_pr, max_cpus_pr);
 show_one(cpufreq_up_lc, cpufreq_up_lc);
 show_one(cpufreq_up_bc, cpufreq_up_bc);
+show_one(cpufreq_up_pr, cpufreq_up_pr);
 show_one(cpufreq_down_lc, cpufreq_down_lc);
 show_one(cpufreq_down_bc, cpufreq_down_bc);
+show_one(cpufreq_down_pr, cpufreq_down_pr);
 show_one(cycle_up, cycle_up);
 show_one(cycle_down, cycle_down);
 
@@ -481,8 +547,10 @@ store_one(delay, delay);
 store_one(scroff_single_core, scroff_single_core);
 store_one(cpufreq_up_lc, cpufreq_up_lc);
 store_one(cpufreq_up_bc, cpufreq_up_bc);
+store_one(cpufreq_up_pr, cpufreq_up_pr);
 store_one(cpufreq_down_lc, cpufreq_down_lc);
 store_one(cpufreq_down_bc, cpufreq_down_bc);
+store_one(cpufreq_down_pr, cpufreq_down_pr);
 store_one(cycle_up, cycle_up);
 store_one(cycle_down, cycle_down);
 
@@ -524,6 +592,27 @@ static ssize_t store_max_cpus_bc(struct kobject *a,
         input = 4;
 
     asmp_param.max_cpus_bc = input;
+
+    return count;
+}
+
+static ssize_t store_max_cpus_pr(struct kobject *a,
+              struct attribute *b, const char *buf, size_t count)
+{
+    unsigned int input;
+    int ret;
+
+    ret = sscanf(buf, "%u", &input);
+    if (ret != 1 ||
+        input < asmp_param.min_cpus_pr)
+        return -EINVAL;
+
+    if (input < 1)
+        input = 1;
+    else if (input > 4)
+        input = 4;
+
+    asmp_param.max_cpus_pr = input;
 
     return count;
 }
@@ -570,22 +659,48 @@ static ssize_t store_min_cpus_bc(struct kobject *a,
     return count;
 }
 
+static ssize_t store_min_cpus_pr(struct kobject *a,
+              struct attribute *b, const char *buf, size_t count)
+{
+    unsigned int input;
+    int ret;
+
+    ret = sscanf(buf, "%u", &input);
+    if (ret != 1 ||
+        input > asmp_param.max_cpus_pr)
+        return -EINVAL;
+
+    if (input < 1)
+        input = 1;
+    else if (input > 4)
+        input = 4;
+
+    asmp_param.min_cpus_pr = input;
+
+    return count;
+}
 define_one_global_rw(min_cpus_lc);
 define_one_global_rw(min_cpus_bc);
+define_one_global_rw(min_cpus_pr);
 define_one_global_rw(max_cpus_lc);
 define_one_global_rw(max_cpus_bc);
+define_one_global_rw(max_cpus_pr);
 
 static struct attribute *asmp_attributes[] = {
     &delay.attr,
     &scroff_single_core.attr,
     &min_cpus_lc.attr,
     &min_cpus_bc.attr,
+    &min_cpus_pr.attr,
     &max_cpus_lc.attr,
     &max_cpus_bc.attr,
+    &max_cpus_pr.attr,
     &cpufreq_up_lc.attr,
     &cpufreq_up_bc.attr,
+    &cpufreq_up_pr.attr,
     &cpufreq_down_lc.attr,
     &cpufreq_down_bc.attr,
+    &cpufreq_down_pr.attr,
     &cycle_up.attr,
     &cycle_down.attr,
     NULL
