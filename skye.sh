@@ -1,9 +1,9 @@
 #!/bin/bash
 
-LLVM_PATH="/home/skye/clang/clang/bin/"
-TC_PATH="/home/skye/clang/clang/bin/"
+LLVM_PATH="/home/skye/bomb/clang/bin/"
+TC_PATH="/home/skye/bomb/clang/bin/"
 GCC_PATH="/usr/bin/"
-KERNEL_NAME=not-pa1n!
+KERNEL_NAME=not-perf+
 MAKE="./makeparallel"
 BUILD_ENV="CC=${TC_PATH}clang CROSS_COMPILE=${GCC_PATH}aarch64-linux-gnu- LLVM=1 LLVM_IAS=1 PATH=$LLVM_PATH:$LLD_PATH:$PATH"  
 
@@ -13,9 +13,9 @@ make clean
 rm -rf .version
 rm -rf .local
 make mrproper
-make O=out clean
-make O=out mrproper
-make O=out ARCH=arm64 $BUILD_ENV not_defconfig
+make O=/home/skye/bomb/out clean
+make O=/home/skye/bomb/out mrproper
+make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV not_defconfig
 
 DATE_START=$(date +"%s")
 
@@ -23,8 +23,8 @@ make -j$(nproc --all) O=out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV Image
 
 make -j$(nproc --all) O=out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV dtbs
 
-DTB_OUT="out/arch/arm64/boot/dts/vendor/qcom"
-IMAGE="out/arch/arm64/boot/Image"
+DTB_OUT="/home/skye/bomb/out/arch/arm64/boot/dts/vendor/qcom"
+IMAGE="/home/skye/bomb/out/arch/arm64/boot/Image"
 
 cat $DTB_OUT/*.dtb > AnyKernel3/dtb
 
