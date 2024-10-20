@@ -1,7 +1,0 @@
-__crc_sec_dev_get_by_name = 0x7a3b71f5;
-__crc____sec_device_create = 0x34dbc535;
-__crc_sec_device_destroy = 0x543de234;
-__crc_sec_get_param = 0xf91db3a3;
-__crc_sec_set_param = 0x8cd70c1a;
-__crc_battery_last_dcvs = 0x51d59a89;
-__crc_do_keyboard_notifier = 0xffc49020;

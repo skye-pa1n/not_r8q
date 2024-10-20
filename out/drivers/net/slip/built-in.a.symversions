@@ -1,6 +1,0 @@
-__crc_slhc_init = 0x215a8ec8;
-__crc_slhc_free = 0xe5bc9a53;
-__crc_slhc_remember = 0xf102033e;
-__crc_slhc_compress = 0x06c8f2de;
-__crc_slhc_uncompress = 0x85fbc931;
-__crc_slhc_toss = 0x6405dcd3;

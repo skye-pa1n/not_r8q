@@ -1,4 +1,0 @@
-__crc_msm_gpio_mpm_wake_set = 0xdc9d499c;
-__crc_msm_gpio_mpm_wake_get = 0xa04c190a;
-__crc_msm_pinctrl_probe = 0x0eebfa5a;
-__crc_msm_pinctrl_remove = 0x91975a38;

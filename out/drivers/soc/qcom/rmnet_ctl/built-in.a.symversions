@@ -1,4 +1,0 @@
-__crc_rmnet_ctl_register_client = 0x191f64e3;
-__crc_rmnet_ctl_unregister_client = 0xf18f9c1f;
-__crc_rmnet_ctl_send_client = 0x9fc0d480;
-__crc_rmnet_ctl_log = 0xce3bfb6e;

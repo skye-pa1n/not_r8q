@@ -1,4 +1,0 @@
-__crc_pps_lookup_dev = 0x16f80981;
-__crc_pps_register_source = 0xe782042c;
-__crc_pps_unregister_source = 0xf4ff90d8;
-__crc_pps_event = 0xde4f3735;

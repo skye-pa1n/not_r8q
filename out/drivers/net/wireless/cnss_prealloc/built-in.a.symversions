@@ -1,4 +1,0 @@
-__crc_wcnss_prealloc_get = 0xdff15e8a;
-__crc_wcnss_prealloc_put = 0x0521fc53;
-__crc_wcnss_prealloc_check_memory_leak = 0x64bee726;
-__crc_wcnss_pre_alloc_reset = 0x82956cff;

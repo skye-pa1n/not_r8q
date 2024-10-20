@@ -1,9 +1,0 @@
-__crc_usb_otg_state_string = 0x7efc7e79;
-__crc_usb_speed_string = 0x77ae495d;
-__crc_usb_get_maximum_speed = 0xd8fdccb0;
-__crc_usb_state_string = 0x4de17ab3;
-__crc_usb_get_dr_mode = 0xf6e05688;
-__crc_of_usb_get_dr_mode_by_phy = 0x924ebf17;
-__crc_of_usb_host_tpl_support = 0xe57b860f;
-__crc_of_usb_update_otg_caps = 0x438598bd;
-__crc_usb_of_get_companion_dev = 0x3c3ed295;

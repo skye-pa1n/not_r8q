@@ -119,6 +119,9 @@ CONFIG_KALLSYMS_ALL=y
 CONFIG_DRM=y
 CONFIG_CPU_FREQ_LIMIT_USERSPACE=n
 
+# Misc changes
+CONFIG_NOT=y
+
 # LTO & Dead Code Elimination & Polly Optimizations
 CONFIG_LTO_CLANG=y
 CONFIG_LTO=y
