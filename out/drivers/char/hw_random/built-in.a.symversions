@@ -1,4 +1,0 @@
-__crc_hwrng_register = 0x08112916;
-__crc_hwrng_unregister = 0xa5b4078f;
-__crc_devm_hwrng_register = 0x4b7ba0fa;
-__crc_devm_hwrng_unregister = 0x899183e2;

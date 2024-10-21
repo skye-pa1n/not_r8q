@@ -1,6 +1,0 @@
-__crc_netlbl_catmap_walk = 0x6cb46525;
-__crc_netlbl_catmap_setbit = 0x2f33a295;
-__crc_netlbl_bitmap_walk = 0x9a583306;
-__crc_netlbl_bitmap_setbit = 0x5506b8f7;
-__crc_netlbl_audit_start = 0x8005cf66;
-__crc_netlbl_calipso_ops_register = 0x9a755ed2;

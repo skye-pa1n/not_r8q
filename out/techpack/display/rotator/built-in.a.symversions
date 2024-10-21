@@ -1,8 +1,0 @@
-__crc_sde_rotator_inline_open = 0x56394a0a;
-__crc_sde_rotator_inline_release = 0x774d1204;
-__crc_sde_rotator_inline_get_dst_pixfmt = 0xc8d8fbf7;
-__crc_sde_rotator_inline_get_downscale_caps = 0xe232044d;
-__crc_sde_rotator_inline_get_maxlinewidth = 0x63b2cdd2;
-__crc_sde_rotator_inline_get_pixfmt_caps = 0xaa278946;
-__crc_sde_rotator_inline_commit = 0x180aeb91;
-__crc_sde_rotator_inline_reg_dump = 0xd915e640;

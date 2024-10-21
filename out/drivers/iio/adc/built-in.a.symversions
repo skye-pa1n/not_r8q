@@ -1,4 +1,0 @@
-__crc_qcom_vadc_scale = 0xd15a6b41;
-__crc_qcom_vadc_hw_scale = 0x334695af;
-__crc_qcom_vadc_decimation_from_dt = 0x70e6eca1;
-__crc_qcom_adc5_decimation_from_dt = 0x47f699dd;

@@ -1,4 +1,0 @@
-__crc_cn_netlink_send_mult = 0x44129ade;
-__crc_cn_netlink_send = 0xa54dc022;
-__crc_cn_add_callback = 0xea126d6c;
-__crc_cn_del_callback = 0xff5a8cfe;

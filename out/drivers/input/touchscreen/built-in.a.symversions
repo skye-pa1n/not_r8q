@@ -1,9 +1,0 @@
-__crc_touchscreen_parse_properties = 0xc9ec244b;
-__crc_touchscreen_set_mt_pos = 0xcf9b558d;
-__crc_touchscreen_report_pos = 0x45c40574;
-__crc_syna_tcm_bus_init = 0x16a831c2;
-__crc_syna_tcm_bus_exit = 0x56c7698e;
-__crc_syna_tcm_add_module = 0xf9531469;
-__crc_fts_get_tsp_test_result = 0x37b675a3;
-__crc_fts_fw_update_on_probe = 0x140d195c;
-__crc_fts_fw_update_on_hidden_menu = 0x0f41faef;

@@ -1,5 +1,0 @@
-__crc_ois_reset_register = 0x95dbf4f1;
-__crc_ois_reset_unregister = 0x039f3102;
-__crc_sensordump_notifier_register = 0xfb260f91;
-__crc_sensordump_notifier_unregister = 0x69240ae6;
-__crc_sensordump_notifier_call_chain = 0x41737281;

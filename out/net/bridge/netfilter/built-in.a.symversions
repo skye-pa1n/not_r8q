@@ -1,3 +1,0 @@
-__crc_ebt_register_table = 0x7aca95f5;
-__crc_ebt_unregister_table = 0x057092c6;
-__crc_ebt_do_table = 0x55afddd9;

@@ -1,4 +1,0 @@
-__crc___fsnotify_inode_delete = 0x7d75db19;
-__crc___fsnotify_parent = 0xa224c297;
-__crc_fsnotify = 0xca514bbc;
-__crc_fsnotify_get_cookie = 0x1a6bf28f;
