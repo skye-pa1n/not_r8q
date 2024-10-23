@@ -24,7 +24,7 @@ extern long ksu_strncpy_from_user_nofault(char *dst,
 					  const void __user *unsafe_addr,
 					  long count);
 
-#if 1
+#ifdef CONFIG_KSU_ALLOWLIST_WORKAROUND
 extern struct key *init_session_keyring;
 #endif
 
