@@ -702,6 +702,60 @@ KBUILD_CFLAGS	+= $(call cc-disable-warning, macro-redefined)
 KBUILD_CFLAGS	+= $(call cc-disable-warning, int-in-bool-context)
 KBUILD_CFLAGS	+= $(call cc-disable-warning, address-of-packed-member)
 
+KBUILD_CFLAGS	+= -mllvm -aggressive-ext-opt \
+           -mllvm -enable-cond-stores-vec \
+           -mllvm -slp-vectorize-hor-store \
+           -mllvm -adce-remove-loops \
+           -mllvm -enable-cse-in-irtranslator \
+           -mllvm -enable-cse-in-legalizer \
+           -mllvm -scalar-evolution-use-expensive-range-sharpening \
+           -mllvm -loop-rotate-multi \
+           -mllvm -enable-interleaved-mem-accesses \
+           -mllvm -enable-masked-interleaved-mem-accesses \
+           -mllvm -enable-gvn-hoist \
+           -mllvm -allow-unroll-and-jam \
+           -mllvm -enable-loop-distribute \
+           -mllvm -enable-loop-flatten \
+           -mllvm -enable-loopinterchange \
+           -mllvm -enable-unroll-and-jam \
+           -mllvm -extra-vectorizer-passes \
+           -mllvm -unroll-runtime-multi-exit \
+           -mllvm -hot-cold-split=true
+           
+ifdef CONFIG_LLVM_POLLY
+KBUILD_CFLAGS	+= -mllvm -polly \
+		   -mllvm -polly-run-dce \
+		   -mllvm -polly-run-inliner \
+		   -mllvm -polly-ast-use-context \
+		   -mllvm -polly-detect-keep-going \
+		   -mllvm -polly-vectorizer=stripmine \
+		   -mllvm -polly-invariant-load-hoisting \
+		   -mllvm -polly-optimizer=isl \
+		   -mllvm -polly-isl-arg=--no-schedule-serialize-sccs \
+           -mllvm -polly-dependences-analysis-type=value-based \
+           -mllvm -polly-dependences-computeout=0 \
+           -mllvm -polly-enable-delicm \
+           -mllvm -polly-loopfusion-greedy \
+           -mllvm -polly-num-threads=0 \
+           -mllvm -polly-omp-backend=LLVM \
+           -mllvm -polly-parallel \
+           -mllvm -polly-postopts \
+           -mllvm -polly-reschedule \
+           -mllvm -polly-scheduling-chunksize=1 \
+           -mllvm -polly-scheduling=dynamic \
+           -mllvm -polly-tiling
+endif
+ifdef CONFIG_LLVM_DFA_JUMP_THREAD
+KBUILD_CFLAGS	+= -mllvm -enable-dfa-jump-thread
+endif
+		   
+ifdef CONFIG_LLVM_MLGO
+KBUILD_CFLAGS	+= -mllvm -regalloc-enable-advisor=release \
+		   -mllvm -enable-local-reassign
+KBUILD_LDFLAGS	+= -mllvm -regalloc-enable-advisor=release \
+		   -mllvm -enable-local-reassign
+endif
+
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS   += -O3
 else
@@ -712,8 +766,11 @@ ifdef CONFIG_CC_WERROR
 KBUILD_CFLAGS  += -Werror
 endif
 
-KBUILD_CFLAGS	+= -mcpu=cortex-a55 -mtune=cortex-a55
-KBUILD_AFLAGS   += -mcpu=cortex-a55 -mtune=cortex-a55
+KBUILD_CFLAGS	+= -mcpu=cortex-a77 -mtune=cortex-a77
+KBUILD_AFLAGS   += -mcpu=cortex-a77 -mtune=cortex-a77
+ifeq ($(CONFIG_LD_IS_LLD), y)
+KBUILD_LDFLAGS  += -mllvm -mcpu=cortex-a77
+endif
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)

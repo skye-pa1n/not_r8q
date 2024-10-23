@@ -679,8 +679,8 @@
 		reg-names = "wdt-base";
 		interrupts = <0 0 IRQ_TYPE_LEVEL_HIGH>,
 				 <0 1 IRQ_TYPE_LEVEL_HIGH>;
-		qcom,bark-time = <11000>;
-		qcom,pet-time = <9360>;
+		qcom,bark-time = <22000>;
+		qcom,pet-time = <18720>;
 		qcom,wakeup-enable;
 		qcom,ipi-ping;
 	};
