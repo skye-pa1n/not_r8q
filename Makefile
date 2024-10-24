@@ -756,13 +756,7 @@ KBUILD_LDFLAGS	+= -mllvm -regalloc-enable-advisor=release \
 		   -mllvm -enable-local-reassign
 endif
 
-ifdef CONFIG_ARM64_16K_PAGES
-KBUILD_LDFLAGS	+= -max-page-size=16384
-endif
-
-ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
-KBUILD_CFLAGS   += -O3
-else
+ifdef CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE
 KBUILD_CFLAGS   += -Ofast
 endif
 
@@ -836,7 +830,6 @@ KBUILD_CFLAGS += $(call cc-disable-warning, tautological-compare)
 # source of a reference will be _MergedGlobals and not on of the whitelisted names.
 # See modpost pattern 2
 KBUILD_CFLAGS += $(call cc-option, -mno-global-merge,)
-KBUILD_CFLAGS += $(call cc-option, -fcatch-undefined-behavior)
 endif
 
 # These warnings generated too much noise in a regular build.
