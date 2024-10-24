@@ -756,6 +756,10 @@ KBUILD_LDFLAGS	+= -mllvm -regalloc-enable-advisor=release \
 		   -mllvm -enable-local-reassign
 endif
 
+ifdef CONFIG_ARM64_16K_PAGES
+KBUILD_LDFLAGS	+= -max-page-size=16384
+endif
+
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS   += -O3
 else
