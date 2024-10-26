@@ -37,6 +37,7 @@
 		qcom,mdss-dsi-display-timings {
 			timing@0 {
 				qcom,mdss-dsi-panel-framerate = <120>;
+				qcom,mdss-dsi-panel-jitter = <0x1 0x1>;
 				qcom,mdss-dsi-panel-width = <1080>;
 				qcom,mdss-dsi-panel-height = <2340>;
 				qcom,mdss-dsi-h-front-porch = <95>;
@@ -132,6 +133,7 @@
 
 			timing@1 {
 				qcom,mdss-dsi-panel-framerate = <90>;
+				qcom,mdss-dsi-panel-jitter = <0x1 0x1>;
 				qcom,mdss-dsi-panel-width = <1080>;
 				qcom,mdss-dsi-panel-height = <2340>;
 				qcom,mdss-dsi-h-front-porch = <95>;
@@ -232,6 +234,7 @@
 
 			timing@2 {
 				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-panel-jitter = <0x1 0x1>;
 				qcom,mdss-dsi-panel-width = <1080>;
 				qcom,mdss-dsi-panel-height = <2340>;
 				qcom,mdss-dsi-h-front-porch = <95>;

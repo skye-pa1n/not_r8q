@@ -178,9 +178,9 @@ int kswapd_threads_current = DEF_KSWAPD_THREADS_PER_NODE;
 #endif
 
 /*
- * From 0 .. 300.  Higher means more swappy.
+ * From 0 .. 200.  Higher means more swappy.
  */
-int vm_swappiness = 260;
+int vm_swappiness = 165;
 /*
  * The total number of pages which are beyond the high watermark within all
  * zones.
