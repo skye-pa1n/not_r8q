@@ -1486,6 +1486,12 @@ struct task_struct {
 
 	/* task is frozen/stopped (used by the cgroup freezer) */
 	ANDROID_KABI_USE(1, unsigned frozen:1);
+		
+	/*
+	 * User pointer to hwui DrawFrameTask::mFrameInfo.
+	 * (used by hwui monitor)
+	 */
+	s64 __user *ui_frame_info;
 
 	/* 095444fad7e3 ("futex: Replace PF_EXITPIDONE with a state") */
 	ANDROID_KABI_USE(2, unsigned int futex_state);

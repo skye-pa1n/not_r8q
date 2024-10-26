@@ -723,7 +723,7 @@ KBUILD_CFLAGS	+= -mllvm -aggressive-ext-opt \
            -mllvm -hot-cold-split=true
            
 ifdef CONFIG_LLVM_POLLY
-KBUILD_CFLAGS	+= -mllvm -polly \
+POLLY_FLAGS	+= -mllvm -polly \
 		   -mllvm -polly-run-dce \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-ast-use-context \
@@ -731,6 +731,7 @@ KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-vectorizer=stripmine \
 		   -mllvm -polly-invariant-load-hoisting \
 		   -mllvm -polly-optimizer=isl \
+		   -mllvm -polly-opt-fusion=max \
 		   -mllvm -polly-isl-arg=--no-schedule-serialize-sccs \
            -mllvm -polly-dependences-analysis-type=value-based \
            -mllvm -polly-dependences-computeout=0 \
@@ -744,11 +745,28 @@ KBUILD_CFLAGS	+= -mllvm -polly \
            -mllvm -polly-scheduling-chunksize=1 \
            -mllvm -polly-scheduling=dynamic \
            -mllvm -polly-tiling
+# Polly may optimise loops with dead paths beyound what the linker
+# can understand. This may negate the effect of the linker's DCE
+# so we tell Polly to perfom proven DCE on the loops it optimises
+# in order to preserve the overall effect of the linker's DCE.
+ifdef CONFIG_LD_DEAD_CODE_DATA_ELIMINATION
+POLLY_FLAGS	+= -mllvm -polly-run-dce
 endif
+OPT_FLAGS	+= $(POLLY_FLAGS)
+KBUILD_LDFLAGS  += $(POLLY_FLAGS)
+KBUILD_CFLAGS   += $(POLLY_FLAGS)
+endif
+
 ifdef CONFIG_LLVM_DFA_JUMP_THREAD
 KBUILD_CFLAGS	+= -mllvm -enable-dfa-jump-thread
 endif
-		   
+
+ifdef CONFIG_INLINE_OPTIMIZATION
+KBUILD_CFLAGS	+= -mllvm -inline-threshold=2000
+KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=3000
+KBUILD_CFLAGS   += -mllvm -unroll-threshold=1200
+endif	
+
 ifdef CONFIG_LLVM_MLGO
 KBUILD_CFLAGS	+= -mllvm -regalloc-enable-advisor=release \
 		   -mllvm -enable-local-reassign

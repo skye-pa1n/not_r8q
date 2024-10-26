@@ -62,6 +62,7 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
+#include <linux/hwui_mon.h>
 #include <linux/ksm.h>
 
 #include <linux/uaccess.h>
@@ -1895,6 +1896,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
+	hwui_mon_handle_exec(filename);
 	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
 }
 
