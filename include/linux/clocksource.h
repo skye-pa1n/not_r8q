@@ -236,7 +236,7 @@ static inline int clocksource_register_khz(struct clocksource *cs, u32 khz)
 
 static inline void __clocksource_update_freq_hz(struct clocksource *cs, u32 hz)
 {
-	__clocksource_update_freq_scale(cs, 2, hz);
+	__clocksource_update_freq_scale(cs, 1, hz);
 }
 
 static inline void __clocksource_update_freq_khz(struct clocksource *cs, u32 khz)
