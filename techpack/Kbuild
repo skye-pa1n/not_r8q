@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0-only
+TECHPACK?=y
+
+techpack-dirs := $(shell find $(srctree)/techpack -maxdepth 1 -mindepth 1 -type d -not -name ".*" -not -name "*camera")
+ifeq ($(CONFIG_TECHPACK_CAMERA_SAMSUNG),y)
+techpack-dirs += $(srctree)/techpack/sec-camera
+else
+techpack-dirs += $(srctree)/techpack/camera
+endif
+obj-${TECHPACK} += stub/ $(addsuffix /,$(subst $(srctree)/techpack/,,$(techpack-dirs)))
+
+techpack-header-dirs := $(shell find $(srctree)/techpack -maxdepth 1 -mindepth 1 -type d -not -name ".*" -not -name "*camera")
+ifeq ($(CONFIG_TECHPACK_CAMERA_SAMSUNG),y)
+techpack-header-dirs += $(srctree)/techpack/sec-camera
+else
+techpack-header-dirs += $(srctree)/techpack/camera
+endif
+
+header-${TECHPACK} += $(addsuffix /include/uapi/,$(subst $(srctree)/techpack/,,$(techpack-header-dirs)))
