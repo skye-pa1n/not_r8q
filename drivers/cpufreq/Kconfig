@@ -253,6 +253,15 @@ config CPU_FREQ_GOV_SCHEDHORIZON
           before raising the frequency to 1248mhz and wait for 60ms before raising the frequency 
           to 1401mhz.
 	  If in doubt, say N.
+	  
+config CPU_FREQ_GOV_PA1N
+	bool "'pa1n' cpufreq policy governor"
+	depends on CPU_FREQ && SMP
+	select CPU_FREQ_GOV_ATTR_SET
+	select IRQ_WORK
+	help
+	  This is a modified version of schedutil.
+	  
 comment "CPU frequency scaling drivers"
 
 config CPUFREQ_DT
