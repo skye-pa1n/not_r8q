@@ -782,11 +782,8 @@ ifdef CONFIG_CC_WERROR
 KBUILD_CFLAGS  += -Werror
 endif
 
-KBUILD_CFLAGS	+= -mcpu=cortex-a77 -mtune=cortex-a77
-KBUILD_AFLAGS   += -mcpu=cortex-a77 -mtune=cortex-a77
-ifeq ($(CONFIG_LD_IS_LLD), y)
-KBUILD_LDFLAGS  += -mllvm -mcpu=cortex-a77
-endif
+KBUILD_CFLAGS	+= -mcpu=cortex-a55+crypto+crc+sha2+aes -mtune=cortex-a55
+KBUILD_AFLAGS   += -mcpu=cortex-a55+crypto+crc+sha2+aes -mtune=cortex-a55
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
