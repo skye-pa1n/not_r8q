@@ -18,10 +18,16 @@
 #include <linux/sched/sysctl.h>
 #include <linux/hwui_mon.h>
 
-#define TARGET_FRAME_TIME 4000
-#define DEFAULT_CPU0_EFFICIENT_FREQ 1804800
-#define DEFAULT_CPU4_EFFICIENT_FREQ 1766400
-#define DEFAULT_CPU7_EFFICIENT_FREQ 2073600
+#define TARGET_FRAME_TIME 1000
+#define DEFAULT_CPU0_EFFICIENT_FREQ 1708800
+#define DEFAULT_HISPEED_CPU0_FREQ 1804800
+#define DEFAULT_HISPEED_CPU0_LOAD 75
+#define DEFAULT_CPU4_EFFICIENT_FREQ 1478400
+#define DEFAULT_HISPEED_CPU4_FREQ 2419200
+#define DEFAULT_HISPEED_CPU4_LOAD 82
+#define DEFAULT_CPU7_EFFICIENT_FREQ 1401600
+#define DEFAULT_HISPEED_CPU7_FREQ 2841600
+#define DEFAULT_HISPEED_CPU7_LOAD 85
 
 struct sugov_tunables {
 	struct gov_attr_set	attr_set;
@@ -362,7 +368,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
 	irq_work_queue(&sg_policy->irq_work);
 }
 
-#define TARGET_LOAD 41
+#define TARGET_LOAD 78
 /**
  * get_next_freq - Compute a new frequency for a given cpufreq policy.
  * @sg_policy: pa1n policy object to compute the new frequency for.
@@ -1257,22 +1263,26 @@ static int sugov_init(struct cpufreq_policy *policy)
 
 	tunables->up_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
 	tunables->down_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
-	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
-	tunables->hispeed_freq = 0;
 
 	switch (policy->cpu) {
 	default:
 	case 0:
 		tunables->rtg_boost_freq = DEFAULT_CPU0_RTG_BOOST_FREQ;
 		tunables->efficient_freq = DEFAULT_CPU0_EFFICIENT_FREQ;
+		tunables->hispeed_load = DEFAULT_HISPEED_CPU0_LOAD;
+		tunables->hispeed_freq = DEFAULT_HISPEED_CPU0_FREQ;
 		break;
 	case 4:
 		tunables->rtg_boost_freq = DEFAULT_CPU4_RTG_BOOST_FREQ;
 		tunables->efficient_freq = DEFAULT_CPU4_EFFICIENT_FREQ;
+		tunables->hispeed_load = DEFAULT_HISPEED_CPU4_LOAD;
+		tunables->hispeed_freq = DEFAULT_HISPEED_CPU4_FREQ;
 		break;
 	case 7:
 		tunables->rtg_boost_freq = DEFAULT_CPU7_RTG_BOOST_FREQ;
 		tunables->efficient_freq = DEFAULT_CPU7_EFFICIENT_FREQ;
+		tunables->hispeed_load = DEFAULT_HISPEED_CPU7_LOAD;
+		tunables->hispeed_freq = DEFAULT_HISPEED_CPU7_FREQ;
 		break;
 	}
 
@@ -1436,17 +1446,6 @@ static void sugov_limits(struct cpufreq_policy *policy)
 	sg_policy->limits_changed = true;
 }
 
-static struct cpufreq_governor pa1n_gov = {
-	.name			= "pa1n",
-	.owner			= THIS_MODULE,
-	.dynamic_switching	= true,
-	.init			= sugov_init,
-	.exit			= sugov_exit,
-	.start			= sugov_start,
-	.stop			= sugov_stop,
-	.limits			= sugov_limits,
-};
-
 static void sugov_calc_frame_boost(
         struct sugov_policy *sg_policy, struct frame_boost_info *info,
 		unsigned int ui_frame_time, u64 cur_time)
@@ -1517,6 +1516,17 @@ static int __init sugov_init_frame_boost(void)
 	        SLAB_HWCACHE_ALIGN | SLAB_PANIC);
 	return register_hwui_mon(&sugov_frametime_receiver);
 }
+
+static struct cpufreq_governor pa1n_gov = {
+	.name			= "pa1n",
+	.owner			= THIS_MODULE,
+	.dynamic_switching	= true,
+	.init			= sugov_init,
+	.exit			= sugov_exit,
+	.start			= sugov_start,
+	.stop			= sugov_stop,
+	.limits			= sugov_limits,
+};
 
 static int __init sugov_register(void)
 {
