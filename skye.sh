@@ -19,9 +19,10 @@ make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV not_defconfig
 
 DATE_START=$(date +"%s")
 
+make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV dtbs
+
 make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV Image
 
-make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV dtbs
 
 DTB_OUT="/home/skye/bomb/out/arch/arm64/boot/dts/vendor/qcom"
 IMAGE="/home/skye/bomb/out/arch/arm64/boot/Image"
