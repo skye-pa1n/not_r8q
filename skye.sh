@@ -9,10 +9,8 @@ BUILD_ENV="CC=${TC_PATH}clang CROSS_COMPILE=${GCC_PATH}aarch64-linux-gnu- LLVM=1
 KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y"
 
 rm -rf AnyKernel3/dtb
-make clean
 rm -rf .version
 rm -rf .local
-make mrproper
 make O=/home/skye/bomb/out clean
 make O=/home/skye/bomb/out mrproper
 make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV not_defconfig
