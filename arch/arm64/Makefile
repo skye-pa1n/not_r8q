@@ -67,10 +67,10 @@ KBUILD_CFLAGS	+= -ffixed-x18
 endif
 
 ifeq ($(cc-name),clang)
-KBUILD_CFLAGS   += -mcpu=cortex-a77+crypto+crc+sha2+aes -mtune=cortex-a77
-KBUILD_AFLAGS   += -mcpu=cortex-a77+crypto+crc+sha2+aes -mtune=cortex-a77
+KBUILD_CFLAGS   += -mcpu=cortex-a77+crypto+crc+sha2+aes -mtune=kryo
+KBUILD_AFLAGS   += -mcpu=cortex-a77+crypto+crc+sha2+aes -mtune=kryo
 ifeq ($(CONFIG_LD_IS_LLD), y)
-KBUILD_LDFLAGS  += -mllvm -mcpu=cortex-a77
+KBUILD_LDFLAGS  += -mllvm -mcpu=kryo
 endif
 endif
 
