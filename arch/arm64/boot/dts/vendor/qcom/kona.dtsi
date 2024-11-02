@@ -287,24 +287,20 @@
 				core3 {
 					cpu = <&CPU3>;
 				};
-			};
 
-			cluster1 {
-				core0 {
+				core4 {
 					cpu = <&CPU4>;
 				};
 
-				core1 {
+				core5 {
 					cpu = <&CPU5>;
 				};
 
-				core2 {
+				core6 {
 					cpu = <&CPU6>;
 				};
-			};
 
-			cluster2 {
-				core0 {
+				core7 {
 					cpu = <&CPU7>;
 				};
 			};
@@ -347,7 +343,7 @@
 	};
 
 	chosen {
-		bootargs = "quiet noirqdebug rcu_nocbs=0-7 kpti=off cgroup_disable=pressure nosoftlockup mce=ignore_ce audit=0";
+		bootargs = "quiet noirqdebug rcu_nocbs=0-7 kpti=off cgroup_disable=pressure nosoftlockup mce=ignore_ce";
 	};
 
 	firmware: firmware {
@@ -2409,6 +2405,7 @@
 		qcom,support-shutdown;
 		qcom,pil-force-shutdown;
 		qcom,esoc-skip-restart-for-mdm-crash;
+		qcom,ignore-ssr-failure;
 		pinctrl-names = "mdm_active", "mdm_suspend";
 		pinctrl-0 = <&ap2mdm_active &mdm2ap_active>;
 		pinctrl-1 = <&ap2mdm_sleep &mdm2ap_sleep>;
