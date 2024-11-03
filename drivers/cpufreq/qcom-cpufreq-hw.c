@@ -20,6 +20,10 @@
 #include <linux/sec_smem.h>
 #include <trace/events/power.h>
 
+#ifdef CONFIG_CPU_FREQ_GOV_PA1N
+#include <linux/moduleparam.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/dcvsh.h>
 
@@ -34,6 +38,10 @@
 #define CYCLE_CNTR_OFFSET(c, m, acc_count)				\
 			(acc_count ? ((c - cpumask_first(m) + 1) * 4) : 0)
 
+#ifdef CONFIG_CPU_FREQ_GOV_PA1N
+static bool r8q_overclock = false;
+module_param(r8q_overclock, bool, S_IRUGO);
+#endif
 
 #ifdef CONFIG_SEC_PM
 extern void *thermal_ipc_log;
@@ -605,6 +613,23 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 				continue;
 			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000, volt);	
 		}
+		
+#ifdef CONFIG_CPU_FREQ_GOV_PA1N
+	        if (r8q_overclock) {
+		        if (cpu == 0) {
+			        c->table[i++].frequency = 1920000;
+			        c->table[i++].frequency = 2016000;
+		        } else if (cpu == 4) {
+			        c->table[i++].frequency = 2572800;
+			        c->table[i++].frequency = 2649600;
+			        c->table[i++].frequency = 2745600;
+		        } else if (cpu == 7) {
+			        c->table[i++].frequency = 2995200;
+			        c->table[i++].frequency = 3187200;
+		}
+	}
+#endif
+
 	}
 
 	c->lut_max_entries = i;

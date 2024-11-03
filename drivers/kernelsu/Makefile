@@ -18,7 +18,7 @@ obj-$(CONFIG_KSU) += kernelsu.o
 
 # hardcode!
 $(eval KSU_VERSION=11986)
-$(info -- KernelSU version: $(KSU_VERSION))
+#$(info -- KernelSU version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
@@ -42,8 +42,8 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
 $(info -- KernelSU Manager package name: $(KSU_MANAGER_PACKAGE))
 endif
 
-$(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
-$(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
+#$(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
+#$(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
 
 ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
