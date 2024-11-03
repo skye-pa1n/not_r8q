@@ -453,7 +453,7 @@ unsigned long apply_dvfs_headroom(int cpu, unsigned long util, unsigned long max
 	return headroom;
 }
 
-unsigned long sugov_effective_cpu_perf(int cpu, unsigned long actual,
+unsigned long sugov_effective_sched_cpu_perf(int cpu, unsigned long actual,
 				 unsigned long min,
 				 unsigned long max)
 {

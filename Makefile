@@ -723,20 +723,20 @@ KBUILD_CFLAGS	+= -mllvm -aggressive-ext-opt \
            -mllvm -hot-cold-split=true
            
 POLLY_FLAGS	+= -mllvm -polly \
-		   -mllvm -polly-run-inliner \
-                   -mllvm -polly-parallel \
-                   -mllvm -polly-postopts \
+		   -mllvm -polly-ast-use-context \
+		   -mllvm -polly-invariant-load-hoisting \
+		   -mllvm -polly-postopts=1 \
+		   -mllvm -polly-run-inliner 
 
-OPT_FLAGS	+= $(POLLY_FLAGS)
-KBUILD_LDFLAGS  += $(POLLY_FLAGS)
-KBUILD_CFLAGS   += $(POLLY_FLAGS)
-
+OPT_FLAGS	+= $(POLLY_FLAGS) -O3
+KBUILD_LDFLAGS	+= $(POLLY_FLAGS) -O3
 
 KBUILD_CFLAGS	+= -mllvm -enable-dfa-jump-thread
 KBUILD_CFLAGS	+= -mllvm -inline-threshold=2000
 KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=3000
 KBUILD_CFLAGS   += -mllvm -unroll-threshold=1200
 KBUILD_CFLAGS   += -O3 -ffast-math
+KBUILD_AFLAGS   += -O3 -ffast-math
 
 ifdef CONFIG_CC_WERROR
 KBUILD_CFLAGS  += -Werror

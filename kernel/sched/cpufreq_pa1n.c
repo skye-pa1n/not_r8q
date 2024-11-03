@@ -20,14 +20,15 @@
 
 #define TARGET_FRAME_TIME 1000
 #define DEFAULT_CPU0_EFFICIENT_FREQ 1708800
-#define DEFAULT_HISPEED_CPU0_FREQ 1804800
+#define DEFAULT_HISPEED_CPU0_FREQ 1708800
 #define DEFAULT_HISPEED_CPU0_LOAD 75
 #define DEFAULT_CPU4_EFFICIENT_FREQ 1478400
-#define DEFAULT_HISPEED_CPU4_FREQ 2419200
+#define DEFAULT_HISPEED_CPU4_FREQ 1478400
 #define DEFAULT_HISPEED_CPU4_LOAD 82
 #define DEFAULT_CPU7_EFFICIENT_FREQ 1401600
-#define DEFAULT_HISPEED_CPU7_FREQ 2841600
+#define DEFAULT_HISPEED_CPU7_FREQ 1401600
 #define DEFAULT_HISPEED_CPU7_LOAD 85
+#define DEFAULT_CPU_SELF_AWARE_FREQ 9999999
 
 struct sugov_tunables {
 	struct gov_attr_set	attr_set;
@@ -180,7 +181,7 @@ static unsigned int __sugov_get_frame_boost(struct sugov_policy *sg_policy)
 		return 0;
 
 	list_for_each_entry(boost, &sg_policy->frame_boost_info, list) {
-		max_freq = max(max_freq, boost->freq);
+		max_freq = DEFAULT_CPU_SELF_AWARE_FREQ;
 	}
 
 	return max_freq;
@@ -396,6 +397,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 {
 	struct cpufreq_policy *policy = sg_policy->policy;
 	unsigned int freq;
+	unsigned int idx, l_freq, h_freq;
 
 	__sugov_expire_frame_boost(sg_policy, time);
 	if (sg_policy->tunables->frame_aware) {
@@ -405,8 +407,14 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 		}
 	}
 
-	freq = arch_scale_freq_invariant() ?
-				policy->cpuinfo.max_freq : policy->cur;
+        if (arch_scale_freq_invariant())
+		freq = policy->cpuinfo.max_freq;
+	else
+		/*
+		 * Apply a 25% margin so that we select a higher frequency than
+		 * the current one before the CPU is fully busy:
+		 */
+		freq = policy->cur + (policy->cur >> 2);
 
 	freq = map_util_freq(util, freq, max);
 
@@ -420,7 +428,19 @@ out:
 	sg_policy->need_freq_update = false;
 	sg_policy->prev_cached_raw_freq = sg_policy->cached_raw_freq;
 	sg_policy->cached_raw_freq = freq;
-	return cpufreq_driver_resolve_freq(policy, freq);
+	l_freq = cpufreq_driver_resolve_freq(policy, freq);
+	idx = cpufreq_frequency_table_target(policy, freq, CPUFREQ_RELATION_H);
+	h_freq = policy->freq_table[idx].frequency;
+	h_freq = clamp(h_freq, policy->min, policy->max);
+	if (l_freq <= h_freq || l_freq == policy->min)
+		return l_freq;
+	/*
+	 * Use the frequency step below if the calculated frequency is <20%
+	 * higher than it.
+	 */
+	if (mult_frac(100, freq - h_freq, l_freq - h_freq) < 20)
+		return h_freq;
+	return l_freq;
 }
 
 extern long
@@ -537,6 +557,35 @@ unsigned long pa1n_cpu_util(int cpu, unsigned long util_cfs,
 		util += cpu_bw_dl(rq);
 
 	return min(max, util);
+}
+
+static __always_inline
+unsigned long apply_dvfs_headroom(int cpu, unsigned long util, unsigned long max_cap)
+{
+	unsigned long headroom;
+	if (!util || util >= max_cap || cpumask_test_cpu(cpu, cpu_prime_mask))
+		return util;
+	if (cpumask_test_cpu(cpu, cpu_lp_mask)) {
+		headroom = util + (util >> 1);
+	} else {
+		headroom = util + (util >> 2);
+	}
+	return headroom;
+}
+unsigned long sugov_effective_pa1n_cpu_perf(int cpu, unsigned long actual,
+				 unsigned long min,
+				 unsigned long max)
+{
+	/* Add dvfs headroom to actual utilization */
+	actual = apply_dvfs_headroom(cpu, actual, max);
+	/* Actually we don't need to target the max performance */
+	if (actual < max)
+		max = actual;
+	/*
+	 * Ensure at least minimum performance while providing more compute
+	 * capacity when possible.
+	 */
+	return max(min, max);
 }
 
 #ifdef CONFIG_SCHED_WALT
