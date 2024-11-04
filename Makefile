@@ -721,15 +721,9 @@ KBUILD_CFLAGS	+= -mllvm -aggressive-ext-opt \
            -mllvm -extra-vectorizer-passes \
            -mllvm -unroll-runtime-multi-exit \
            -mllvm -hot-cold-split=true
-           
-POLLY_FLAGS	+= -mllvm -polly \
-		   -mllvm -polly-ast-use-context \
-		   -mllvm -polly-invariant-load-hoisting \
-		   -mllvm -polly-postopts=1 \
-		   -mllvm -polly-run-inliner 
 
-OPT_FLAGS	+= $(POLLY_FLAGS) -O3
-KBUILD_LDFLAGS	+= $(POLLY_FLAGS) -O3
+OPT_FLAGS	+= -O3
+KBUILD_LDFLAGS	+= -O3
 
 KBUILD_CFLAGS	+= -mllvm -enable-dfa-jump-thread
 KBUILD_CFLAGS	+= -mllvm -inline-threshold=2000
