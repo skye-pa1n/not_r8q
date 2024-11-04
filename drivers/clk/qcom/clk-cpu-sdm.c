@@ -498,7 +498,7 @@ static void cpucc_clk_get_speed_bin(struct platform_device *pdev, int *bin,
 	pte_efuse = readl_relaxed(base);
 	iounmap(base);
 
-	*bin = (pte_efuse >> 2) & 0x7;
+	*bin = 1;
 
 	dev_info(&pdev->dev, "PVS version: %d speed bin: %d\n", *version, *bin);
 }
