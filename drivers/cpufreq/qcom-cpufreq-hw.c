@@ -602,24 +602,8 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 			cpu_dev = get_cpu_device(cpu);
 			if (!cpu_dev)
 				continue;
-			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000, volt);	
+			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000, volt);
 		}
-		
-#ifdef CONFIG_CPU_FREQ_GOV_PA1N
-		        if (cpu == 7) {
-		                c->table[i++].frequency = 844800;
-		                c->table[i++].frequency = 1190400;
-		                c->table[i++].frequency = 1401600;
-		                c->table[i++].frequency = 1862400;
-		                c->table[i++].frequency = 2073600;
-		                c->table[i++].frequency = 2457600;
-		                c->table[i++].frequency = 2553600;
-		                c->table[i++].frequency = 2649600;
-			        c->table[i++].frequency = 2841600;
-			        c->table[i++].frequency = 3187200;
-		}
-#endif
-
 	}
 
 	c->lut_max_entries = i;

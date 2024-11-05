@@ -18,7 +18,7 @@ obj-$(CONFIG_KSU) += kernelsu.o
 
 # hardcode!
 $(eval KSU_VERSION=11986)
-#$(info -- KernelSU version: $(KSU_VERSION))
+$(info -- KernelSU version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
@@ -29,12 +29,15 @@ ifeq ($(shell grep -q "struct selinux_state " $(srctree)/security/selinux/includ
 ccflags-y += -DKSU_COMPAT_HAS_SELINUX_STATE
 endif
 
-ifndef KSU_EXPECTED_SIZE
 KSU_EXPECTED_SIZE := 0x033b
+KSU_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+
+ifndef KSU_EXPECTED_SIZE
+KSU_EXPECTED_SIZE := 0x3cb
 endif
 
 ifndef KSU_EXPECTED_HASH
-KSU_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+KSU_EXPECTED_HASH := a66a220227b7b539ace80a02f03e1e11cf5d20f66e9eaf02ef81dc9811946af2
 endif
 
 ifdef KSU_MANAGER_PACKAGE
@@ -42,18 +45,9 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
 $(info -- KernelSU Manager package name: $(KSU_MANAGER_PACKAGE))
 endif
 
-#$(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
-#$(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
-
 ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
-
-ifeq ($(shell grep -q "int path_umount" $(srctree)/fs/namespace.c; echo $$?),0)
 ccflags-y += -DKSU_UMOUNT
-else
-$(info -- Did you know you can backport path_umount to fs/namespace.c from 5.9?)
-$(info -- Read: https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#how-to-backport-path-umount)
-endif
 
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
@@ -91,5 +85,4 @@ endif
 ifdef KSU_SUSFS_ENABLE_LOG
 ccflags-y += -DKSU_SUSFS_ENABLE_LOG
 endif
-
 # Keep a new line here!! Because someone may append config

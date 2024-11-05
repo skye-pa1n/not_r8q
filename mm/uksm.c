@@ -441,14 +441,14 @@ struct uksm_cpu_preset_s {
 };
 
 struct uksm_cpu_preset_s uksm_cpu_preset[4] = {
-	{ {20, 40, -2500, -10000}, {1000, 500, 200, 50}, 95},
-	{ {20, 30, -2500, -10000}, {1000, 500, 400, 100}, 50},
+	{ {20, 40, -2500, -10000}, {1000, 500, 200, 50}, 35},
+	{ {20, 30, -2500, -10000}, {1000, 500, 400, 100}, 30},
 	{ {10, 20, -5000, -10000}, {1500, 1000, 1000, 250}, 20},
-	{ {10, 20, 40, 75}, {2000, 1000, 1000, 1000}, 1},
+	{ {10, 20, 40, 75}, {2000, 1000, 1000, 1000}, 5},
 };
 
 /* The default value for uksm_ema_page_time if it's not initialized */
-#define UKSM_PAGE_TIME_DEFAULT	500
+#define UKSM_PAGE_TIME_DEFAULT	5000
 
 /*cost to scan one page by expotional moving average in nsecs */
 static unsigned long uksm_ema_page_time = UKSM_PAGE_TIME_DEFAULT;
