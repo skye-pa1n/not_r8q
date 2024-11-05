@@ -29,7 +29,7 @@
 		clocks = <&clock_audio_tx_1 0>,
 			 <&clock_audio_tx_2 0>;
 		qcom,tx-swr-gpios = <&tx_swr_gpios>;
-		qcom,tx-dmic-sample-rate = <9600000>;
+		qcom,tx-dmic-sample-rate = <12288000>;
 		swr2: tx_swr_master {
 			compatible = "qcom,swr-mstr";
 			#address-cells = <2>;
