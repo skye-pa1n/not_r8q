@@ -1093,7 +1093,7 @@
 				qcom,mdss-dsi-v-front-porch = <4>;
 
 				samsung,mdss-dsi-sot-hs-mode; // HS Setting
-				qcom,mdss-dsi-panel-framerate = <120>;
+				qcom,mdss-dsi-panel-framerate = <135>;
 				qcom,mdss-mdp-transfer-time-us = <7533>; /* transfer time: 48Hz: 20032, 60Hz: 15866, 96Hz: 9616, 120Hz: 7533 */
 
 				qcom,mdss-dsi-panel-clockrate = <1110000000>; /* 1110 Mbps*/

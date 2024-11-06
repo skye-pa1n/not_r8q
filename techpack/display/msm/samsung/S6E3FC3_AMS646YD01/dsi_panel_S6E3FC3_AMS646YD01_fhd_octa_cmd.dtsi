@@ -1340,7 +1340,7 @@
 				qcom,mdss-dsi-v-back-porch = <2>;
 				qcom,mdss-dsi-v-front-porch = <15>;
 
-				qcom,mdss-dsi-panel-framerate = <120>;
+				qcom,mdss-dsi-panel-framerate = <135>;
 				samsung,mdss-dsi-sot-hs-mode;
 
 				/* transfer time: 48Hz: 20032, 60Hz: 15866, 96Hz: 9616, 120Hz: 7533 */

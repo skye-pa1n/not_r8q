@@ -346,7 +346,8 @@
 	};
 
 	chosen {
-		bootargs = "r8q_overclock=false quiet noirqdebug rcu_nocbs=0-7 kpti=off cgroup_disable=pressure nosoftlockup mce=ignore_ce";
+		bootargs = "quiet noirqdebug rcu_nocbs=0-7 kpti=off cgroup.memory=nokmem cgroup_disable=pressure";
+		rng-seed = <0x12345678>;
 	};
 
 	firmware: firmware {
@@ -680,7 +681,6 @@
 				 <0 1 IRQ_TYPE_LEVEL_HIGH>;
 		qcom,bark-time = <11000>;
 		qcom,pet-time = <9360>;
-		qcom,wakeup-enable;
 		qcom,ipi-ping;
 	};
         

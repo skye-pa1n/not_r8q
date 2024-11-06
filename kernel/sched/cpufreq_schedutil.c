@@ -443,7 +443,7 @@ static __always_inline
 unsigned long apply_dvfs_headroom(int cpu, unsigned long util, unsigned long max_cap)
 {
 	unsigned long headroom;
-	if (!util || util >= max_cap || cpumask_test_cpu(cpu, cpu_prime_mask))
+	if (!util || util >= max_cap)
 		return util;
 	if (cpumask_test_cpu(cpu, cpu_lp_mask)) {
 		headroom = util + (util >> 1);
