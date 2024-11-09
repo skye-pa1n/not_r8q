@@ -64,6 +64,8 @@ extern unsigned int lpcharge;
 #include <linux/spu-verify.h>
 #endif
 
+#include <linux/rom_notifier.h>
+
 #define TSP_PATH_EXTERNAL_FW		"/sdcard/Firmware/TSP/tsp.bin"
 #define TSP_PATH_EXTERNAL_FW_SIGNED	"/sdcard/Firmware/TSP/tsp_signed.bin"
 #define TSP_PATH_SPU_FW_SIGNED		"/spu/TSP/ffu_tsp.bin"
@@ -802,7 +804,7 @@ struct zt_ts_info {
 	u8 fod_info_vi_trx[3];
 	u16 fod_info_vi_data_len;
 	u16 fod_rect[4];
-	int fod_pressed;
+    int fod_pressed;
 
 	u16 aod_rect[4];
 	u16 aod_active_area[3];
@@ -1425,13 +1427,10 @@ static void zt_set_lp_mode(struct zt_ts_info *info, int event, bool enable)
 
 	mutex_lock(&info->set_lpmode_lock);
 
-	if (enable) {
+	if (enable)
 		zinitix_bit_set(info->lpm_mode, event);
-		info->fod_pressed = 0;
-	}
-	else {
+	else
 		zinitix_bit_clr(info->lpm_mode, event);
-    }
 
 	ret = ts_write_to_sponge(info, ZT_SPONGE_LP_FEATURE, &info->lpm_mode, 1);
 	if (ret < 0)
@@ -1883,6 +1882,12 @@ static void zt_ts_fod_event_report(struct zt_ts_info *info, struct point_info to
 			| ((touch_info.byte04.value_u8bit & 0xF0) >> 4);
 		info->scrub_y = ((touch_info.byte03.value_u8bit << 4) & 0xFF0)
 			| ((touch_info.byte04.value_u8bit & 0x0F));
+		if (!is_aosp) {
+			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+			input_sync(info->input_dev);
+			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
+			input_sync(info->input_dev);
+		}
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 		input_info(true, &info->client->dev, "%s: FOD %s PRESS: %d\n", __func__,
 				touch_info.byte01.value_u8bit ? "NORMAL" : "LONG", info->scrub_id);
@@ -1900,6 +1905,12 @@ static void zt_ts_fod_event_report(struct zt_ts_info *info, struct point_info to
 			| ((touch_info.byte04.value_u8bit & 0xF0) >> 4);
 		info->scrub_y = ((touch_info.byte03.value_u8bit << 4) & 0xFF0)
 			| ((touch_info.byte04.value_u8bit & 0x0F));
+		if (!is_aosp) {
+			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+			input_sync(info->input_dev);
+			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
+			input_sync(info->input_dev);
+		}
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 		input_info(true, &info->client->dev, "%s: FOD RELEASE: %d\n", __func__, info->scrub_id);
 #else
@@ -1915,6 +1926,12 @@ static void zt_ts_fod_event_report(struct zt_ts_info *info, struct point_info to
 			| ((touch_info.byte04.value_u8bit & 0xF0) >> 4);
 		info->scrub_y = ((touch_info.byte03.value_u8bit << 4) & 0xFF0)
 			| ((touch_info.byte04.value_u8bit & 0x0F));
+		if (!is_aosp) {
+			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+			input_sync(info->input_dev);
+			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
+			input_sync(info->input_dev);
+		}
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 		input_info(true, &info->client->dev, "%s: FOD OUT: %d\n", __func__, info->scrub_id);
 #else
@@ -3579,17 +3596,12 @@ static irqreturn_t zt_touch_work(int irq, void *data)
 			if (read_data(info->client, ZT_PROXIMITY_DETECT, (u8 *)&prox_data, 2) < 0)
 				input_err(true, &client->dev, "%s: fail to read proximity detect reg\n", __func__);
 
-            if (info->lpm_mode == 1 || !info->finger_cnt1) {
-			// Report actual range when the area around the sensor is touched,
-			// when panel is in LPM state or when the screen isn't touched
-			    prox_data = prox_data == 5 || !prox_data;
-			    info->hover_event = prox_data;
+			info->hover_event = prox_data;
 
-			    input_info(true, &client->dev, "PROXIMITY DETECT. LVL = %d \n", prox_data);
-			    input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, prox_data);
-			    input_sync(info->input_dev_proximity);
-			    break;
-			}
+			input_info(true, &client->dev, "PROXIMITY DETECT. LVL = %d \n", !prox_data);
+			input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, !prox_data);
+			input_sync(info->input_dev_proximity);
+			break;
 		}
 	}
 
@@ -7836,11 +7848,8 @@ static void ear_detect_enable(void *device_data)
 		snprintf(buff, sizeof(buff), "%s", "NG");
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
 	} else {
-		if (info->lpm_mode == 1)
-			info->ed_enable = sec->cmd_param[0];
-		else
-			info->ed_enable = sec->cmd_param[0] != 0 ? 3 : 0;
-		
+		info->ed_enable = sec->cmd_param[0];
+
 		if (info->ed_enable == 3) {
 			zt_set_optional_mode(info, DEF_OPTIONAL_MODE_EAR_DETECT, true);
 			zt_set_optional_mode(info, DEF_OPTIONAL_MODE_EAR_DETECT_MUTUAL, false);

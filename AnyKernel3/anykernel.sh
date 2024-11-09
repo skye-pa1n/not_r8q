@@ -35,12 +35,48 @@ ramdisk_compression=auto;
 set_perm_recursive 0 0 755 644 $ramdisk/*;
 set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
 
+oneui=$(file_getprop /system/build.prop ro.build.version.oneui);
+gsi=$(file_getprop /system/build.prop ro.product.system.device);
+if [ -n "$oneui" ]; then
+   ui_print " "
+   ui_print "Changing Karnel Image"
+   mv $home/ImageUI $home/Image
+elif [ $gsi == "generic" ]; then
+   ui_print " "
+   ui_print "Changing kemel Image"
+   mv $home/ImageUI $home/Image
+else
+   ui_print " "
+   ui_print "Changing kernel Image"
+   mv $home/ImageAOSP $home/Image
+fi
+
 ## AnyKernel boot install
 dump_boot;
 
 # begin ramdisk changes
 
 # end ramdisk changes
+
+# begin cmdline changes
+
+oneui=$(file_getprop /system/build.prop ro.build.version.oneui);
+gsi=$(file_getprop /system/build.prop ro.product.system.device);
+if [ -n "$oneui" ]; then
+   ui_print " "
+   ui_print "OneUI ROM detected!"
+   patch_cmdline "android.is_aosp" "android.is_aosp=0";
+elif [ $gsi == "generic" ]; then
+   ui_print " "
+   ui_print "GSI ROM detected!"
+   patch_cmdline "android.is_aosp" "android.is_aosp=0";
+else
+   ui_print " "
+   ui_print "AOSP ROM detected!"
+   patch_cmdline "android.is_aosp" "android.is_aosp=1";
+fi
+
+# end cmdline changes
 
 write_boot;
 ## end boot install

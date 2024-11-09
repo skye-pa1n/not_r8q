@@ -53,6 +53,8 @@
 #include <linux/atomic.h>
 #endif
 
+#include <linux/rom_notifier.h>
+
 #ifdef CONFIG_OF
 #ifndef USE_OPEN_CLOSE
 #define USE_OPEN_CLOSE
@@ -1821,15 +1823,21 @@ static u8 fts_event_handler_type_b(struct fts_ts_info *info)
 			if (p_event_status->stype == FTS_EVENT_STATUSTYPE_VENDORINFO) {
 				if (info->board->support_ear_detect) {
 					if (p_event_status->status_id == 0x6A) {
-						if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER || !info->touch_count) {
-							// Report actual range when the area around the sensor is touched,
-							// when panel is in LPM state or when the screen isn't touched
+						if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER || info->finger[TouchID].y < 700 && info->finger[TouchID].x > 900
+						    && info->finger[TouchID].x < 3000) {
+							// Report actual range when either the area around the sensor is touched or if panel is in LPM state
 							p_event_status->status_data_1 = p_event_status->status_data_1 == 5 || !p_event_status->status_data_1;
 							info->hover_event = p_event_status->status_data_1;
 							input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, p_event_status->status_data_1);
 							input_sync(info->input_dev_proximity);
-							input_info(true, &info->client->dev, "%s: proximity: %d\n", __func__, p_event_status->status_data_1);
+						} else {
+							// Properly reset to 1cm
+							p_event_status->status_data_1 = 1;
+							info->hover_event = p_event_status->status_data_1;
+							input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, p_event_status->status_data_1);
+							input_sync(info->input_dev_proximity);
 						}
+						input_info(true, &info->client->dev, "%s: proximity: %d\n", __func__, p_event_status->status_data_1);
 					}
 				}
 			}
@@ -2157,6 +2165,11 @@ static u8 fts_event_handler_type_b(struct fts_ts_info *info)
 						input_info(true, &info->client->dev, "%s: invalid id %d\n",
 								__func__, p_gesture_status->gesture_id);
 						break;
+					}
+					if (!is_aosp) {
+						input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+						input_sync(info->input_dev);
+						input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
 					}
 					break;
 				}
@@ -3841,9 +3854,6 @@ static void fts_sponge_dump_flush(struct fts_ts_info *info, int dump_area)
 			snprintf(buff, sizeof(buff), "%03d: %04x%04x%04x%04x%04x\n",
 					i + (info->sponge_dump_event * dump_area),
 					edata[0], edata[1], edata[2], edata[3], edata[4]);
-#ifdef CONFIG_SEC_DEBUG_TSP_LOG
-			sec_tsp_sponge_log(buff);
-#endif
 		}
 	}
 
@@ -4146,8 +4156,6 @@ int fts_set_lowpowermode(struct fts_ts_info *info, u8 mode)
 	}
 
 	if (mode == TO_LOWPOWER_MODE) {
-		info->fod_pressed = 0;
-
 		if (device_may_wakeup(&info->client->dev))
 			enable_irq_wake(info->irq);
 
