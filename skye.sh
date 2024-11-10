@@ -12,8 +12,8 @@ rm -rf /home/skye/bomb/out/arch/arm64/boot/Image
 rm -rf AnyKernel3/dtb
 rm -rf .version
 rm -rf .local
-make O=/home/skye/bomb/out clean
-make O=/home/skye/bomb/out mrproper
+#make O=/home/skye/bomb/out clean
+#make O=/home/skye/bomb/out mrproper
 make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV not_defconfig
 
 make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV dtbs
@@ -21,9 +21,9 @@ make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_E
 DTB_OUT="/home/skye/bomb/out/arch/arm64/boot/dts/vendor/qcom"
 cat $DTB_OUT/*.dtb > AnyKernel3/dtb
 
-make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV Image
-IMAGEAOSP="/home/skye/bomb/out/arch/arm64/boot/Image"
-mv $IMAGEAOSP AnyKernel3/ImageAOSP
+#make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV Image
+#IMAGEAOSP="/home/skye/bomb/out/arch/arm64/boot/Image"
+#mv $IMAGEAOSP AnyKernel3/ImageAOSP
 
 rm -rf /home/skye/bomb/out/arch/arm64/boot/Image
 rm -rf .version
