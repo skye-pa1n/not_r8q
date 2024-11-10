@@ -261,7 +261,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
 	irq_work_queue(&sg_policy->irq_work);
 }
 
-#define TARGET_LOAD 87
+#define TARGET_LOAD 91
 /**
  * get_next_freq - Compute a new frequency for a given cpufreq policy.
  * @sg_policy: schedutil policy object to compute the new frequency for.
@@ -1119,8 +1119,8 @@ static int sugov_init(struct cpufreq_policy *policy)
 
 	tunables->up_rate_limit_us = 500;
 	tunables->down_rate_limit_us = 1000;
-	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
-	tunables->hispeed_freq = 0;
+	tunables->hispeed_load = 80;
+	tunables->hispeed_freq = 300000;
 
 	switch (policy->cpu) {
 	default:
