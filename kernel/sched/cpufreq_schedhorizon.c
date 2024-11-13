@@ -17,14 +17,14 @@
 #include <trace/events/power.h>
 #include <linux/sched/sysctl.h>
 
-static unsigned int default_efficient_freq_lp[] = {1171200};
-static u64 default_up_delay_lp[] = {100 * NSEC_PER_MSEC};
+static unsigned int default_efficient_freq_lp[] = {1708800};
+static u64 default_up_delay_lp[] = {50 * NSEC_PER_MSEC};
 
-static unsigned int default_efficient_freq_hp[] = {1478400};
-static u64 default_up_delay_hp[] = {100 * NSEC_PER_MSEC};
+static unsigned int default_efficient_freq_hp[] = {1766400};
+static u64 default_up_delay_hp[] = {50 * NSEC_PER_MSEC};
 
 static unsigned int default_efficient_freq_pr[] = {1862400};
-static u64 default_up_delay_pr[] = {100 * NSEC_PER_MSEC};
+static u64 default_up_delay_pr[] = {50 * NSEC_PER_MSEC};
 
 #define DEFAULT_RTG_BOOST_FREQ_LP 0
 #define DEFAULT_RTG_BOOST_FREQ_HP 0
@@ -38,8 +38,8 @@ static u64 default_up_delay_pr[] = {100 * NSEC_PER_MSEC};
 #define DEFAULT_HISPEED_FREQ_HP 1478400
 #define DEFAULT_HISPEED_FREQ_PR 0
 
-#define DEFAULT_PL_LP 0
-#define DEFAULT_PL_HP 0
+#define DEFAULT_PL_LP 1
+#define DEFAULT_PL_HP 1
 #define DEFAULT_PL_PR 1
 
 struct sugov_tunables {
@@ -1295,8 +1295,8 @@ static int sugov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
-	tunables->up_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
-	tunables->down_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
+	tunables->up_rate_limit_us = 500;
+	tunables->down_rate_limit_us = 1000;
 	
 	if (cpumask_test_cpu(sg_policy->policy->cpu, cpu_lp_mask)) {
 		tunables->efficient_freq = default_efficient_freq_lp;
@@ -1487,12 +1487,10 @@ static struct cpufreq_governor schedhorizon_gov = {
 	.limits			= sugov_limits,
 };
 
-#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDHORIZON
 struct cpufreq_governor *cpufreq_default_governor(void)
 {
 	return &schedhorizon_gov;
 }
-#endif
 
 static int __init sugov_register(void)
 {
