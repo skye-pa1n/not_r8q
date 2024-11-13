@@ -168,13 +168,13 @@
 
 			qcom,l3-pwrlevel@2 {
 				reg = <2>;
-				qcom,l3-freq = <1544000000>;
+				qcom,l3-freq = <1744000000>;
 				
 			};
 			
 			qcom,l3-pwrlevel@3 {
 				reg = <3>;
-				qcom,l3-freq = <1933000000>;	
+				qcom,l3-freq = <2133000000>;	
 			};
 		};
 

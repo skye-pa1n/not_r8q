@@ -10,6 +10,69 @@
 #include <linux/binfmts.h>
 #include <linux/sched/idle.h>
 
+#define trace_sched_kthread_stop(...) {}
+#define trace_sched_kthread_stop_ret(...) {}
+#define trace_sched_enq_deq_task(...) {}
+#define trace_sched_waking(...) {}
+#define trace_sched_wakeup(...) {}
+#define trace_sched_wakeup_new(...) {}
+#define register_trace_sched_switch(...) {}
+#define unregister_trace_sched_switch(...) {}
+#define trace_sched_switch(...) {}
+#define trace_sched_migrate_task(...) {}
+#define trace_sched_load_balance(...) {}
+#define trace_sched_load_balance_nohz_kick(...) {}
+#define trace_sched_load_balance_sg_stats(...) {}
+#define trace_sched_load_balance_stats(...) {}
+#define trace_sched_process_free(...) {}
+#define trace_sched_process_exit(...) {}
+#define trace_sched_wait_task(...) {}
+#define trace_sched_process_wait(...) {}
+#define trace_sched_process_fork(...) {}
+#define trace_sched_process_fork(...) {}
+#define trace_sched_process_exec(...) {}
+#define trace_sched_stat_wait(...) {}
+#define trace_sched_stat_sleep(...) {}
+#define trace_sched_stat_iowait(...) {}
+#define trace_sched_stat_blocked(...) {}
+#define trace_sched_blocked_reason(...) {}
+#define trace_sched_stat_runtime(...) {}
+#define trace_sched_stat_runtime(...) {}
+#define trace_sched_pi_setprio(...) {}
+#define trace_sched_move_numa(...) {}
+#define trace_sched_stick_numa(...) {}
+#define trace_sched_swap_numa(...) {}
+#define trace_sched_wake_idle_without_ipi(...) {}
+#define trace_sched_load_cfs_rq(...) {}
+#define trace_sched_load_rt_rq(...) {}
+#define trace_sched_load_avg_cpu(...) {}
+#define trace_sched_load_se(...) {}
+#define trace_sched_load_tg(...) {}
+#define trace_sched_util_est_task(...) {}
+#define trace_sched_util_est_cpu(...) {}
+#define trace_sched_cpu_util(...) {}
+#define trace_sched_compute_energy(...) {}
+#define trace_sched_task_util(...) {}
+#define trace_sched_find_best_target(...) {}
+#define trace_sched_boost_cpu(...) {}
+#define trace_core_ctl_eval_need(...) {}
+#define trace_core_ctl_set_busy(...) {}
+#define trace_core_ctl_set_boost(...) {}
+#define trace_core_ctl_update_nr_need(...) {}
+#define trace_core_ctl_notif_data(...) {}
+#define trace_sched_tune_tasks_update(...) {}
+#define trace_sched_tune_boostgroup_update(...) {}
+#define trace_sched_boost_task(...) {}
+#define trace_sched_overutilized(...) {}
+#define trace_sched_capacity_update(...) {}
+#define trace_sched_get_nr_running_avg(...) {}
+#define trace_sched_isolate(...) {}
+#define trace_sched_set_boost(...) {}
+#define trace_sched_isolate_enabled(...) false
+#define trace_sched_task_util_enabled(...) false
+
+#if 0
+
 /*
  * Tracepoint for calling kthread_stop, performed to end a kthread:
  */
@@ -851,6 +914,7 @@ TRACE_EVENT(sched_wake_idle_without_ipi,
 
 	TP_printk("cpu=%d", __entry->cpu)
 );
+#endif
 
 #ifdef CONFIG_SMP
 #ifdef CREATE_TRACE_POINTS
@@ -894,6 +958,7 @@ struct cfs_rq *__trace_sched_group_cfs_rq(struct sched_entity *se)
 }
 #endif /* CREATE_TRACE_POINTS */
 
+#if 0
 /*
  * Tracepoint for cfs_rq load tracking:
  */
@@ -1670,3 +1735,4 @@ TRACE_EVENT(sched_isolate,
 
 /* This part must be outside protection */
 #include <trace/define_trace.h>
+#endif

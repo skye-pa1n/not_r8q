@@ -47,7 +47,7 @@ static struct notifier_block asmp_nb;
 /*
  * Flag and NOT editable/tunabled
  */
-static bool started = false;
+static bool started = true;
 
 static struct asmp_param_struct {
     unsigned int delay;
@@ -63,17 +63,17 @@ static struct asmp_param_struct {
     unsigned int cycle_up;
     unsigned int cycle_down;
 } asmp_param = {
-    .delay = 350,
+    .delay = 96,
     .scroff_single_core = true,
     .max_cpus_bc = 4, /* Max cpu Big cluster ! */
     .max_cpus_lc = 4, /* Max cpu Little cluster ! */
-    .min_cpus_bc = 1, /* Minimum Big cluster online */
+    .min_cpus_bc = 4, /* Minimum Big cluster online */
     .min_cpus_lc = 2, /* Minimum Little cluster online */
-    .cpufreq_up_bc = 42,
-    .cpufreq_up_lc = 60,
-    .cpufreq_down_bc = 5,
-    .cpufreq_down_lc = 40,
-    .cycle_up = 1,
+    .cpufreq_up_bc = 50,
+    .cpufreq_up_lc = 50,
+    .cpufreq_down_bc = 20,
+    .cpufreq_down_lc = 20,
+    .cycle_up = 0,
     .cycle_down = 2,
 };
 
