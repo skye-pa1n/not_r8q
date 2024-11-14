@@ -346,7 +346,7 @@
 	};
 
 	chosen {
-		bootargs = "quiet noirqdebug rcu_nocbs=0-7 kpti=off cgroup.memory=nokmem cgroup_disable=pressure";
+		bootargs = "quiet noirqdebug rcu_nocbs=0-7 kpti=off cgroup.memory=nokmem androidboot.warranty_bit=0 androidboot.vbmeta.device_state=locked androidboot.flash.locked=1";
 		rng-seed = <0x12345678>;
 	};
 

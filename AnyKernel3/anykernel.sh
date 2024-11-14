@@ -39,15 +39,15 @@ oneui=$(file_getprop /system/build.prop ro.build.version.oneui);
 gsi=$(file_getprop /system/build.prop ro.product.system.device);
 if [ -n "$oneui" ]; then
    ui_print " "
-   ui_print "Changing Karnel Image"
+   ui_print "Changing Kernel Image."
    mv $home/ImageUI $home/Image
 elif [ $gsi == "generic" ]; then
    ui_print " "
-   ui_print "Changing kemel Image"
+   ui_print "Changing Kernel Image.."
    mv $home/ImageUI $home/Image
 else
    ui_print " "
-   ui_print "Changing kernel Image"
+   ui_print "Changing Kernel Image..."
    mv $home/ImageAOSP $home/Image
 fi
 
@@ -73,6 +73,9 @@ elif [ $gsi == "generic" ]; then
 else
    ui_print " "
    ui_print "AOSP ROM detected!"
+   ui_print " "
+   ui_print "Patching CMDline to spoof a Verified boot state..."
+   patch_cmdline "androidboot.verifiedbootstate=orange" "androidboot.verifiedbootstate=green"
    patch_cmdline "android.is_aosp" "android.is_aosp=1";
 fi
 
