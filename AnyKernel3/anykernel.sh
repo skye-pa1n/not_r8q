@@ -74,8 +74,33 @@ else
    ui_print " "
    ui_print "AOSP ROM detected!"
    ui_print " "
-   ui_print "Patching CMDline to spoof a Verified boot state..."
+   ui_print "Patching CMDline..."
    patch_cmdline "androidboot.verifiedbootstate=orange" "androidboot.verifiedbootstate=green"
+   ui_print " "
+   ui_print "Patching Props..."
+   resetprop -n ro.boot.vbmeta.avb_version 4.0
+   resetprop -n ro.boot.vbmeta.device_state locked
+   resetprop -n ro.boot.vbmeta.hash_alg sha256
+   resetprop -n ro.boot.vbmeta.invalidate_on_error yes
+   resetprop -n ro.boot.vbmeta.size 17472
+   resetprop -n ro.boot.vbmeta.device_state locked
+   resetprop -n ro.boot.verifiedbootstate green
+   resetprop -n ro.boot.flash.locked 1
+   resetprop -n ro.boot.veritymode enforcing
+   resetprop -n ro.boot.warranty_bit 0
+   resetprop -n ro.warranty_bit 0
+   resetprop -n ro.debuggable 0
+   resetprop -n ro.force.debuggable 0
+   resetprop -n ro.secure 1
+   resetprop -n ro.adb.secure 1
+   resetprop -n ro.build.type user
+   resetprop -n ro.build.tags release-keys
+   resetprop -n ro.vendor.boot.warranty_bit 0
+   resetprop -n ro.vendor.warranty_bit 0
+   resetprop -n vendor.boot.vbmeta.device_state locked
+   resetprop -n ro.secureboot.lockstate locked
+   resetprop -n vendor.boot.verifiedbootstate green
+   ui_print "Patching Fingerprint Sensor..."
    patch_cmdline "android.is_aosp" "android.is_aosp=1";
 fi
 

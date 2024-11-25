@@ -26,17 +26,17 @@ static u64 default_up_delay_hp[] = {50 * NSEC_PER_MSEC};
 static unsigned int default_efficient_freq_pr[] = {1862400};
 static u64 default_up_delay_pr[] = {50 * NSEC_PER_MSEC};
 
-#define DEFAULT_RTG_BOOST_FREQ_LP 0
-#define DEFAULT_RTG_BOOST_FREQ_HP 0
-#define DEFAULT_RTG_BOOST_FREQ_PR 0
+#define DEFAULT_RTG_BOOST_FREQ_LP 883200
+#define DEFAULT_RTG_BOOST_FREQ_HP 940800
+#define DEFAULT_RTG_BOOST_FREQ_PR 960000
 
 #define DEFAULT_HISPEED_LOAD_LP 100
 #define DEFAULT_HISPEED_LOAD_HP 100
 #define DEFAULT_HISPEED_LOAD_PR 100
 
-#define DEFAULT_HISPEED_FREQ_LP 0
-#define DEFAULT_HISPEED_FREQ_HP 1478400
-#define DEFAULT_HISPEED_FREQ_PR 0
+#define DEFAULT_HISPEED_FREQ_LP 1171200
+#define DEFAULT_HISPEED_FREQ_HP 940800
+#define DEFAULT_HISPEED_FREQ_PR 960000
 
 #define DEFAULT_PL_LP 1
 #define DEFAULT_PL_HP 1
@@ -331,7 +331,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
 	irq_work_queue(&sg_policy->irq_work);
 }
 
-#define TARGET_LOAD 91
+#define TARGET_LOAD 96
 /**
  * get_next_freq - Compute a new frequency for a given cpufreq policy.
  * @sg_policy: schedhorizon policy object to compute the new frequency for.
