@@ -17,7 +17,7 @@ ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-
 obj-$(CONFIG_KSU) += kernelsu.o
 
 # hardcode!
-$(eval KSU_VERSION=11986)
+$(eval KSU_VERSION=11992)
 $(info -- KernelSU version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 
@@ -31,6 +31,7 @@ endif
 
 KSU_EXPECTED_SIZE_CUST := 0x396
 KSU_EXPECTED_HASH_CUST := f415f4ed9435427e1fdf7f1fccd4dbc07b3d6b8751e4dbcec6f19671f427870b
+
 KSU_EXPECTED_SIZE := 0x033b
 KSU_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
 
@@ -44,7 +45,6 @@ $(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
 
 ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
-
 ccflags-y += -DEXPECTED_SIZE_CUST=$(KSU_EXPECTED_SIZE_CUST)
 ccflags-y += -DEXPECTED_HASH_CUST=\"$(KSU_EXPECTED_HASH_CUST)\"
 
@@ -57,39 +57,5 @@ endif
 
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
-
-ifdef KSU_SUSFS
-ccflags-y += -DKSU_SUSFS
-endif
-ifdef KSU_SUSFS_SUS_PATH
-ccflags-y += -DKSU_SUSFS_SUS_PATH
-endif
-ifdef KSU_SUSFS_SUS_MOUNT
-ccflags-y += -DKSU_SUSFS_SUS_MOUNT
-endif
-ifdef KSU_SUSFS_SUS_MOUNT_MNT_ID_REORDER
-ccflags-y += -DKSU_SUSFS_SUS_MOUNT_MNT_ID_REORDER
-endif
-ifdef KSU_SUSFS_SUS_KSTAT
-ccflags-y += -DKSU_SUSFS_SUS_KSTAT
-endif
-ifdef KSU_SUSFS_SUS_MAPS
-ccflags-y += -DKSU_SUSFS_SUS_MAPS
-endif
-ifdef KSU_SUSFS_SUS_PROC_FD_LINK
-ccflags-y += -DKSU_SUSFS_SUS_PROC_FD_LINK
-endif
-ifdef KSU_SUSFS_SUS_MEMFD
-ccflags-y += -DKSU_SUSFS_SUS_MEMFD
-endif
-ifdef KSU_SUSFS_TRY_UMOUNT
-ccflags-y += -DKSU_SUSFS_TRY_UMOUNT
-endif
-ifdef KSU_SUSFS_SPOOF_UNAME
-ccflags-y += -DKSU_SUSFS_SPOOF_UNAME
-endif
-ifdef KSU_SUSFS_ENABLE_LOG
-ccflags-y += -DKSU_SUSFS_ENABLE_LOG
-endif
 
 # Keep a new line here!! Because someone may append config

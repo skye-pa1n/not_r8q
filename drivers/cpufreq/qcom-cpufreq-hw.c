@@ -603,6 +603,15 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 			if (!cpu_dev)
 				continue;
 			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000, volt);
+			if (cpu == 4) {
+                            c->table[0].frequency = 150000;
+                            c->table[1].frequency = 691200;
+                            c->table[2].frequency = 733600;
+                        } else if (cpu == 7) {
+                            c->table[0].frequency = 150000;
+                            c->table[1].frequency = 691200;
+                            c->table[2].frequency = 733600;
+                            }	
 		}
 	}
 

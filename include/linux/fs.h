@@ -723,7 +723,6 @@ struct inode {
 #endif
 
 	void			*i_private; /* fs or device private pointer */
-
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 } __randomize_layout;
@@ -1538,7 +1537,6 @@ struct super_block {
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
-
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);

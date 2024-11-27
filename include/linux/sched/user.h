@@ -43,7 +43,6 @@ struct user_struct {
     defined(CONFIG_NET)
 	atomic_long_t locked_vm;
 #endif
-
 	/* Miscellaneous per-user rate limit */
 	struct ratelimit_state ratelimit;
 };

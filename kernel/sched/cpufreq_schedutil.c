@@ -20,13 +20,13 @@
 
 #define TARGET_FRAME_TIME 1000
 #define DEFAULT_CPU0_EFFICIENT_FREQ 883200
-#define DEFAULT_HISPEED_CPU0_FREQ 1708800
+#define DEFAULT_HISPEED_CPU0_FREQ 1171200
 #define DEFAULT_HISPEED_CPU0_LOAD 84
-#define DEFAULT_CPU4_EFFICIENT_FREQ 1171200
-#define DEFAULT_HISPEED_CPU4_FREQ 1478400
+#define DEFAULT_CPU4_EFFICIENT_FREQ 691200
+#define DEFAULT_HISPEED_CPU4_FREQ 691200
 #define DEFAULT_HISPEED_CPU4_LOAD 88
-#define DEFAULT_CPU7_EFFICIENT_FREQ 960000
-#define DEFAULT_HISPEED_CPU7_FREQ 1401600
+#define DEFAULT_CPU7_EFFICIENT_FREQ 691200
+#define DEFAULT_HISPEED_CPU7_FREQ 691200
 #define DEFAULT_HISPEED_CPU7_LOAD 95
 #define DEFAULT_CPU_SELF_AWARE_FREQ 9999999
 
@@ -38,7 +38,7 @@ struct sugov_tunables {
 	unsigned int		hispeed_freq;
 	unsigned int		rtg_boost_freq;
 	unsigned int		efficient_freq;
-	bool			perf_max;
+	bool			frame_aware;
 	bool			pl;
 };
 
@@ -369,7 +369,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
 	irq_work_queue(&sg_policy->irq_work);
 }
 
-#define TARGET_LOAD 90
+#define TARGET_LOAD 95
 /**
  * get_next_freq - Compute a new frequency for a given cpufreq policy.
  * @sg_policy: pa1n policy object to compute the new frequency for.
@@ -400,7 +400,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 	unsigned int idx, l_freq, h_freq;
 
 	__sugov_expire_frame_boost(sg_policy, time);
-	if (sg_policy->tunables->perf_max) {
+	if (sg_policy->tunables->frame_aware) {
 		freq = __sugov_get_frame_boost(sg_policy);
 		if (freq) {
 			goto out;
@@ -418,7 +418,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 
 	freq = map_util_freq(util, freq, max);
 
-	if (sg_policy->tunables->perf_max)
+	if (sg_policy->tunables->frame_aware)
 		freq = min(freq, sg_policy->tunables->efficient_freq);
 
 out:
@@ -629,11 +629,11 @@ static bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu)
 static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
 #endif /* CONFIG_NO_HZ_COMMON */
 
-#define NL_RATIO 77
-#define DEFAULT_HISPEED_LOAD 90
+#define NL_RATIO 88
+#define DEFAULT_HISPEED_LOAD 98
 #define DEFAULT_CPU0_RTG_BOOST_FREQ 691200
-#define DEFAULT_CPU4_RTG_BOOST_FREQ 710400
-#define DEFAULT_CPU7_RTG_BOOST_FREQ 844000
+#define DEFAULT_CPU4_RTG_BOOST_FREQ 691200
+#define DEFAULT_CPU7_RTG_BOOST_FREQ 691200
 static void sugov_walt_adjust(struct sugov_cpu *sg_cpu, unsigned long *util,
 			      unsigned long *max)
 {
@@ -1067,19 +1067,19 @@ static ssize_t efficient_freq_store(struct gov_attr_set *attr_set,
 	return count;
 }
 
-static ssize_t perf_max_show(struct gov_attr_set *attr_set, char *buf)
+static ssize_t frame_aware_show(struct gov_attr_set *attr_set, char *buf)
 {
 	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n", tunables->perf_max);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", tunables->frame_aware);
 }
 
-static ssize_t perf_max_store(struct gov_attr_set *attr_set, const char *buf,
+static ssize_t frame_aware_store(struct gov_attr_set *attr_set, const char *buf,
 				   size_t count)
 {
 	struct sugov_tunables *tunables = to_sugov_tunables(attr_set);
 
-	if (kstrtobool(buf, &tunables->perf_max))
+	if (kstrtobool(buf, &tunables->frame_aware))
 		return -EINVAL;
 
 	return count;
@@ -1107,7 +1107,7 @@ static struct governor_attr hispeed_load = __ATTR_RW(hispeed_load);
 static struct governor_attr hispeed_freq = __ATTR_RW(hispeed_freq);
 static struct governor_attr rtg_boost_freq = __ATTR_RW(rtg_boost_freq);
 static struct governor_attr efficient_freq = __ATTR_RW(efficient_freq);
-static struct governor_attr perf_max = __ATTR_RW(perf_max);
+static struct governor_attr frame_aware = __ATTR_RW(frame_aware);
 static struct governor_attr pl = __ATTR_RW(pl);
 
 static struct attribute *sugov_attributes[] = {
@@ -1117,7 +1117,7 @@ static struct attribute *sugov_attributes[] = {
 	&hispeed_freq.attr,
 	&rtg_boost_freq.attr,
 	&efficient_freq.attr,
-	&perf_max.attr,
+	&frame_aware.attr,
 	&pl.attr,
 	NULL
 };
@@ -1234,7 +1234,7 @@ static void sugov_tunables_save(struct cpufreq_policy *policy,
 	cached->hispeed_load = tunables->hispeed_load;
 	cached->rtg_boost_freq = tunables->rtg_boost_freq;
 	cached->efficient_freq = tunables->efficient_freq;
-	cached->perf_max = tunables->perf_max;
+	cached->frame_aware = tunables->frame_aware;
 	cached->hispeed_freq = tunables->hispeed_freq;
 	cached->up_rate_limit_us = tunables->up_rate_limit_us;
 	cached->down_rate_limit_us = tunables->down_rate_limit_us;
@@ -1261,7 +1261,7 @@ static void sugov_tunables_restore(struct cpufreq_policy *policy)
 	tunables->hispeed_load = cached->hispeed_load;
 	tunables->rtg_boost_freq = cached->rtg_boost_freq;
 	tunables->efficient_freq = cached->efficient_freq;
-	tunables->perf_max = cached->perf_max;
+	tunables->frame_aware = cached->frame_aware;
 	tunables->hispeed_freq = cached->hispeed_freq;
 	tunables->up_rate_limit_us = cached->up_rate_limit_us;
 	tunables->down_rate_limit_us = cached->down_rate_limit_us;
@@ -1335,7 +1335,7 @@ static int sugov_init(struct cpufreq_policy *policy)
 		break;
 	}
 
-	tunables->perf_max = false;
+	tunables->frame_aware = false;
 	policy->governor_data = sg_policy;
 	sg_policy->tunables = tunables;
 
@@ -1537,7 +1537,7 @@ static void sugov_frametime_handler(
 	sg_cpu = &per_cpu(sugov_cpu, cpu);
 	// Pa1n is not running on this cpu now.
 	if (sg_cpu->sg_policy == NULL ||
-	        !sg_cpu->sg_policy->tunables->perf_max) {
+	        !sg_cpu->sg_policy->tunables->frame_aware) {
 		kmem_cache_free(kmem_frame_boost_pool, info);
 		goto out_put_cpu;
 	}
