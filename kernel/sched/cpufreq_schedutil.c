@@ -278,7 +278,7 @@ static bool sugov_update_next_freq(struct sugov_policy *sg_policy, u64 time,
 		sg_policy->cached_raw_freq = sg_policy->prev_cached_raw_freq;
 		return false;
 	}
-
+		
 	sg_policy->next_freq = next_freq;
 	sg_policy->last_freq_update_time = time;
 
