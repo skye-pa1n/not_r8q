@@ -369,7 +369,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
 	irq_work_queue(&sg_policy->irq_work);
 }
 
-#define TARGET_LOAD 95
+#define TARGET_LOAD 97
 /**
  * get_next_freq - Compute a new frequency for a given cpufreq policy.
  * @sg_policy: pa1n policy object to compute the new frequency for.
@@ -435,10 +435,10 @@ out:
 	if (l_freq <= h_freq || l_freq == policy->min)
 		return l_freq;
 	/*
-	 * Use the frequency step below if the calculated frequency is <20%
+	 * Use the frequency step below if the calculated frequency is <33%
 	 * higher than it.
 	 */
-	if (mult_frac(100, freq - h_freq, l_freq - h_freq) < 20)
+	if (mult_frac(100, freq - h_freq, l_freq - h_freq) < 33)
 		return h_freq;
 	return l_freq;
 }
@@ -629,7 +629,7 @@ static bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu)
 static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
 #endif /* CONFIG_NO_HZ_COMMON */
 
-#define NL_RATIO 88
+#define NL_RATIO 85
 #define DEFAULT_HISPEED_LOAD 98
 #define DEFAULT_CPU0_RTG_BOOST_FREQ 691200
 #define DEFAULT_CPU4_RTG_BOOST_FREQ 691200
