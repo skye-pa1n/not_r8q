@@ -21,13 +21,6 @@ struct adreno_sysfs_attribute adreno_attr_##_name = { \
 	.store = _ ## _name ## _store, \
 }
 
-#define _ADRENO_SYSFS_FPERM_ATTR(_name, _fperm, __show, __store) \
-struct adreno_sysfs_attribute adreno_attr_##_name = { \
-	.attr = __ATTR(_name, _fperm, __show, __store), \
-	.show = _ ## _name ## _show, \
-	.store = _ ## _name ## _store, \
-}
-
 #define _ADRENO_SYSFS_ATTR_RO(_name, __show) \
 struct adreno_sysfs_attribute adreno_attr_##_name = { \
 	.attr = __ATTR(_name, 0444, __show, NULL), \
@@ -262,17 +255,6 @@ static unsigned int _hwcg_show(struct adreno_device *adreno_dev)
 	return test_bit(ADRENO_HWCG_CTRL, &adreno_dev->pwrctrl_flag);
 }
 
-static int _throttling_store(struct adreno_device *adreno_dev,
-	unsigned int val)
-{
-	return 0;
-}
-
-static unsigned int _throttling_show(struct adreno_device *adreno_dev)
-{
-	return test_bit(ADRENO_THROTTLING_CTRL, &adreno_dev->pwrctrl_flag);
-}
-
 static int _sptp_pc_store(struct adreno_device *adreno_dev,
 		unsigned int val)
 {
@@ -421,9 +403,7 @@ static ssize_t _sysfs_show_bool(struct device *dev,
 #define ADRENO_SYSFS_BOOL(_name) \
 	_ADRENO_SYSFS_ATTR(_name, _sysfs_show_bool, _sysfs_store_bool)
 	
-#define ADRENO_SYSFS_RO_BOOL(_name) \
-	_ADRENO_SYSFS_FPERM_ATTR(_name, 0444, _sysfs_show_bool, _sysfs_store_bool)
-	
+
 #define ADRENO_SYSFS_U32(_name) \
 	_ADRENO_SYSFS_ATTR(_name, _sysfs_show_u32, _sysfs_store_u32)
 
@@ -448,7 +428,6 @@ static ADRENO_SYSFS_BOOL(sptp_pc);
 static ADRENO_SYSFS_BOOL(lm);
 static ADRENO_SYSFS_BOOL(preemption);
 static ADRENO_SYSFS_BOOL(hwcg);
-static ADRENO_SYSFS_RO_BOOL(throttling);
 static ADRENO_SYSFS_BOOL(ifpc);
 static ADRENO_SYSFS_RO_U32(ifpc_count);
 static ADRENO_SYSFS_BOOL(acd);
@@ -466,7 +445,6 @@ static const struct attribute *_attr_list[] = {
 	&adreno_attr_lm.attr.attr,
 	&adreno_attr_preemption.attr.attr,
 	&adreno_attr_hwcg.attr.attr,
-	&adreno_attr_throttling.attr.attr,
 	&adreno_attr_gpu_llc_slice_enable.attr.attr,
 	&adreno_attr_gpuhtw_llc_slice_enable.attr.attr,
 	&adreno_attr_preempt_level.attr.attr,
