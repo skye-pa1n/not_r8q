@@ -1317,7 +1317,7 @@ static int sugov_init(struct cpufreq_policy *policy)
 		tunables->efficient_freq = DEFAULT_CPU0_EFFICIENT_FREQ;
 		tunables->hispeed_load = DEFAULT_HISPEED_CPU0_LOAD;
 		tunables->hispeed_freq = DEFAULT_HISPEED_CPU0_FREQ;
-		tunables->up_rate_limit_us = 500;
+		tunables->up_rate_limit_us = 1200;
 	        tunables->down_rate_limit_us = 1000;
 		break;
 	case 4:
@@ -1325,16 +1325,16 @@ static int sugov_init(struct cpufreq_policy *policy)
 		tunables->efficient_freq = DEFAULT_CPU4_EFFICIENT_FREQ;
 		tunables->hispeed_load = DEFAULT_HISPEED_CPU4_LOAD;
 		tunables->hispeed_freq = DEFAULT_HISPEED_CPU4_FREQ;
-		tunables->up_rate_limit_us = 400;
-	        tunables->down_rate_limit_us = 16000;
+		tunables->up_rate_limit_us = 22000;
+	        tunables->down_rate_limit_us = 1500;
 		break;
 	case 7:
 		tunables->rtg_boost_freq = DEFAULT_CPU7_RTG_BOOST_FREQ;
 		tunables->efficient_freq = DEFAULT_CPU7_EFFICIENT_FREQ;
 		tunables->hispeed_load = DEFAULT_HISPEED_CPU7_LOAD;
 		tunables->hispeed_freq = DEFAULT_HISPEED_CPU7_FREQ;
-		tunables->up_rate_limit_us = 500;
-	        tunables->down_rate_limit_us = 15000;
+		tunables->up_rate_limit_us = 20000;
+	        tunables->down_rate_limit_us = 1500;
 		break;
 	}
 
