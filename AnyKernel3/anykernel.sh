@@ -35,22 +35,6 @@ ramdisk_compression=auto;
 set_perm_recursive 0 0 755 644 $ramdisk/*;
 set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
 
-oneui=$(file_getprop /system/build.prop ro.build.version.oneui);
-gsi=$(file_getprop /system/build.prop ro.product.system.device);
-if [ -n "$oneui" ]; then
-   ui_print " "
-   ui_print "Changing Kernel Image."
-   mv $home/ImageUI $home/Image
-elif [ $gsi == "generic" ]; then
-   ui_print " "
-   ui_print "Changing Kernel Image.."
-   mv $home/ImageUI $home/Image
-else
-   ui_print " "
-   ui_print "Changing Kernel Image..."
-   mv $home/ImageAOSP $home/Image
-fi
-
 ## AnyKernel boot install
 dump_boot;
 

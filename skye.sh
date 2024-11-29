@@ -22,8 +22,8 @@ DTB_OUT="/home/skye/bomb/out/arch/arm64/boot/dts/vendor/qcom"
 cat $DTB_OUT/*.dtb > AnyKernel3/dtb
 
 make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV Image
-IMAGEAOSP="/home/skye/bomb/out/arch/arm64/boot/Image"
-mv $IMAGEAOSP AnyKernel3/ImageAOSP
+IMAGE="/home/skye/bomb/out/arch/arm64/boot/Image"
+mv $IMAGE AnyKernel3/Image
 
 cd AnyKernel3
 rm *.zip
