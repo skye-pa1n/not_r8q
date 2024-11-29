@@ -103,6 +103,13 @@ struct cpufreq_counter {
 	spinlock_t lock;
 };
 
+struct cpufreq_qcom_boost {
+	struct cpufreq_qcom *c;
+	unsigned int max_index;
+};
+
+static DEFINE_PER_CPU(struct cpufreq_qcom_boost, cpufreq_boost_pcpu);
+
 struct cpufreq_cooling_cdev {
 	int cpu_id;
 	bool cpu_cooling_state;
@@ -498,6 +505,16 @@ static bool of_find_freq(u32 *of_table, int of_len, long frequency)
 	return false;
 }
 
+static int cpuhp_qcom_online(unsigned int cpu)
+{
+	struct cpufreq_qcom_boost *b = &per_cpu(cpufreq_boost_pcpu, cpu);
+	struct cpufreq_qcom *c = b->c;
+	
+	/* Set the max frequency by default before the governor takes over */
+	writel_relaxed(b->max_index, c->reg_bases[REG_PERF_STATE]);
+	return 0;
+}
+
 static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 				    struct cpufreq_qcom *c,
 	                int domain_index)
@@ -616,6 +633,10 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 
 	c->lut_max_entries = i;
 	c->table[i].frequency = CPUFREQ_TABLE_END;
+	for_each_cpu(cpu, &c->related_cpus) {
+	per_cpu(cpufreq_boost_pcpu, cpu).c = c;
+	per_cpu(cpufreq_boost_pcpu, cpu).max_index = i - 1;
+}
 
 	if (of_table)
 		devm_kfree(dev, of_table);
@@ -946,6 +967,11 @@ static int qcom_cpufreq_hw_driver_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "cycle counter cb failed to register\n");
 		return rc;
 	}
+		
+        rc = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE, "qcom-cpufreq:online",
+				       cpuhp_qcom_online, NULL);
+	if (rc)
+		dev_err(&pdev->dev, "CPUHP callback setup failed, rc=%d\n", rc);
 
 	dev_dbg(&pdev->dev, "QCOM CPUFreq HW driver initialized\n");
 	of_platform_populate(pdev->dev.of_node, NULL, NULL, &pdev->dev);
