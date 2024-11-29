@@ -38,6 +38,16 @@ set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
 ## AnyKernel boot install
 dump_boot;
 
+case "$ZIPFILE" in
+   *-925*)
+    ui_print " • Flashing 925Mhz GPU device tree blob • "
+    mv $home/925dtb $home/dtb
+    ;;
+   *)
+   ui_print " • Flashing 840Mhz GPU device tree blob • "
+    mv $home/840dtb $home/dtb
+    ;;
+esac
 # begin ramdisk changes
 
 # end ramdisk changes
