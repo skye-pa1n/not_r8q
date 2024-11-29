@@ -3089,6 +3089,9 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 		return -EFAULT;
 
 	lock_sock(sk);
+	
+	/* Hack optname to use TCP_NODELAY for everything */
+	optname=TCP_NODELAY;
 
 	switch (optname) {
 	case TCP_MAXSEG:
