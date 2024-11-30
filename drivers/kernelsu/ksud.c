@@ -64,6 +64,10 @@ bool ksu_execveat_hook __read_mostly = true;
 bool ksu_input_hook __read_mostly = true;
 #endif
 
+#ifdef CONFIG_KSU_SUSFS_SUS_SU
+bool ksu_devpts_hook = false;
+#endif
+
 u32 ksu_devpts_sid;
 
 void on_post_fs_data(void)
@@ -487,7 +491,6 @@ static int execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
 #else
 	argv.ptr.native = PT_REGS_PARM3(regs);
 #endif
-
 	return ksu_handle_execveat_ksud(fd, filename_ptr, &argv, NULL, NULL);
 }
 
@@ -522,7 +525,6 @@ __maybe_unused static int vfs_read_handler_pre(struct kprobe *p,
 	char __user **buf_ptr = (char **)&PT_REGS_PARM2(regs);
 	size_t *count_ptr = (size_t *)&PT_REGS_PARM3(regs);
 	loff_t **pos_ptr = (loff_t **)&PT_REGS_CCALL_PARM4(regs);
-
 	return ksu_handle_vfs_read(file_ptr, buf_ptr, count_ptr, pos_ptr);
 }
 
