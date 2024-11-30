@@ -40,22 +40,46 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
 $(info -- KernelSU Manager package name: $(KSU_MANAGER_PACKAGE))
 endif
 
-$(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
-$(info -- KernelSU Manager signature hash: $(KSU_EXPECTED_HASH))
-
 ccflags-y += -DEXPECTED_SIZE=$(KSU_EXPECTED_SIZE)
 ccflags-y += -DEXPECTED_HASH=\"$(KSU_EXPECTED_HASH)\"
 ccflags-y += -DEXPECTED_SIZE_CUST=$(KSU_EXPECTED_SIZE_CUST)
 ccflags-y += -DEXPECTED_HASH_CUST=\"$(KSU_EXPECTED_HASH_CUST)\"
 
-ifeq ($(shell grep -q "int path_umount" $(srctree)/fs/namespace.c; echo $$?),0)
-ccflags-y += -DKSU_UMOUNT
-else
-$(info -- Did you know you can backport path_umount to fs/namespace.c from 5.9?)
-$(info -- Read: https://kernelsu.org/guide/how-to-integrate-for-non-gki.html#how-to-backport-path-umount)
-endif
-
 ccflags-y += -Wno-implicit-function-declaration -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat
 ccflags-y += -Wno-declaration-after-statement -Wno-unused-function
+
+ifdef KSU_SUSFS
+ccflags-y += -DKSU_SUSFS
+endif
+ifdef KSU_SUSFS_SUS_PATH
+ccflags-y += -DKSU_SUSFS_SUS_PATH
+endif
+ifdef KSU_SUSFS_SUS_MOUNT
+ccflags-y += -DKSU_SUSFS_SUS_MOUNT
+endif
+ifdef KSU_SUSFS_SUS_MOUNT_MNT_ID_REORDER
+ccflags-y += -DKSU_SUSFS_SUS_MOUNT_MNT_ID_REORDER
+endif
+ifdef KSU_SUSFS_SUS_KSTAT
+ccflags-y += -DKSU_SUSFS_SUS_KSTAT
+endif
+ifdef KSU_SUSFS_SUS_MAPS
+ccflags-y += -DKSU_SUSFS_SUS_MAPS
+endif
+ifdef KSU_SUSFS_SUS_PROC_FD_LINK
+ccflags-y += -DKSU_SUSFS_SUS_PROC_FD_LINK
+endif
+ifdef KSU_SUSFS_SUS_MEMFD
+ccflags-y += -DKSU_SUSFS_SUS_MEMFD
+endif
+ifdef KSU_SUSFS_TRY_UMOUNT
+ccflags-y += -DKSU_SUSFS_TRY_UMOUNT
+endif
+ifdef KSU_SUSFS_SPOOF_UNAME
+ccflags-y += -DKSU_SUSFS_SPOOF_UNAME
+endif
+ifdef KSU_SUSFS_ENABLE_LOG
+ccflags-y += -DKSU_SUSFS_ENABLE_LOG
+endif
 
 # Keep a new line here!! Because someone may append config
