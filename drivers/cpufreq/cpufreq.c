@@ -2258,7 +2258,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	if (ret)
 		return ret;
 
-	 /* little, big, prime - min/max freq limit (3.19Ghz) */
+	 /* little, big, prime - min/max freq limit (3.36Ghz) */
         min = 150000;
         max = 3360000;
 		cpufreq_verify_within_limits(new_policy, new_policy->min, max);
