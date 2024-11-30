@@ -122,7 +122,7 @@ enum power_control {
 /* ESD Protection */
 /*second : if 0, no use. if you have to use, 3 is recommended*/
 #define ESD_TIMER_INTERVAL			2
-#define SCAN_RATE_HZ				1000
+#define SCAN_RATE_HZ				1200
 #define CHECK_ESD_TIMER				5
 
 /*Test Mode (Monitoring Raw Data) */
