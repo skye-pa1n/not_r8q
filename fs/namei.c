@@ -45,6 +45,10 @@
 #include <linux/susfs.h>
 #endif
 
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#include <linux/sched/user.h>
+#endif
+
 #include "internal.h"
 #include "mount.h"
 
