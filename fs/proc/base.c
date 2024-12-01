@@ -2376,14 +2376,22 @@ static int map_files_get_link(struct dentry *dentry, struct path *path)
 	vma = find_exact_vma(mm, vm_start, vm_end);
 	if (vma) {
         	if (vma->vm_file) {
+        	        const char *target_path = "/dev/ashmem (deleted)";
             		if (strstr(vma->vm_file->f_path.dentry->d_name.name, "lineage")) { 
             		rc = kern_path("/dev/ashmem (deleted)", LOOKUP_FOLLOW, path);
+            		if (rc) {
+                            pr_err("Failed to resolve path: %s (rc: %d)\n", target_path, rc);
+                            return rc;
+                    }
         	} else {
 			*path = vma->vm_file->f_path;
 			path_get(path);
                 	rc = 0;
             		}
-        	}
+            	} else {
+             	   pr_err("Invalid VMA or VM file\n");
+              	   rc = -EINVAL;
+            	}
     	}
 	up_read(&mm->mmap_sem);
 
