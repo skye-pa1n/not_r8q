@@ -624,10 +624,10 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 			 * Underclock cpu thanks to @HotaruOs & Davi0293
 			 */
 			if (cpu == 4) {
-                            c->table[0].frequency = 300000;
+                            c->table[0].frequency = 480000;
                             c->table[1].frequency = 691200;
                         } else if (cpu == 7) {
-                            c->table[0].frequency = 150000;
+                            c->table[0].frequency = 300000;
                             c->table[1].frequency = 480000;
                             c->table[2].frequency = 844800;
                             }	
