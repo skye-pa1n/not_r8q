@@ -2377,7 +2377,7 @@ static int map_files_get_link(struct dentry *dentry, struct path *path)
 	if (vma) {
         	if (vma->vm_file) {
         	        const char *target_path = "/dev/ashmem (deleted)";
-            		if (strstr(vma->vm_file->f_path.dentry->d_name.name, "lineage")) { 
+            		if (strstr(path, "lineage") || strstr(path, "boot.oat")) {
             		rc = kern_path("/dev/ashmem (deleted)", LOOKUP_FOLLOW, path);
             		if (rc) {
                             pr_err("Failed to resolve path: %s (rc: %d)\n", target_path, rc);

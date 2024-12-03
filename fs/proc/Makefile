@@ -5,7 +5,7 @@
 
 obj-y   += proc.o
 
-ccflags-y += -Wno-declaration-after-statement
+ccflags-y += -Wno-declaration-after-statement -Wno-incompatible-pointer-types
 
 CFLAGS_task_mmu.o	+= $(call cc-option,-Wno-override-init,)
 
