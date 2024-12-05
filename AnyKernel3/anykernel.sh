@@ -15,7 +15,7 @@ device.name2=r8qxx
 device.name3=r8qxxx
 device.name4=e3q
 device.name5=e3qxxx
-supported.versions=14
+supported.versions=14 - 15
 supported.patchlevels=
 '; } # end properties
 
