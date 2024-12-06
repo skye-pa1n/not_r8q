@@ -6593,6 +6593,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 
 		tcp_initialize_rcv_mss(sk);
 		tcp_fast_path_on(tp);
+		if (sk->sk_shutdown & SEND_SHUTDOWN)
+		        tcp_shutdown(sk, SEND_SHUTDOWN);
 #ifdef CONFIG_MPTCP
 
 		/* Send an ACK when establishing a new  MPTCP subflow, i.e.
