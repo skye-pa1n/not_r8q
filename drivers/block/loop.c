@@ -258,12 +258,17 @@ static void loop_set_size(struct loop_device *lo, loff_t size)
 	kobject_uevent(&disk_to_dev(bdev->bd_disk)->kobj, KOBJ_CHANGE);
 }
 
-static void
+static int
 figure_loop_size(struct loop_device *lo, loff_t offset, loff_t sizelimit)
 {
 	loff_t size = get_size(offset, sizelimit, lo->lo_backing_file);
 
-	loop_set_size(lo, size);
+	sector_t x = (sector_t)size;
+ 
+	if (unlikely((loff_t)x != size))
+		return -EFBIG;
+ 	loop_set_size(lo, size);
+	return 0;
 }
  
 static inline int
@@ -1025,6 +1030,7 @@ loop_set_status_from_info(struct loop_device *lo,
 	int err;
 	struct loop_func_table *xfer;
 	kuid_t uid = current_uid();
+	loff_t new_size;
 
 	if ((unsigned int) info->lo_encrypt_key_size > LO_KEY_SIZE)
 		return -EINVAL;
