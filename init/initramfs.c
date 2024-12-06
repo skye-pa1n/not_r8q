@@ -12,13 +12,14 @@
 #include <linux/file.h>
 #include <linux/initramfs.h>
 
-static ssize_t __init xwrite(int fd, const char *p, size_t count)
+static ssize_t __init xwrite(struct file *file, const char *p, size_t count,
+		loff_t *pos)
 {
 	ssize_t out = 0;
 
 	/* sys_write only can write MAX_RW_COUNT aka 2G-4K bytes at most */
 	while (count) {
-		ssize_t rv = ksys_write(fd, p, count);
+		ssize_t rv = kernel_write(file, p, count, pos);
 
 		if (rv < 0) {
 			if (rv == -EINTR || rv == -EAGAIN)
@@ -612,6 +613,30 @@ static int __init skip_initramfs_param(char *str)
 	return 1;
 }
 __setup("skip_initramfs", skip_initramfs_param);
+
+#ifdef CONFIG_BLK_DEV_RAM
+static void __init populate_initrd_image(char *err)
+{
+	ssize_t written;
+	struct file *file;
+	loff_t pos = 0;
+
+	unpack_to_rootfs(__initramfs_start, __initramfs_size);
+
+	printk(KERN_INFO "rootfs image is not initramfs (%s); looks like an initrd\n",
+			err);
+	file = filp_open("/initrd.image", O_WRONLY|O_CREAT|O_LARGEFILE, 0700);
+	if (IS_ERR(file))
+		return;
+
+	written = xwrite(file, (char *)initrd_start, initrd_end - initrd_start,
+			&pos);
+	if (written != initrd_end - initrd_start)
+		pr_err("/initrd.image: incomplete write (%zd != %ld)\n",
+		       written, initrd_end - initrd_start);
+	fput(file);
+}
+#endif /* CONFIG_BLK_DEV_RAM */
 
 static int __init populate_rootfs(void)
 {

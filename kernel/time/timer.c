@@ -1429,18 +1429,22 @@ int timer_delete_sync(struct timer_list *timer)
 	 * could lead to deadlock.
 	 */
 	WARN_ON(in_irq() && !(timer->flags & TIMER_IRQSAFE));
-	for (;;) {
-		int ret = try_to_del_timer_sync(timer);
-		if (ret >= 0)
-			return ret;
-		cpu_relax();
-		ndelay(TIMER_LOCK_TIGHT_LOOP_DELAY_NS);
-	}
-}
-EXPORT_SYMBOL(del_timer_sync);
-#endif
+        do {
+		ret = try_to_del_timer_sync(timer);
 
-static void call_timer_fn(struct timer_list *timer, void (*fn)(struct timer_list *))
+		if (unlikely(ret < 0)) {
+			del_timer_wait_running(timer);
+			cpu_relax();
+		}
+	} while (ret < 0);
+
+	return ret;
+ }
+EXPORT_SYMBOL(timer_delete_sync);
+
+static void call_timer_fn(struct timer_list *timer,
+			  void (*fn)(struct timer_list *),
+			  unsigned long baseclk)
 {
 	int count = preempt_count();
 
@@ -1463,7 +1467,7 @@ static void call_timer_fn(struct timer_list *timer, void (*fn)(struct timer_list
 	 */
 	lock_map_acquire(&lockdep_map);
 
-	trace_timer_expire_entry(timer);
+	trace_timer_expire_entry(timer, baseclk);
 	sec_debug_msg_log("timer %pS entry", fn);
 	fn(timer);
 	sec_debug_msg_log("timer %pS exit", fn);
