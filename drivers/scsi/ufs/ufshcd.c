@@ -1196,14 +1196,11 @@ static void ufshcd_add_query_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 static void ufshcd_add_tm_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 		const char *str)
 {
-	struct utp_task_req_desc *descp;
-	struct utp_upiu_task_req *task_req;
 	int off = (int)tag - hba->nutrs;
+	struct utp_task_req_desc *descp = &hba->utmrdl_base_addr[off];
 
-	descp = &hba->utmrdl_base_addr[off];
-	task_req = (struct utp_upiu_task_req *)descp->task_req_upiu;
-	trace_ufshcd_upiu(dev_name(hba->dev), str, &task_req->header,
-			&task_req->input_param1);
+	trace_ufshcd_upiu(dev_name(hba->dev), str, &descp->req_header,
+			&descp->input_param1);
 }
 
 #define UFSHCD_MAX_CMD_LOGGING	200
@@ -1520,25 +1517,16 @@ void ufshcd_print_trs(struct ufs_hba *hba, unsigned long bitmap, bool pr_prdt)
 
 static void ufshcd_print_tmrs(struct ufs_hba *hba, unsigned long bitmap)
 {
-	struct utp_task_req_desc *tmrdp;
 	int tag;
 
 	if (!(hba->ufshcd_dbg_print & UFSHCD_DBG_PRINT_TMRS_EN))
 		return;
 
 	for_each_set_bit(tag, &bitmap, hba->nutmrs) {
-		tmrdp = &hba->utmrdl_base_addr[tag];
+		struct utp_task_req_desc *tmrdp = &hba->utmrdl_base_addr[tag];
+
 		dev_err(hba->dev, "TM[%d] - Task Management Header\n", tag);
-		ufshcd_hex_dump(hba, "TM TRD", &tmrdp->header,
-				sizeof(struct request_desc_header));
-		dev_err(hba->dev, "TM[%d] - Task Management Request UPIU\n",
-				tag);
-		ufshcd_hex_dump(hba, "TM REQ", tmrdp->task_req_upiu,
-				sizeof(struct utp_upiu_req));
-		dev_err(hba->dev, "TM[%d] - Task Management Response UPIU\n",
-				tag);
-		ufshcd_hex_dump(hba, "TM RSP", tmrdp->task_rsp_upiu,
-				sizeof(struct utp_task_req_desc));
+		ufshcd_hex_dump(hba, "", tmrdp, sizeof(*tmrdp));
 	}
 }
 
@@ -3061,19 +3049,19 @@ static ssize_t ufshcd_clkgate_enable_store(struct device *dev,
 		return -EINVAL;
 
 	value = !!value;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
 	if (value == hba->clk_gating.is_enabled)
 		goto out;
 
-	if (value) {
-		ufshcd_release(hba, false);
-	} else {
-		spin_lock_irqsave(hba->host->host_lock, flags);
+	if (value)
+		hba->clk_gating.active_reqs--;
+	else
 		hba->clk_gating.active_reqs++;
-		spin_unlock_irqrestore(hba->host->host_lock, flags);
-	}
 
 	hba->clk_gating.is_enabled = value;
 out:
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
 	return count;
 }
 
@@ -3145,7 +3133,7 @@ static void ufshcd_init_clk_gating(struct ufs_hba *hba)
 	snprintf(wq_name, ARRAY_SIZE(wq_name), "ufs_clk_gating_%d",
 			hba->host->host_no);
 	hba->clk_gating.clk_gating_workq = alloc_ordered_workqueue("%s",
-							   WQ_MEM_RECLAIM, wq_name);
+							   WQ_MEM_RECLAIM | WQ_HIGHPRI, wq_name);
 
 	gating->is_enabled = true;
 
@@ -6034,11 +6022,16 @@ static inline void ufshcd_add_delay_before_dme_cmd(struct ufs_hba *hba)
 			min_sleep_time_us =
 				MIN_DELAY_BEFORE_DME_CMDS_US - delta;
 		else
-			return; /* no more delay required */
+			min_sleep_time_us = 0; /* no more delay required */
 	}
 
-	/* allow sleep for extra 50us if needed */
-	usleep_range(min_sleep_time_us, min_sleep_time_us + 50);
+	if (min_sleep_time_us > 0) {
+		/* allow sleep for extra 50us if needed */
+		usleep_range(min_sleep_time_us, min_sleep_time_us + 50);
+	}
+
+	/* update the last_dme_cmd_tstamp */
+	hba->last_dme_cmd_tstamp = ktime_get();
 }
 
 static inline void ufshcd_save_tstamp_of_last_dme_cmd(
@@ -7413,46 +7406,6 @@ static void ufshcd_slave_destroy(struct scsi_device *sdev)
 	}
 
 	ufshcd_crypto_destroy_rq_keyslot_manager(hba, q);
-}
-
-/**
- * ufshcd_task_req_compl - handle task management request completion
- * @hba: per adapter instance
- * @index: index of the completed request
- * @resp: task management service response
- *
- * Returns non-zero value on error, zero on success
- */
-static int ufshcd_task_req_compl(struct ufs_hba *hba, u32 index, u8 *resp)
-{
-	struct utp_task_req_desc *task_req_descp;
-	struct utp_upiu_task_rsp *task_rsp_upiup;
-	unsigned long flags;
-	int ocs_value;
-	int task_result;
-
-	spin_lock_irqsave(hba->host->host_lock, flags);
-
-	/* Clear completed tasks from outstanding_tasks */
-	__clear_bit(index, &hba->outstanding_tasks);
-
-	task_req_descp = hba->utmrdl_base_addr;
-	ocs_value = ufshcd_get_tmr_ocs(&task_req_descp[index]);
-
-	if (ocs_value == OCS_SUCCESS) {
-		task_rsp_upiup = (struct utp_upiu_task_rsp *)
-				task_req_descp[index].task_rsp_upiu;
-		task_result = be32_to_cpu(task_rsp_upiup->output_param1);
-		task_result = task_result & MASK_TM_SERVICE_RESP;
-		if (resp)
-			*resp = (u8)task_result;
-	} else {
-		dev_err(hba->dev, "%s: failed, ocs = 0x%x\n",
-				__func__, ocs_value);
-	}
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
-
-	return ocs_value;
 }
 
 /**
@@ -9081,30 +9034,11 @@ static int __ufshcd_issue_tm_cmd(struct ufs_hba *hba,
 	ufshcd_hold_all(hba);
 
 	spin_lock_irqsave(host->host_lock, flags);
-	task_req_descp = hba->utmrdl_base_addr;
-	task_req_descp += free_slot;
-
-	/* Configure task request descriptor */
-	task_req_descp->header.dword_0 = cpu_to_le32(UTP_REQ_DESC_INT_CMD);
-	task_req_descp->header.dword_2 =
-			cpu_to_le32(OCS_INVALID_COMMAND_STATUS);
-
-	/* Configure task request UPIU */
-	task_req_upiup =
-		(struct utp_upiu_task_req *) task_req_descp->task_req_upiu;
 	task_tag = hba->nutrs + free_slot;
-	task_req_upiup->header.dword_0 =
-		UPIU_HEADER_DWORD(UPIU_TRANSACTION_TASK_REQ, 0,
-					      lun_id, task_tag);
-	task_req_upiup->header.dword_1 =
-		UPIU_HEADER_DWORD(0, tm_function, 0, 0);
-	/*
-	 * The host shall provide the same value for LUN field in the basic
-	 * header and for Input Parameter.
-	 */
-	task_req_upiup->input_param1 = cpu_to_be32(lun_id);
-	task_req_upiup->input_param2 = cpu_to_be32(task_id);
 
+	treq->req_header.dword_0 |= cpu_to_be32(task_tag);
+
+	memcpy(hba->utmrdl_base_addr + free_slot, treq, sizeof(*treq));
 	ufshcd_vops_setup_task_mgmt(hba, free_slot, tm_function);
 
 	/* send command to the controller */
@@ -9137,8 +9071,15 @@ static int __ufshcd_issue_tm_cmd(struct ufs_hba *hba,
 		spin_unlock_irqrestore(host->host_lock, flags);
 		err = -ETIMEDOUT;
 	} else {
-		err = ufshcd_task_req_compl(hba, free_slot, tm_response);
+		err = 0;
+		memcpy(treq, hba->utmrdl_base_addr + free_slot, sizeof(*treq));
+
 		ufshcd_add_tm_upiu_trace(hba, task_tag, "tm_complete");
+
+		spin_lock_irqsave(hba->host->host_lock, flags);
+		__clear_bit(free_slot, &hba->outstanding_tasks);
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+
 	}
 
 	clear_bit(free_slot, &hba->tm_condition);
@@ -13171,7 +13112,6 @@ out_error:
 }
 EXPORT_SYMBOL(ufshcd_alloc_host);
 
-#if 0
 #if defined(SEC_UFS_ERROR_COUNT)
 /**
  * ufs_sec_send_errinfo - Send UFS Error Information to AP
@@ -13238,7 +13178,6 @@ static void ufs_sec_send_errinfo(void *data)
 	sec_debug_store_additional_dbg(DBG_1_UFS_ERR, 0, "%s", buf);
 #endif
 }
-#endif
 #endif
 
 /**
@@ -13383,7 +13322,7 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	 * Make sure that UFS interrupts are disabled and any pending interrupt
 	 * status is cleared before registering UFS interrupt handler.
 	 */
-	mb();
+	ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
 
 	/* IRQ registration */
 	err = devm_request_irq(dev, irq, ufshcd_intr, IRQF_SHARED,
@@ -13450,7 +13389,10 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	dev_info(hba->dev, "UFS test mode enabled\n");
 #endif
 
-	/* 	Hold auto suspend until async scan completes */
+	/* init ufs_sec_debug function */
+	ufs_sec_send_errinfo(hba);
+
+	/* Hold auto suspend until async scan completes */
 	pm_runtime_get_sync(dev);
 	atomic_set(&hba->scsi_block_reqs_cnt, 0);
 
