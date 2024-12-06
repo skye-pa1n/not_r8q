@@ -67,11 +67,11 @@
 				qcom,gpu-freq = <840000000>;
 				qcom,bus-freq-ddr7 = <11>;
 				qcom,bus-min-ddr7 = <1>;
-				qcom,bus-max-ddr7 = <12>;
+				qcom,bus-max-ddr7 = <11>;
 
 				qcom,bus-freq-ddr8 = <11>;
 				qcom,bus-min-ddr8 = <1>;
-				qcom,bus-max-ddr8 = <12>;
+				qcom,bus-max-ddr8 = <11>;
 
 				qcom,acd-level = <0x802b5ffd>;
 			};

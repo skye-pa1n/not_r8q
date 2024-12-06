@@ -9,8 +9,7 @@
 		sku-index = <0>;
 		reg = <0x0aa00000 0x00100000>;
 		interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
-		qcom,max-hw-load = <2563200>; /* Full 4k @ 60 + 1080p @ 60 */
-		qcom,power-conf = <8294400>; /* WxH - 3840*2160 */
+
 		/* IOMMU Config */
 		#address-cells = <1>;
 		#size-cells = <1>;
@@ -33,7 +32,7 @@
 		/* Mask: Bit0: Clock Scaling, Bit1: Mem Retention*/
 		qcom,clock-configs = <0x0 0x1 0x1>;
 		qcom,allowed-clock-rates = <239999999 338000000
-						366000000 488000000>;
+						366000000 444000000>;
 		resets = <&clock_gcc GCC_VIDEO_AXI0_CLK_ARES>,
 			<&clock_videocc VIDEO_CC_MVS0C_CLK_ARES>;
 		reset-names = "video_axi_reset", "video_core_reset";
