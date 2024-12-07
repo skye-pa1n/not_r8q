@@ -25,11 +25,8 @@ void hnae3_unregister_ae_algo_prepare(struct hnae3_ae_algo *ae_algo)
 		pci_id = pci_match_id(ae_algo->pdev_id_table, ae_dev->pdev);
 		if (!pci_id)
 			continue;
-		if (IS_ENABLED(CONFIG_PCI_IOV)) {
-			device_lock(&ae_dev->pdev->dev);
+		if (IS_ENABLED(CONFIG_PCI_IOV))
 			pci_disable_sriov(ae_dev->pdev);
-			device_unlock(&ae_dev->pdev->dev);
-		}
 	}
 }
 EXPORT_SYMBOL(hnae3_unregister_ae_algo_prepare);
