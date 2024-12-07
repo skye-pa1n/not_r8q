@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 # define_trace.h needs to know how to find our header
+ccflags-y := -Wno-unused-variable
 CFLAGS_trace.o				:= -I$(src)
 CFLAGS_dwc3-msm.o                       := -Idrivers/usb/host -Idrivers/base/power
 
