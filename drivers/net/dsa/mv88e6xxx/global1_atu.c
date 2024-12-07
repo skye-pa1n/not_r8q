@@ -363,8 +363,7 @@ static irqreturn_t mv88e6xxx_g1_atu_prob_irq_thread_fn(int irq, void *dev_id)
 		dev_err_ratelimited(chip->dev,
 				    "ATU full violation for %pM portvec %x spid %d\n",
 				    entry.mac, entry.portvec, spid);
-		if (spid < ARRAY_SIZE(chip->ports))
-			chip->ports[spid].atu_full_violation++;
+		chip->ports[spid].atu_full_violation++;
 	}
 	mutex_unlock(&chip->reg_lock);
 

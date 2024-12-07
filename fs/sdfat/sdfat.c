@@ -4584,7 +4584,11 @@ static int __sdfat_show_options(struct seq_file *m, struct super_block *sb)
 
 static const struct super_operations sdfat_sops = {
 	.alloc_inode   = sdfat_alloc_inode,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+	.free_inode    = sdfat_free_inode,
+#else
 	.destroy_inode = sdfat_destroy_inode,
+#endif
 	.write_inode   = sdfat_write_inode,
 	.evict_inode  = sdfat_evict_inode,
 	.put_super     = sdfat_put_super,

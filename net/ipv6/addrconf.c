@@ -3714,7 +3714,6 @@ static int addrconf_ifdown(struct net_device *dev, int how)
 	struct inet6_ifaddr *ifa;
 	LIST_HEAD(tmp_addr_list);
 	bool keep_addr = false;
-	bool was_ready;
 	int state, i;
 
 	ASSERT_RTNL();
@@ -3780,10 +3779,7 @@ restart:
 
 	addrconf_del_rs_timer(idev);
 
-	/* Step 2: clear flags for stateless addrconf, repeated down
-	 *         detection
-	 */
-	was_ready = idev->if_flags & IF_READY;
+	/* Step 2: clear flags for stateless addrconf */
 	if (!how)
 		idev->if_flags &= ~(IF_RS_SENT|IF_RA_RCVD|IF_READY);
 
@@ -3863,7 +3859,7 @@ restart:
 	if (how) {
 		ipv6_ac_destroy_dev(idev);
 		ipv6_mc_destroy_dev(idev);
-	} else if (was_ready) {
+	} else {
 		ipv6_mc_down(idev);
 	}
 

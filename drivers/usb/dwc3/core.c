@@ -403,7 +403,6 @@ static int dwc3_alloc_event_buffers(struct dwc3 *dwc, unsigned length)
 int dwc3_event_buffers_setup(struct dwc3 *dwc)
 {
 	struct dwc3_event_buffer	*evt;
-	u32				reg;
 
 	if (!dwc->ev_buf)
 		return 0;
@@ -1872,11 +1871,7 @@ static int dwc3_runtime_resume(struct device *dev)
 
 	switch (dwc->current_dr_role) {
 	case DWC3_GCTL_PRTCAP_DEVICE:
-		if (dwc->pending_events) {
-			pm_runtime_put(dwc->dev);
-			dwc->pending_events = false;
-			enable_irq(dwc->irq_gadget);
-		}
+		dwc3_gadget_process_pending_events(dwc);
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
 	default:
@@ -1962,32 +1957,10 @@ runtime_set_active:
 
 	return 0;
 }
-
-static void dwc3_complete(struct device *dev)
-{
-	struct dwc3	*dwc = dev_get_drvdata(dev);
-	u32		reg;
-
-	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST &&
-			dwc->dis_split_quirk) {
-		reg = dwc3_readl(dwc->regs, DWC3_GUCTL3);
-		reg |= DWC3_GUCTL3_SPLITDISABLE;
-		dwc3_writel(dwc->regs, DWC3_GUCTL3, reg);
-	}
-}
-#else
-#define dwc3_complete NULL
 #endif /* CONFIG_PM_SLEEP */
 
 static const struct dev_pm_ops dwc3_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_suspend, dwc3_resume)
-	.complete = dwc3_complete,
-
-	/*
-	 * Runtime suspend halts the controller on disconnection. It relies on
-	 * platforms with custom connection notification to start the controller
-	 * again.
-	 */
 	SET_RUNTIME_PM_OPS(dwc3_runtime_suspend, dwc3_runtime_resume,
 			dwc3_runtime_idle)
 };

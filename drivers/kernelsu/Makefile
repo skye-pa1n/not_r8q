@@ -1,4 +1,3 @@
-ccflags-y     += -Wno-implicit-int
 kernelsu-objs := ksu.o
 kernelsu-objs += allowlist.o
 kernelsu-objs += apk_sign.o

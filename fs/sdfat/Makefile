@@ -1,7 +1,6 @@
 #
 # Makefile for the linux FAT12/16/32(VFAT)/64(exFAT) filesystem driver.
 #
-ccflags-y      := -Wno-constant-conversion -Wno-unused-function
 
 obj-$(CONFIG_SDFAT_FS) += sdfat_fs.o
 
