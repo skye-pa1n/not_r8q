@@ -102,7 +102,7 @@
 		qcom,mdss-dsi-stream = <0>;
 		qcom,mdss-dsi-mdp-trigger = "none";
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";
-		qcom,mdss-dsi-panel-framerate = <96>;
+		qcom,mdss-dsi-panel-framerate = <60>;
 
 		qcom,mdss-pan-physical-width-dimension = <68>; /* 68.4504mm, round-off */
 		qcom,mdss-pan-physical-height-dimension = <148>; /* 148.3092mm, round-off */
@@ -146,11 +146,15 @@
 		qcom,mdss-dsi-panel-status-irq-trigger1 = "falling"; /* DISP_DET */
 		qcom,mdss-dsi-panel-status-irq-trigger2 = "falling"; /* FG_ERR */
 
+
+		/* DFPS (Dynamic FPS, VRR) for only video mode display */
+		/*
 		qcom,dsi-supported-dfps-list = <60 135>;
 		qcom,mdss-dsi-pan-enable-dynamic-fps;
 		qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
-		qcom,mdss-dsi-min-refresh-rate = <96>;
+		qcom,mdss-dsi-min-refresh-rate = <60>;
 		qcom,mdss-dsi-max-refresh-rate = <135>;
+		*/
 
 
 		/* *************************************************************
@@ -2070,6 +2074,7 @@
 #endif
 
 		samsung,br_tables {
+#if 0
 			vrr60@0 {
 				samsung,refresh_rate = <60>;
 
@@ -2133,6 +2138,7 @@
 					/* data is made with 60hz data base */
 				};
 			};
+#endif
 
 			vrr120hs@1 {
 				samsung,refresh_rate = <135>;
@@ -2177,6 +2183,7 @@
 				samsung,flash_gamma_0xc8_check_sum_start_offset = <0x2822>;
 				samsung,flash_gamma_0xc8_check_sum_end_offset = <0x2823>;
 
+#if 0
 				/* Basically all flash gamma datas is from parent node
 				 * Implement properties if value is different with parent's.
 				 */
@@ -2191,8 +2198,10 @@
 
 					/* data is made with 120hz data base */
 				};
+#endif
 			};
 
+#if 0
 			vrr60hs@2 {
 				samsung,refresh_rate = <60>;
 				samsung,br_tbl_sot_hs_mode;
@@ -2235,6 +2244,7 @@
 				samsung,flash_gamma_0xc8_check_sum_start_offset = <0x2822>;
 				samsung,flash_gamma_0xc8_check_sum_end_offset = <0x2823>;
 			};
+#endif
 		};
 
 		/* *************************************************************
@@ -2257,7 +2267,7 @@
 				qcom,mdss-dsi-v-front-porch = <3778>;
 
 				samsung,mdss-dsi-sot-hs-mode;
-				qcom,mdss-dsi-panel-framerate = <96>;
+				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-mdp-transfer-time-us = <15866>;
 				qcom,mdss-dsi-panel-clockrate = <1160000000>;
 				qcom,mdss-dsi-panel-phy-timings = [00 26 0A 0A 27 25 0A 0A 07 02 04 00 1F 1A];

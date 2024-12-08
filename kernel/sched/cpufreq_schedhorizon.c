@@ -1580,11 +1580,6 @@ static struct cpufreq_governor pa1n_gov = {
 	.limits			= sugov_limits,
 };
 
-struct cpufreq_governor *cpufreq_default_governor(void)
-{
-	return &pa1n_gov;
-}
-
 static int __init sugov_register(void)
 {
 	return cpufreq_register_governor(&pa1n_gov) ||
