@@ -42,10 +42,12 @@ dump_boot;
 
 android=$(file_getprop /system/build.prop ro.system.build.version.release);
 if [ $android == 14 ]; then
-    ui_print " • Using A14 Device Tree Blob "
+    ui_print " "
+    ui_print " • Using A14 Device Tree Blob • "
     mv $home/a14.dtb $home/dtb
 elif [ $android == 15 ]; then
-    ui_print " • Using A15 Device Tree Blob "
+    ui_print " "
+    ui_print " • Using A15 Device Tree Blob • "
     mv $home/a15.dtb $home/dtb
 fi
 
@@ -78,20 +80,20 @@ oneui=$(file_getprop /system/build.prop ro.build.version.oneui);
 gsi=$(file_getprop /system/build.prop ro.product.system.device);
 if [ -n "$oneui" ]; then
    ui_print " "
-   ui_print "OneUI ROM detected!"
+   ui_print " • OneUI ROM detected! • "
    patch_cmdline "android.is_aosp" "android.is_aosp=0";
 elif [ $gsi == "generic" ]; then
    ui_print " "
-   ui_print "GSI ROM detected!"
+   ui_print " • GSI ROM detected! • "
    patch_cmdline "android.is_aosp" "android.is_aosp=0";
 else
    ui_print " "
-   ui_print "AOSP ROM detected!"
+   ui_print " • AOSP ROM detected! • "
    ui_print " "
-   ui_print "Patching CMDline..."
+   ui_print " • Patching CMDline... • "
    patch_cmdline "androidboot.verifiedbootstate=orange" "androidboot.verifiedbootstate=green"
    ui_print " "
-   ui_print "Patching Props..."
+   ui_print " • Patching Props... • "
    resetprop -n ro.boot.vbmeta.avb_version 4.0
    resetprop -n ro.boot.vbmeta.device_state locked
    resetprop -n ro.boot.vbmeta.hash_alg sha256
@@ -115,7 +117,7 @@ else
    resetprop -n ro.secureboot.lockstate locked
    resetprop -n vendor.boot.verifiedbootstate green
    ui_print " "
-   ui_print "Patching Fingerprint Sensor..."
+   ui_print " • Patching Fingerprint Sensor... • "
    patch_cmdline "android.is_aosp" "android.is_aosp=1";
 fi
 
