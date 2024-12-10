@@ -38,10 +38,25 @@ set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
 ## AnyKernel boot install
 dump_boot;
 
+# begin dtb changes
+
+android=$(file_getprop /system/build.prop ro.system.build.version.release);
+if [ $android == 14 ]; then
+    ui_print " • Using A14 Device Tree Blob "
+    mv $home/a14.dtb $home/dtb
+elif [ $android == 15 ]; then
+    ui_print " • Using A15 Device Tree Blob "
+    mv $home/a15.dtb $home/dtb
+fi
+
+# end dtb changes
+
+# begin cmdline-ksu changes
+
 case "$ZIPFILE" in
    *-noksu*)
     ui_print " "
-    ui_print " • No KSU Option detected • "
+    ui_print " • Disable KSU Option detected • "
     ui_print " "
     ui_print " • Disabling KSU • "
     patch_cmdline "enable_kernelsu" "enable_kernelsu=0";
@@ -55,9 +70,7 @@ case "$ZIPFILE" in
     ;;
 esac
 
-# begin ramdisk changes
-
-# end ramdisk changes
+#end cmdline-ksu changes
 
 # begin cmdline changes
 

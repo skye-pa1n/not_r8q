@@ -16,8 +16,8 @@ ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-
 
 obj-$(CONFIG_KSU) += kernelsu.o
 
-$(info -- KernelSU version: 11994)
-ccflags-y += -DKSU_VERSION=11994
+$(info -- KernelSU version: 12025)
+ccflags-y += -DKSU_VERSION=12025
 
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
 ccflags-y += -DKSU_COMPAT_HAS_CURRENT_SID
