@@ -38,6 +38,23 @@ set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
 ## AnyKernel boot install
 dump_boot;
 
+case "$ZIPFILE" in
+   *-noksu*)
+    ui_print " "
+    ui_print " • No KSU Option detected • "
+    ui_print " "
+    ui_print " • Disabling KSU • "
+    patch_cmdline "enable_kernelsu" "enable_kernelsu=0";
+    ;;
+   *)
+    ui_print " "
+    ui_print " • Default KSU Option detected • "
+    ui_print " "
+    ui_print " • Enabling KSU • "
+    patch_cmdline "enable_kernelsu" "enable_kernelsu=1";
+    ;;
+esac
+
 # begin ramdisk changes
 
 # end ramdisk changes
@@ -84,6 +101,7 @@ else
    resetprop -n vendor.boot.vbmeta.device_state locked
    resetprop -n ro.secureboot.lockstate locked
    resetprop -n vendor.boot.verifiedbootstate green
+   ui_print " "
    ui_print "Patching Fingerprint Sensor..."
    patch_cmdline "android.is_aosp" "android.is_aosp=1";
 fi
