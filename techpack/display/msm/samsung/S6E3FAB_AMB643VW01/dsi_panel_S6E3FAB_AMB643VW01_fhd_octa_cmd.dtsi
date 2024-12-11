@@ -149,11 +149,11 @@
 
 		/* DFPS (Dynamic FPS, VRR) for only video mode display */
 		/*
-		qcom,dsi-supported-dfps-list = <60 135>;
+		qcom,dsi-supported-dfps-list = <60 120>;
 		qcom,mdss-dsi-pan-enable-dynamic-fps;
 		qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
 		qcom,mdss-dsi-min-refresh-rate = <60>;
-		qcom,mdss-dsi-max-refresh-rate = <135>;
+		qcom,mdss-dsi-max-refresh-rate = <120>;
 		*/
 
 
@@ -2141,7 +2141,7 @@
 #endif
 
 			vrr120hs@1 {
-				samsung,refresh_rate = <135>;
+				samsung,refresh_rate = <120>;
 				samsung,br_tbl_sot_hs_mode;
 
 				samsung,ddi_vfp = <16>;

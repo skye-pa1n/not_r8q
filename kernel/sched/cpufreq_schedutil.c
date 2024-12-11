@@ -18,13 +18,13 @@
 #include <linux/sched/sysctl.h>
 
 static unsigned int default_efficient_freq_lp[] = {1171200};
-static u64 default_up_delay_lp[] = {50 * NSEC_PER_MSEC};
+static u64 default_up_delay_lp[] = {2560};
 
 static unsigned int default_efficient_freq_hp[] = {1171200};
-static u64 default_up_delay_hp[] = {50 * NSEC_PER_MSEC};
+static u64 default_up_delay_hp[] = {5670};
 
 static unsigned int default_efficient_freq_pr[] = {1401600};
-static u64 default_up_delay_pr[] = {50 * NSEC_PER_MSEC};
+static u64 default_up_delay_pr[] = {5240};
 
 #define DEFAULT_RTG_BOOST_FREQ_LP 883200
 #define DEFAULT_RTG_BOOST_FREQ_HP 940800
@@ -1295,8 +1295,21 @@ static int sugov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
-	tunables->up_rate_limit_us = 500;
-	tunables->down_rate_limit_us = 1000;
+	switch (policy->cpu) {
+	default:
+	case 0:
+		tunables->up_rate_limit_us = 500;
+	        tunables->down_rate_limit_us = 1000;
+		break;
+	case 4:
+		tunables->up_rate_limit_us = 12320;
+	        tunables->down_rate_limit_us = 2500;
+		break;
+	case 7:
+		tunables->up_rate_limit_us = 11700;
+	        tunables->down_rate_limit_us = 3500;
+		break;
+	}
 	
 	if (cpumask_test_cpu(sg_policy->policy->cpu, cpu_lp_mask)) {
 		tunables->efficient_freq = default_efficient_freq_lp;

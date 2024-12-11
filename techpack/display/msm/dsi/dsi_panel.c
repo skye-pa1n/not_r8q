@@ -38,38 +38,6 @@
 #define DEFAULT_PANEL_PREFILL_LINES	25
 #define MIN_PREFILL_LINES      35
 
-struct bda {
-    u32 brightness;
-    u32 alpha;
-};
-
-struct bda fod_dim_lut[] = {
-	{0, 0xFF},
-	{1, 0xEC},
-	{2, 0xE6},
-	{3, 0xE0},
-	{4, 0xDC},
-	{6, 0xD5},
-	{10, 0xCA},
-	{20, 0xB7},
-	{21, 0xB5},
-	{30, 0xA8},
-	{42, 0x9A},
-	{63, 0x85},
-	{84, 0x74},
-	{105, 0x65},
-	{126, 0x58},
-	{147, 0x4C},
-	{168, 0x40},
-	{189, 0x36},
-	{210, 0x2C},
-	{231, 0x23},
-	{252, 0x1A},
-	{273, 0x11},
-	{294, 0x9},
-	{315, 0x1},
-};
-
 enum dsi_dsc_ratio_type {
 	DSC_8BPC_8BPP,
 	DSC_10BPC_8BPP,
@@ -610,9 +578,9 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
 
 #if defined(CONFIG_DISPLAY_SAMSUNG)
-    if (vdd->dtsi_data.samsung_dsi_off_reset_delay)
-        usleep_range(vdd->dtsi_data.samsung_dsi_off_reset_delay,
-                vdd->dtsi_data.samsung_dsi_off_reset_delay);
+	if (vdd->dtsi_data.samsung_dsi_off_reset_delay)
+		usleep_range(vdd->dtsi_data.samsung_dsi_off_reset_delay,
+				vdd->dtsi_data.samsung_dsi_off_reset_delay);
 
 	/*
 		AOT disable on factory binary.
@@ -999,38 +967,57 @@ error:
 	return rc;
 }
 
-static u32 dsi_panel_get_backlight(struct dsi_panel *panel)
-{
-	return panel->bl_config.real_bl_level;
-}
-
 static u32 interpolate(uint32_t x, uint32_t xa, uint32_t xb,
 		       uint32_t ya, uint32_t yb)
 {
 	return ya - (ya - yb) * (x - xa) / (xb - xa);
 }
 
-u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel)
+bool dsi_panel_get_fod_ui(struct dsi_panel *panel)
 {
-	u32 brightness = dsi_panel_get_backlight(panel);
-	int len = ARRAY_SIZE(fod_dim_lut);
+	return panel->fod_ui;
+}
+
+void dsi_panel_set_fod_ui(struct dsi_panel *panel, bool status)
+{
+	panel->fod_ui = status;
+
+	sysfs_notify(&panel->parent->kobj, NULL, "fod_ui");
+}
+
+static u32 dsi_panel_calc_fod_dim_alpha(struct dsi_panel *panel, u32 bl_level)
+{
 	int i;
 
-	for (i = 0; i < len; i++)
-		if (fod_dim_lut[i].brightness >= brightness)
+	if (!panel->fod_dim_lut)
+		return 0;
+
+	for (i = 0; i < panel->fod_dim_lut_len; i++)
+		if (panel->fod_dim_lut[i].brightness >= bl_level)
 			break;
 
 	if (i == 0)
-		return fod_dim_lut[i].alpha;
+		return panel->fod_dim_lut[i].alpha;
 
-	if (i == len)
-		return fod_dim_lut[i - 1].alpha;
+	if (i == panel->fod_dim_lut_len)
+		return panel->fod_dim_lut[i - 1].alpha;
 
-	return interpolate(brightness,
-			   fod_dim_lut[i - 1].brightness,
-			   fod_dim_lut[i].brightness,
-			   fod_dim_lut[i - 1].alpha,
-			   fod_dim_lut[i].alpha);
+	return interpolate(bl_level,
+			   panel->fod_dim_lut[i - 1].brightness,
+			   panel->fod_dim_lut[i].brightness,
+			   panel->fod_dim_lut[i - 1].alpha,
+			   panel->fod_dim_lut[i].alpha);
+}
+
+u8 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel)
+{
+	u8 alpha;
+
+	mutex_lock(&panel->panel_lock);
+	alpha = panel->fod_dim_alpha;
+	mutex_unlock(&panel->panel_lock);
+
+	return alpha;
 }
 
 int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
@@ -1060,6 +1047,8 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 	}
 
 	bl->real_bl_level = bl_lvl;
+
+	panel->fod_dim_alpha = dsi_panel_calc_fod_dim_alpha(panel, bl_lvl);
 
 	return rc;
 }
@@ -2990,12 +2979,14 @@ static int dsi_panel_parse_misc_features(struct dsi_panel *panel)
 {
 	struct dsi_parser_utils *utils = &panel->utils;
 
-	panel->ulps_feature_enabled = true;
+	panel->ulps_feature_enabled =
+		utils->read_bool(utils->data, "qcom,ulps-enabled");
 
 	DSI_DEBUG("%s: ulps feature %s\n", __func__,
 		(panel->ulps_feature_enabled ? "enabled" : "disabled"));
 
-	panel->ulps_suspend_enabled = true;
+	panel->ulps_suspend_enabled =
+		utils->read_bool(utils->data, "qcom,suspend-ulps-enabled");
 
 	DSI_DEBUG("%s: ulps during suspend feature %s\n", __func__,
 		(panel->ulps_suspend_enabled ? "enabled" : "disabled"));
@@ -3193,6 +3184,79 @@ error:
 	return rc;
 }
 
+static int dsi_panel_parse_fod_dim_lut(struct dsi_panel *panel,
+		struct dsi_parser_utils *utils)
+{
+	const char *prop_name = "samsung,fod-dim-lut";
+	unsigned int i;
+	u32 *array;
+	int count;
+	int rc;
+
+	count = utils->count_u32_elems(utils->data, prop_name);
+	if (count <= 0 || count % BRIGHTNESS_ALPHA_PAIR_LEN) {
+		DSI_ERR("[%s] invalid number of elements %d\n",
+			panel->name, count);
+		rc = -EINVAL;
+		goto count_fail;
+	}
+
+	array = kcalloc(count, sizeof(u32), GFP_KERNEL);
+	if (!array) {
+		rc = -ENOMEM;
+		goto alloc_array_fail;
+	}
+
+	rc = utils->read_u32_array(utils->data, prop_name, array, count);
+	if (rc) {
+		DSI_ERR("[%s] failed to read array, rc=%d\n", panel->name, rc);
+		goto read_fail;
+	}
+
+	count /= BRIGHTNESS_ALPHA_PAIR_LEN;
+	panel->fod_dim_lut = kcalloc(count, sizeof(*panel->fod_dim_lut),
+				     GFP_KERNEL);
+	if (!panel->fod_dim_lut) {
+		rc = -ENOMEM;
+		goto alloc_lut_fail;
+	}
+
+	panel->fod_dim_lut_len = count;
+
+	for (i = 0; i < count; i++) {
+		struct brightness_alpha_pair *pair = &panel->fod_dim_lut[i];
+		pair->brightness = array[i * BRIGHTNESS_ALPHA_PAIR_LEN + 0];
+		pair->alpha = array[i * BRIGHTNESS_ALPHA_PAIR_LEN + 1];
+	}
+
+alloc_lut_fail:
+read_fail:
+	kfree(array);
+alloc_array_fail:
+count_fail:
+
+	return rc;
+}
+
+int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status)
+{
+	struct dsi_display *display = get_main_display();
+	struct samsung_display_driver_data *vdd = (struct samsung_display_driver_data *)display->panel->panel_private;
+
+	if (status){
+		if (vdd->br_info.common_br.bl_level > 255)
+			vdd->br_info.common_br.finger_mask_bl_level = vdd->br_info.common_br.bl_level;
+		else
+			vdd->br_info.common_br.finger_mask_bl_level = 311;
+	}
+	else
+		vdd->br_info.common_br.finger_mask_bl_level = 0;
+
+	vdd->finger_mask_enable = status;
+
+	return 0;
+}
+
 static int dsi_panel_parse_bl_pwm_config(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -3310,6 +3374,10 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	panel->bl_config.bl_inverted_dbv = utils->read_bool(utils->data,
 		"qcom,mdss-dsi-bl-inverted-dbv");
+
+    rc = dsi_panel_parse_fod_dim_lut(panel, utils);
+	if (rc)
+		DSI_ERR("[%s] failed to parse fod dim lut\n", panel->name);
 
 	if (panel->bl_config.type == DSI_BACKLIGHT_PWM) {
 		rc = dsi_panel_parse_bl_pwm_config(panel);
@@ -4276,7 +4344,24 @@ end:
 #endif
 }
 
+static ssize_t sysfs_fod_ui_read(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct dsi_display *display = dev_get_drvdata(dev);
+	struct dsi_panel *panel = display->panel;
+	bool status;
+
+	mutex_lock(&panel->panel_lock);
+	status = panel->fod_ui;
+	mutex_unlock(&panel->panel_lock);
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", status);
+}
+
+static DEVICE_ATTR(fod_ui, 0444, sysfs_fod_ui_read, NULL);
+
 static struct attribute *panel_attrs[] = {
+	&dev_attr_fod_ui.attr,
 	NULL,
 };
 
