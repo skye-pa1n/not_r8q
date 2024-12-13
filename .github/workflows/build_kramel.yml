@@ -1,7 +1,10 @@
 name: Build notKernel
 on:
-      workflow_dispatch:
-
+    workflow_dispatch:
+    push:
+    branches:
+      - 'master'
+      
 jobs:
   build:
     strategy:
@@ -21,11 +24,17 @@ jobs:
           sudo apt update -y
           sudo apt-get install -y lld binutils clang llvm zip flex bison libncurses-dev gawk  libiberty-dev autoconf kmod bc build-essential gcc libc6 curl libstdc++6 git wget libssl-dev cpio p7zip-full ccache git
           sudo apt clean
+      - name: Build environment
+        run: |
+          sudo apt update
+          DEBIAN_FRONTEND=noninteractive sudo apt install -yq \
+            attr ccache clang golang libbrotli-dev \
+            libgtest-dev libprotobuf-dev libunwind-dev libusb-1.0-0-dev libzstd-dev \
+            linux-modules-extra-$(uname -r) build-essential lld ninja-build protobuf-compiler zipalign gcc-aarch64-linux-gnu libc6-dev libarchive-tools
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Setup kernel source
         uses: actions/checkout@v4
-        with:
-          ref: not_r8q
-          path: master
 
       - name: Cache Build Tools
         id: cache-aosp-clang
