@@ -1,0 +1,114 @@
+name: Build notKernel
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        device: [r8q]
+
+    name: Build Kernel For ${{ matrix.device }}
+    runs-on: ubuntu-latest
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      
+    steps:
+      - name: Installing Dependencies
+        run: |
+          sudo apt update -y
+          sudo apt-get install -y lld binutils clang llvm zip flex bison libncurses-dev gawk  libiberty-dev autoconf kmod bc build-essential gcc libc6 curl libstdc++6 git wget libssl-dev cpio p7zip-full ccache
+          sudo apt clean
+      - name: Setup kernel source
+        uses: actions/checkout@v4
+        with:
+          ref: not_r8q
+          path: master
+
+      - name: Cache Build Tools
+        id: cache-aosp-clang
+        uses: actions/cache@v4
+        with:
+          path: aosp-clang
+          key: aosp-clang  
+
+      - name: Download Build Tools
+        if: steps.cache-aosp-clang.outputs.cache-hit != 'true'
+        run: |
+          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 --single-branch --no-tags -b main aosp-clang/clang  
+      - name: Checkout Anykernel
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          repository: skye-pa1n/AnyKernel3
+          ref: main
+          path: anykernel
+
+      - name: Setup Ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: Build-notK-${{ matrix.device }}
+          save: ${{ github.event_name != 'pull_request' }}
+          max-size: 2G
+
+      - name: Build Kernel
+        working-directory: kernel-source
+        run: |
+          CLANG="$GITHUB_WORKSPACE/aosp-clang/clang/bin"
+          PATH=$CLANG:$PATH
+          export PATH
+          export ARCH=arm64
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CROSS_COMPILE=aarch64-linux-android-
+          export KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y"
+          output_dir=out
+          date=$(date +"%Y%m%d%H%M")
+          export PATH="/usr/lib/ccache:$PATH"
+          echo "date=$date" >> $GITHUB_ENV
+          echo "Building kernel with $args"
+          make -C $(pwd) O=out $KERNEL_MAKE_ENV CC="ccache clang" LLVM=1 LLVM_IAS=1 vendor/m23xq_eur_open_defconfig && make O=out $KERNEL_MAKE_ENV CC="ccache clang" LLVM=1 LLVM_IAS=1 -j$(grep -c ^processor /proc/cpuinfo)
+          $GITHUB_WORKSPACE/kernel-source//tools/mkdtimg create $GITHUB_WORKSPACE/kernel-source/out/arch/arm64/boot/dtbo.img --page_size=4096 $(find out/arch/arm64/boot/dts/samsung/m23/m23xq/ -name *.dtbo)
+      - name: Upload notKernel-${{ matrix.device }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: notK-${{ matrix.device }}
+          path: kernel-source/out/arch/arm64/boot/*
+          
+      - name: Prepare Anykernel
+        working-directory: anykernel
+        run: |
+          cp -f $GITHUB_WORKSPACE/kernel-source/out/arch/arm64/boot/Image .
+          cp -f $GITHUB_WORKSPACE/kernel-source/out/arch/arm64/boot/dtbo.img .
+          ZIP_NAME="notK-perf+${{ matrix.device }}_$(date +'%Y-%m-%d')"
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          zip -r "$ZIP_NAME.zip" *
+          mv "$ZIP_NAME.zip" $GITHUB_WORKSPACE
+      - name: Generate SHA-1 checksum
+        run: |
+          # Replace 'yourfile.ext' with the actual file path
+          sha1sum $ZIP_NAME.zip | awk '{print $1}' > checksum.txt
+          # Read the checksum into a variable
+          CHECKSUM=$(cat checksum.txt)
+      - name: Upload Anykernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: anykernel/*
+
+      - name: Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: ${{ github.workspace }}/checksum.txt
+          name: "notKernel For ${{ matrix.device }} with KernelSU"
+          files: |
+            ${{ env.ZIP_NAME }}.zip
+          tag_name: ${{ github.run_number }}-${{ github.ref }}-${{ matrix.device }}
+
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          retain_days: 0
+          keep_minimum_runs: 1
