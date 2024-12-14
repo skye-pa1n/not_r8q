@@ -73,9 +73,8 @@ jobs:
           date=$(date +"%Y%m%d%H%M")
           export PATH="/usr/lib/ccache:$PATH"
           echo "date=$date" >> $GITHUB_ENV
-          echo "Building kernel with $args"
-          make -C $(pwd) O=out $KERNEL_MAKE_ENV CC="ccache clang" LLVM=1 LLVM_IAS=1 not_defconfig && make O=out $KERNEL_MAKE_ENV CC="ccache clang" LLVM=1 LLVM_IAS=1 -j$(grep -c ^processor /proc/cpuinfo)
-          $GITHUB_WORKSPACE/kernel-source//tools/mkdtimg create $GITHUB_WORKSPACE/kernel-source/out/arch/arm64/boot/dtbo.img --page_size=4096 $(find out/arch/arm64/boot/dts/vendor/qcom/ -name *.dtbo)
+          echo "Building kernel"
+          make -C $(pwd) O=out $KERNEL_MAKE_ENV CC="ccache clang" LLVM=1 LLVM_IAS=1 not_defconfig && make O=out $KERNEL_MAKE_ENV CC="ccache clang" LLVM=1 LLVM_IAS=1 -j8
       - name: Upload notKernel-${{ matrix.device }}
         uses: actions/upload-artifact@v3
         with:
