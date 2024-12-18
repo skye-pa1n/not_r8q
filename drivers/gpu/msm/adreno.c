@@ -39,7 +39,7 @@ static unsigned int counter_delta(struct kgsl_device *device,
 
 static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 	.bus = {
-		.max = 1200,
+		.max = 1500,
 		.floating = true,
 	},
 	.device_id = KGSL_DEVICE_3D0,
@@ -97,7 +97,7 @@ static unsigned int adreno_ft_regs_default[] = {
 int adreno_wake_nice = -7;
 
 /* Number of milliseconds to stay active active after a wake on touch */
-unsigned int adreno_wake_timeout = 100;
+unsigned int adreno_wake_timeout = 72;
 
 void adreno_reglist_write(struct adreno_device *adreno_dev,
 		const struct adreno_reglist *list, u32 count)

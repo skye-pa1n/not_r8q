@@ -11,6 +11,7 @@
 #include <linux/pwm.h>
 #include <video/mipi_display.h>
 
+#include <linux/display_state.h>
 #include "dsi_panel.h"
 #include "dsi_display.h"
 #include "dsi_ctrl_hw.h"
@@ -45,6 +46,13 @@ enum dsi_dsc_ratio_type {
 	DSC_10BPC_10BPP,
 	DSC_RATIO_TYPE_MAX
 };
+
+bool display_on = true;
+
+bool is_display_on()
+{
+	return display_on;
+}
 
 static u32 dsi_dsc_rc_buf_thresh[] = {0x0e, 0x1c, 0x2a, 0x38, 0x46, 0x54,
 		0x62, 0x69, 0x70, 0x77, 0x79, 0x7b, 0x7d, 0x7e};
