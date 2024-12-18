@@ -8,7 +8,7 @@ on:
       - 'master'
 
 jobs:
-  build_aqua:
+  build_not:
     runs-on: ubuntu-latest
 
     strategy:
@@ -36,10 +36,6 @@ jobs:
           mkdir -p "$HOME/toolchains/neutron-clang"; cd "$HOME/toolchains/neutron-clang"
           curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"; chmod +x antman; ./antman -S; ./antman --patch=glibc
           cd "$KERNEL_DIR"
-
-      - name: Fetch AnyKernel3
-        run: |
-          git clone https://github.com/skye-pa1n/AnyKernel3 -b main ./AnyKernel3
 
       - name: Build Kernel Clean
         run: |
