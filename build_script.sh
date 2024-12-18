@@ -37,9 +37,7 @@ toolchaincheck() {
 }
 
 copyoutputtozip() {
-    cp ./out/arch/arm64/boot/Image ./AnyKernel3/
     cp ./out/arch/arm64/boot/dts/vendor/qcom/*.dtb ./AnyKernel3/a15.dtb
-    cp ./out/arch/arm64/boot/dtbo.img ./AnyKernel3/
     cd AnyKernel3
     rm -rf not*
     zip -r9 $ZIP_NAME . -x '*.git*' '*patch*' '*ramdisk*' 'LICENSE' 'README.md'
@@ -61,7 +59,6 @@ help() {
         toolchaincheck
         make $MAKE_PARAMS $DEFCONFIG
         make $MAKE_PARAMS dtbs
-        make $MAKE_PARAMS
         copyoutputtozip
         echo "This build was made using these arguments: $ARGS"
     fi
