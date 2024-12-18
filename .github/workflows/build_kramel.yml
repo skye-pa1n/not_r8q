@@ -1,27 +1,26 @@
-name: Build notKernel
-on:
-    workflow_dispatch:
-      
-jobs:
-  build:
-    strategy:
-      matrix:
-        device: [r8q]
+name: Build
 
-    name: Build Kernel For ${{ matrix.device }}
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - 'master'
+
+jobs:
+  build_aqua:
     runs-on: ubuntu-latest
-    env:
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
-      
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [r8q]
+
     steps:
-      - name: Installing Dependencies
-        run: |
-          sudo apt update -y
-          sudo apt-get install -y lld binutils clang llvm zip flex bison libncurses-dev gawk  libiberty-dev autoconf kmod bc build-essential gcc libc6 curl libstdc++6 git wget libssl-dev cpio p7zip-full ccache git
-          sudo apt clean
-      - name: Build environment
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up build environment
         run: |
           sudo apt update
           DEBIAN_FRONTEND=noninteractive sudo apt install -yq \
@@ -30,90 +29,56 @@ jobs:
             linux-modules-extra-$(uname -r) build-essential lld ninja-build protobuf-compiler zipalign gcc-aarch64-linux-gnu libc6-dev libarchive-tools
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      - name: Setup kernel source
-        uses: actions/checkout@v4
 
-      - name: Cache Build Tools
-        id: cache-aosp-clang
-        uses: actions/cache@v4
-        with:
-          path: aosp-clang
-          key: aosp-clang  
-
-      - name: Download Build Tools
-        if: steps.cache-aosp-clang.outputs.cache-hit != 'true'
+      - name: Fetch Neutron Clang and Patch glibc
         run: |
-          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth=1 --single-branch --no-tags -b main aosp-clang/clang  
-      - name: Checkout Anykernel
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-          repository: skye-pa1n/AnyKernel3
-          ref: main
-          path: anykernel
+          export KERNEL_DIR="$(pwd)"
+          mkdir -p "$HOME/toolchains/neutron-clang"; cd "$HOME/toolchains/neutron-clang"
+          curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"; chmod +x antman; ./antman -S; ./antman --patch=glibc
+          cd "$KERNEL_DIR"
 
-      - name: Setup Ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: Build-notK-${{ matrix.device }}
-          save: ${{ github.event_name != 'pull_request' }}
-          max-size: 2G
-
-      - name: Build Kernel
-        working-directory: kernel-source
+      - name: Fetch AnyKernel3
         run: |
-          CLANG="$GITHUB_WORKSPACE/aosp-clang/clang/bin"
-          PATH=$CLANG:$PATH
-          export PATH
+          git clone https://github.com/skye-pa1n/AnyKernel3 -b main ./AnyKernel3
+
+      - name: Build Kernel Clean
+        run: |
           export ARCH=arm64
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          export CROSS_COMPILE=aarch64-linux-android-
-          export KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y"
-          output_dir=out
-          date=$(date +"%Y%m%d%H%M")
-          export PATH="/usr/lib/ccache:$PATH"
-          echo "date=$date" >> $GITHUB_ENV
-          echo "Building kernel"
-          make -C $(pwd) O=out $KERNEL_MAKE_ENV CC="ccache clang" LLVM=1 LLVM_IAS=1 not_defconfig && make O=out $KERNEL_MAKE_ENV CC="ccache clang" LLVM=1 LLVM_IAS=1 -j8
-      - name: Upload notKernel-${{ matrix.device }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: notK-${{ matrix.device }}
-          path: kernel-source/out/arch/arm64/boot/*
-          
-      - name: Prepare Anykernel
-        working-directory: anykernel
-        run: |
-          cp -f $GITHUB_WORKSPACE/kernel-source/out/arch/arm64/boot/Image .
-          cp -f $GITHUB_WORKSPACE/kernel-source/out/arch/arm64/boot/dtbo.img .
-          ZIP_NAME="notK-perf+${{ matrix.device }}_$(date +'%Y-%m-%d')"
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
-          zip -r "$ZIP_NAME.zip" *
-          mv "$ZIP_NAME.zip" $GITHUB_WORKSPACE
-      - name: Generate SHA-1 checksum
-        run: |
-          # Replace 'yourfile.ext' with the actual file path
-          sha1sum $ZIP_NAME.zip | awk '{print $1}' > checksum.txt
-          # Read the checksum into a variable
-          CHECKSUM=$(cat checksum.txt)
-      - name: Upload Anykernel
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ZIP_NAME }}
-          path: anykernel/*
+          mkdir out
+          BUILD_CROSS_COMPILE=$(pwd)/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+          KERNEL_LLVM_BIN=$(pwd)/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y"
+          make -j64 -C $(pwd) O=$(pwd)/out $KERNEL_MAKE_ENV ARCH=arm64 CROSS_COMPILE=$BUILD_CROSS_COMPILE REAL_CC=$KERNEL_LLVM_BIN CLANG_TRIPLE=$CLANG_TRIPLE CONFIG_SECTION_MISMATCH_WARN_ONLY=y not_defconfig
+          make -j64 -C $(pwd) O=$(pwd)/out $KERNEL_MAKE_ENV ARCH=arm64 CROSS_COMPILE=$BUILD_CROSS_COMPILE REAL_CC=$KERNEL_LLVM_BIN CLANG_TRIPLE=$CLANG_TRIPLE CONFIG_SECTION_MISMATCH_WARN_ONLY=y
+          cp out/arch/arm64/boot/Image $(pwd)/arch/arm64/boot/Image
+          cp ./AnyKernel3/zip* ./
 
-      - name: Release
-        if: success()
-        uses: softprops/action-gh-release@v2
-        with:
-          body_path: ${{ github.workspace }}/checksum.txt
-          name: "notKernel For ${{ matrix.device }} with KernelSU"
-          files: |
-            ${{ env.ZIP_NAME }}.zip
-          tag_name: ${{ github.run_number }}-${{ github.ref }}-${{ matrix.device }}
+      - name: Date
+        id: format_date
+        run: echo "time=$(date +'%Y-%m-%d %T %Z')" >> $GITHUB_ENV
 
-      - name: Delete workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
+      - name: Publish to GitHub
+        id: release
+        uses: softprops/action-gh-release@v1
         with:
-          retain_days: 0
-          keep_minimum_runs: 1
+          files: not*
+          name: not-CI_${{ github.run_number }}
+          tag_name: ${{ github.run_number }}
+          body: |
+            **Release Notes -** **notKernel**
+
+            - **Kernel Version:** 4.19.325
+            - **Release Date:** ${{ steps.format_date.outputs.time }}
+            - **Run Number:** ${{ github.run_number }}
+
+            :rocket: *bombed by GitHub Actions.*
+        env:
+          GITHUB_TOKEN: ${{ secrets.TEST }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: not-CI_${{ github.run_number }}-${{ matrix.target }}-artifacts
+          path: |
+            ./not*.zip
+          compression-level: 0
