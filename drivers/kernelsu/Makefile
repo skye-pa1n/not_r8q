@@ -16,8 +16,8 @@ ccflags-y += -I$(objtree)/security/selinux -include $(srctree)/include/uapi/asm-
 
 obj-$(CONFIG_KSU) += kernelsu.o
 
-$(info -- KernelSU version: 12025)
-ccflags-y += -DKSU_VERSION=12025
+$(info -- KernelSU version: 12058)
+ccflags-y += -DKSU_VERSION=12058
 
 ifeq ($(shell grep -q " current_sid(void)" $(srctree)/security/selinux/include/objsec.h; echo $$?),0)
 ccflags-y += -DKSU_COMPAT_HAS_CURRENT_SID
@@ -27,8 +27,8 @@ ifeq ($(shell grep -q "struct selinux_state " $(srctree)/security/selinux/includ
 ccflags-y += -DKSU_COMPAT_HAS_SELINUX_STATE
 endif
 
-KSU_EXPECTED_SIZE_CUST := 0x27b
-KSU_EXPECTED_HASH_CUST := d50f782a7d12deaa1ae967959a5b69cd88587874387e92b8b1517df232e5a061
+KSU_EXPECTED_SIZE_CUST := 0x3e6
+KSU_EXPECTED_HASH_CUST := 79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7
 
 KSU_EXPECTED_SIZE := 0x033b
 KSU_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
