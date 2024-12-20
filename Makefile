@@ -743,8 +743,8 @@ ifdef CONFIG_CC_WERROR
 KBUILD_CFLAGS  += -Werror
 endif
 
-KBUILD_CFLAGS	+= -mcpu=cortex-a77+crc+crypto+sha2+aes -mtune=cortex-a77 -march=armv8.2-a+crc+crypto+lse+rdm+rcpc+dotprod -O3 -funroll-loops -fno-plt
-KBUILD_AFLAGS   += -mcpu=cortex-a77+crc+crypto+sha2+aes -mtune=cortex-a77 -march=armv8.2-a+crc+crypto+lse+rdm+rcpc+dotprod -O3 -funroll-loops -fno-plt
+KBUILD_CFLAGS	+= -mcpu=cortex-a77+crc+crypto+sha2+aes -mtune=cortex-a77 -march=armv8.2-a+crc+crypto+lse+rdm+rcpc+dotprod -O3 -funroll-loops
+KBUILD_AFLAGS   += -mcpu=cortex-a77+crc+crypto+sha2+aes -mtune=cortex-a77 -march=armv8.2-a+crc+crypto+lse+rdm+rcpc+dotprod -O3 -funroll-loops
 
 KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-run-dce \

@@ -3606,7 +3606,7 @@ void factory_write_reg_uic_int_m(struct work_struct *work)
 
 #ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
 #define NUM_BUS_TABLE	13
-#define MAX_FREQ		2841600
+#define MAX_FREQ		3187200
 #define MHZ_TO_BPS(mhz, w) ((uint64_t)mhz * 1000 * 1000 * w)
 #define BUS_W 4	/* SM8250 DDR Voting('w' for DDR is 4) */
 
