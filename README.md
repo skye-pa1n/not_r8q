@@ -25,15 +25,15 @@ The kernel parameters are highly customizable.
  
 ### KernelSU
 
-+ KernelSU version: 11992
-+ Hardcoded KernelSU version: 11992
-+ No SusFS Support (for now)
-+ Ksu-Legacy Manager Support
++ KernelSU version: 12072
++ Hardcoded KernelSU version: 12072
++ SusFS Support: 1.5.3
++ Ksu-NeXT Manager Support
 + Manually hooked KSU (No KProbes)
   
 ## Compatibility
 
-**`Android14 ROMS ONLY`**
+**`Android14 & 15 ROMS ONLY`**
 
 aka.
 - Lineage
