@@ -2,7 +2,7 @@
 CONFIG_FS_VERITY=y
 CONFIG_FS_VERITY_BUILTIN_SIGNATURES=y
 
-CONFIG_LOCALVERSION="-notK-perf+"
+CONFIG_LOCALVERSION="-notK-misery"
 CONFIG_DEFAULT_HOSTNAME="pa1n"
 
 # Project
@@ -412,7 +412,7 @@ CONFIG_CFP_ROPP=y
 CONFIG_ARM64_SW_TTBR0_PAN=y
 # CONFIG_ARM64_VHE is not set
 CONFIG_RANDOMIZE_BASE=y
-CONFIG_CMDLINE="cgroup_disable=pressure rcutree.kthread_prio=99"
+CONFIG_CMDLINE="cgroup_disable=pressure rcutree.kthread_prio=99 cgroup.memory=nokmem"
 CONFIG_CMDLINE_EXTEND=y
 # CONFIG_EFI is not set
 CONFIG_BUILD_ARM64_UNCOMPRESSED_KERNEL=y
