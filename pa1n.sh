@@ -5,7 +5,7 @@ TC_PATH="/data/data/com.termux/files/usr/bin"
 GCC_PATH="/data/data/com.termux/files/usr/bin"
 KERNEL_NAME=notK-perf+
 MAKE="./makeparallel"
-BUILD_ENV="CC=${TC_PATH}clang CROSS_COMPILE=${GCC_PATH}aarch64-android- LLVM=1 LLVM_IAS=1 PATH=$LLVM_PATH:$LLD_PATH:$PATH"  
+BUILD_ENV="CC=${TC_PATH}aarch64-linux-android-gcc CROSS_COMPILE=${GCC_PATH}aarch64-linux-android- LLVM=1 LLVM_IAS=1 PATH=$LLVM_PATH:$LLD_PATH:$PATH"  
 KERNEL_MAKE_ENV="DTC_EXT=$(pwd)/tools/dtc CONFIG_BUILD_ARM64_DT_OVERLAY=y"
 
 rm -rf /home/skye/bomb/out/arch/arm64/boot/Image
