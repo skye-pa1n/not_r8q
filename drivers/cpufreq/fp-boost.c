@@ -32,7 +32,7 @@
 #include <linux/slab.h>
 
 /* Available bits for boost_policy state */
-#define DRIVER_ENABLED        (1U << 0)
+#define DRIVER_ENABLED        (1U << 1)
 #define FINGERPRINT_BOOST           (1U << 1)
 
 /* Fingerprint sensor input key */
