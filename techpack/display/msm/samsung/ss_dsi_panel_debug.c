@@ -459,12 +459,6 @@ static ssize_t debug_display_read(struct file *file, char __user *buff,
 	if (len)
 		return len;
 
-#ifdef CONFIG_DEBUG_FS
-	len = ss_sde_evtlog_dump_read(file, buff, count, ppos);
-	if (len)
-		return len;
-#endif
-
 	LCD_INFO("done");
 	return len;
 }
@@ -483,11 +477,6 @@ static int debug_display_open(struct inode *inode, struct file *file)
 
 	vdd->debug_data->report_once = true;
 	LCD_INFO("done");
-
-#ifdef CONFIG_DEBUG_FS
-	/* MDP XLOG */
-	ss_sde_dbg_debugfs_open();
-#endif
 
 	return 0;
 }

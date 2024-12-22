@@ -2335,7 +2335,7 @@ cancel_poc:
 	/* exit exclusive mode*/
 	for (type = TX_POC_CMD_START; type < TX_POC_CMD_END + 1 ; type++)
 		ss_set_exclusive_tx_packet(vdd, type, 0);
-	ss_set_exclusive_tx_packet(vdd, RX_POC_STATUS, 0);
+		ss_set_exclusive_tx_packet(vdd, RX_POC_STATUS, 0);
 	vdd->exclusive_tx.permit_frame_update = 0;
 	vdd->exclusive_tx.enable = 0;
 	mutex_unlock(&vdd->exclusive_tx.ex_tx_lock);

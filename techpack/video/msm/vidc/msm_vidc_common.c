@@ -817,8 +817,8 @@ int msm_comm_get_inst_load(struct msm_vidc_inst *inst,
 	 *                 |          res * max(op, fps)|
 	 * ----------------|----------------------------|
 	 */
-	if (!is_supported_session(inst) ||
-		is_thumbnail_session(inst) ||
+
+	if (is_thumbnail_session(inst) ||
 		(!is_realtime_session(inst) &&
 		 quirks == LOAD_ADMISSION_CONTROL)) {
 		load = 0;
@@ -858,6 +858,7 @@ int msm_comm_get_device_load(struct msm_vidc_core *core,
 	list_for_each_entry(inst, &core->instances, list) {
 		if (inst->session_type != sess_type)
 			continue;
+
 		if (load_type == MSM_VIDC_VIDEO && !is_video_session(inst))
 			continue;
 		else if (load_type == MSM_VIDC_IMAGE && !is_grid_session(inst))
@@ -3576,8 +3577,7 @@ static int msm_vidc_load_resources(int flipped_state,
 			"H/W is overloaded. needed: %d max: %d\n",
 			video_load, max_video_load);
 		msm_vidc_print_running_insts(inst->core);
-		inst->supported = false;
-		return -ENOMEM;
+		return -EBUSY;
 	}
 
 	if (video_load + image_load > max_video_load + max_image_load) {
@@ -3585,8 +3585,7 @@ static int msm_vidc_load_resources(int flipped_state,
 			"H/W is overloaded. needed: [video + image][%d + %d], max: [video + image][%d + %d]\n",
 			video_load, image_load, max_video_load, max_image_load);
 		msm_vidc_print_running_insts(inst->core);
-		inst->supported = false;
-		return -ENOMEM;
+		return -EBUSY;
 	}
 
 	hdev = core->device;
@@ -5993,7 +5992,6 @@ static int msm_vidc_check_mbps_supported(struct msm_vidc_inst *inst)
 				"H/W is overloaded. needed: %d max: %d\n",
 				video_load, max_video_load);
 			msm_vidc_print_running_insts(inst->core);
-			inst->supported = false;
 			return -EBUSY;
 		}
 
@@ -6003,7 +6001,6 @@ static int msm_vidc_check_mbps_supported(struct msm_vidc_inst *inst)
 				video_load, image_load,
 				max_video_load, max_image_load);
 			msm_vidc_print_running_insts(inst->core);
-			inst->supported = false;
 			return -EBUSY;
 		}
 	}
