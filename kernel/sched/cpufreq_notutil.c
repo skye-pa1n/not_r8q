@@ -1459,10 +1459,12 @@ static struct cpufreq_governor notutil_gov = {
 	.limits			= sugov_limits,
 };
 
+#if 0
 struct cpufreq_governor *cpufreq_default_governor(void)
 {
 	return &notutil_gov;
 }
+#endif
 
 static int __init sugov_register(void)
 {

@@ -1742,12 +1742,10 @@ static struct cpufreq_governor walt_gov = {
 	.limits			= waltgov_limits,
 };
 
-#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_WALT
 struct cpufreq_governor *cpufreq_default_governor(void)
 {
 	return &walt_gov;
 }
-#endif
 
 static int __init waltgov_register(void)
 {
