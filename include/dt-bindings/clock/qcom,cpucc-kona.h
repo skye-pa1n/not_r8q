@@ -16,9 +16,9 @@
 #define PWRCL_CLK			9
 #define CPU4_PERFCL_CLK			10
 #define CPU5_PERFCL_CLK			11
-#define CPU6_PERFCL_CLK			12
-#define PERFCL_CLK			13
-#define CPU7_PERFPCL_CLK	14
+#define PERFCL_CLK			12
+#define CPU6_PERFPCL_CLK		13
+#define CPU7_PERFPCL_CLK	        14
 #define PERFPCL_CLK			15
 
 #endif

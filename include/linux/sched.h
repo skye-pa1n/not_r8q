@@ -584,6 +584,8 @@ struct cpu_cycle_counter_cb {
 };
 
 #define MAX_NUM_CGROUP_COLOC_ID	20
+#define SCHED_CPUFREQ_CONTINUE	(1U << 8)
+#define SCHED_CPUFREQ_BOOST_UPDATE	(1U << 9)
 
 DECLARE_PER_CPU_READ_MOSTLY(int, sched_load_boost);
 

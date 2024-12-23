@@ -7,8 +7,8 @@
 #include <linux/ktime.h>
 
 static struct timer_list governor_timer;
-static unsigned long last_cpu_load[NR_CPUS] = {0};  // Store last CPU load for each CPU
-static unsigned long last_check_time[NR_CPUS] = {0}; // Store last check time for each CPU
+static unsigned long last_cpu_load[NR_CPUS] = {0}; 
+static unsigned long last_check_time[NR_CPUS] = {0};
 
 // Simplified load calculation using the cpufreq_stats
 static unsigned long get_cpu_load(int cpu)
@@ -20,13 +20,13 @@ static unsigned long get_cpu_load(int cpu)
         return 0;
 
     // Use the CPU frequency statistics to estimate load
-    load = cpufreq_get(policy->cpu) * 100 / policy->max;  // Simple approximation
+    load = cpufreq_get(policy->cpu) * 100 / policy->max;
 
     cpufreq_cpu_put(policy);
     return load;
 }
 
-// Timer function to periodically calculate the CPU load and adjust frequency
+// Calculate the CPU load and adjust frequency
 static void governor_timer_func(struct timer_list *t)
 {
     int cpu;
@@ -40,7 +40,7 @@ static void governor_timer_func(struct timer_list *t)
             continue;
 
         // Get CPU load if enough time has passed since the last check
-        if (ktime_to_ms(ktime_get()) - last_check_time[cpu] > 500) {  // Check every 500ms
+        if (ktime_to_ms(ktime_get()) - last_check_time[cpu] > 10) {  // Check every 10ms
             load = get_cpu_load(cpu);
             last_check_time[cpu] = ktime_to_ms(ktime_get());  // Update last check time
 
@@ -48,26 +48,24 @@ static void governor_timer_func(struct timer_list *t)
             if (load > 80) {
                 target_freq = policy->max;
             } else if (load > 60) {
-                target_freq = (policy->max * 67) / 100;
+                target_freq = (policy->max * 80) / 100;
             } else if (load > 40) {
+                target_freq = (policy->max * 60) / 100;
+            } else if (load > 20) {
                 target_freq = (policy->max * 40) / 100;
             } else {
                 target_freq = (policy->max * 20) / 100;
             }
 
-            // Set the CPU frequency using cpufreq_driver_target
-            if (cpufreq_driver_target(policy, target_freq, CPUFREQ_RELATION_H)) {
-                pr_err("Failed to set frequency %u kHz for CPU %d\n", target_freq, cpu);
-            } else {
-                pr_info("CPU%d: Load: %lu%%, Frequency set to %u kHz\n", cpu, load, target_freq);
-            }
+            // Set the CPU frequency
+            __cpufreq_driver_target(policy, target_freq, CPUFREQ_RELATION_H);
         }
 
         cpufreq_cpu_put(policy);
     }
 
     // Reschedule the timer to run again
-    mod_timer(&governor_timer, jiffies + msecs_to_jiffies(500));  // Run every 500ms
+    mod_timer(&governor_timer, jiffies + msecs_to_jiffies(10));  // Run every 10ms
 }
 
 // Governor initialization function
@@ -77,7 +75,7 @@ static int not_uag_init(struct cpufreq_policy *policy)
 
     // Initialize the timer
     timer_setup(&governor_timer, governor_timer_func, 0);
-    mod_timer(&governor_timer, jiffies + msecs_to_jiffies(500));  // Start the timer with 500ms delay
+    mod_timer(&governor_timer, jiffies + msecs_to_jiffies(10));  // Start the timer with 10ms delay
 
     return 0;
 }
@@ -127,4 +125,4 @@ module_exit(not_uag_exit_module);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("skyewasnthere");
-MODULE_DESCRIPTION("Optimized Ultra Aggressive CPU governor for Android Kernel");
+MODULE_DESCRIPTION("Ultra Aggressive CPU Governor");
