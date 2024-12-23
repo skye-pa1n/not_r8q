@@ -204,6 +204,7 @@
 			qcom,freq-domain = <&cpufreq_hw 1 4>;
 			capacity-dmips-mhz = <1800>;
 			dynamic-power-coefficient = <475>;
+			#cooling-cells = <2>;
 			L2_5: l2-cache {
 			      compatible = "arm,arch-cache";
 			      cache-level = <2>;
@@ -226,9 +227,10 @@
 			enable-method = "psci";
 			cpu-release-addr = <0x0 0x90000000>;
 			next-level-cache = <&L2_6>;
-			qcom,freq-domain = <&cpufreq_hw 1 4>;
-			capacity-dmips-mhz = <1800>;
-			dynamic-power-coefficient = <475>;
+			qcom,freq-domain = <&cpufreq_hw 2 4>;
+			capacity-dmips-mhz = <1894>;
+			dynamic-power-coefficient = <598>;
+			#cooling-cells = <2>;
 			L2_6: l2-cache {
 			      compatible = "arm,arch-cache";
 			      cache-level = <2>;
@@ -252,8 +254,8 @@
 			cpu-release-addr = <0x0 0x90000000>;
 			next-level-cache = <&L2_7>;
 			qcom,freq-domain = <&cpufreq_hw 2 4>;
-			capacity-dmips-mhz = <1800>;
-			dynamic-power-coefficient = <475>;
+			capacity-dmips-mhz = <1894>;
+			dynamic-power-coefficient = <598>;
 			#cooling-cells = <2>;
 			L2_7: l2-cache {
 			      compatible = "arm,arch-cache";
@@ -293,18 +295,18 @@
 				core0 {
 					cpu = <&CPU4>;
 				};
-
+				
 				core1 {
 					cpu = <&CPU5>;
-				};
-
-				core2 {
-					cpu = <&CPU6>;
 				};
 			};
 
 			cluster2 {
 				core0 {
+					cpu = <&CPU6>;
+				};
+
+				core1 {
 					cpu = <&CPU7>;
 				};
 			};
@@ -671,18 +673,6 @@
 		reg = <0x9200000 0x1d0000> , <0x9600000 0x50000>;
 		reg-names = "llcc_base", "llcc_broadcast_base";
 		cap-based-alloc-and-pwr-collapse;
-	};
-
-	wdog: qcom,wdt@17c10000 {
-		compatible = "qcom,msm-watchdog";
-		reg = <0x17c10000 0x1000>;
-		reg-names = "wdt-base";
-		interrupts = <0 0 IRQ_TYPE_LEVEL_HIGH>,
-				 <0 1 IRQ_TYPE_LEVEL_HIGH>;
-		qcom,bark-time = <11000>;
-		qcom,pet-time = <9360>;
-		qcom,wakeup-enable;
-		qcom,ipi-ping;
 	};
 
 	arch_timer: timer {
@@ -5056,4 +5046,73 @@
 		vio-supply = <&pm8150_s4>;
 		rtc6226,vio-supply-voltage = <1800000 1800000 >;
 	};
+};
+
+&cpufreq_hw {
+	interrupts = <GIC_SPI 30 IRQ_TYPE_LEVEL_HIGH>,
+		   <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>,
+		   <GIC_SPI 19 IRQ_TYPE_LEVEL_HIGH>;
+	interrupt-names = "dcvsh0_int", "dcvsh1_int", "dcvsh2_int";
+	
+	qcom,cpufreq-table-0 =
+			< 300000>,
+			< 403200>,
+			< 518400>,
+			< 614400>,
+			< 691200>,
+			< 787200>,
+			< 883200>,
+			< 979200>,
+			<1075200>,
+			<1171200>,
+			<1248000>,
+			<1344000>,
+			<1420800>,
+			<1516800>,
+			<1612800>,
+			<1708800>,
+			<1804800>;
+			
+	qcom,cpufreq-table-1 =
+			< 710400>,
+			< 825600>,
+			< 940800>,
+			<1056000>,
+			<1171200>,
+			<1286400>,
+			<1382400>,
+			<1478400>,
+			<1574400>,
+			<1670400>,
+			<1766400>,
+			<1862400>,
+			<1958400>,
+			<2054400>,
+			<2150400>,
+			<2246400>,
+			<2342400>,
+			<2419200>;
+			
+	qcom,cpufreq-table-2 =
+			< 844800>,
+			< 960000>,
+			<1075200>,
+			<1190400>,
+			<1305600>,
+			<1401600>,
+			<1516800>,
+			<1632000>,
+			<1747200>,
+			<1862400>,
+			<1977600>,
+			<2073600>,
+			<2169600>,
+			<2265600>,
+			<2361600>,
+			<2457600>,
+			<2553600>,
+			<2649600>,
+			<2745600>,
+			<2841600>,
+			<3187200>;
 };
