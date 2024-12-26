@@ -328,7 +328,7 @@
 			reg-names = "freq-domain0", "freq-domain1",
 					"freq-domain2";
 
-			clocks = <&clock_rpmh RPMH_CXO_CLK>, <&clock_gcc GPLL0>;
+			clocks = <&clock_rpmh RPMH_CXO_CLK_A>, <&clock_gcc GPLL0>;
 			clock-names = "xo", "alternate";
 
 			qcom,lut-row-size = <4>;
