@@ -1,4 +1,4 @@
-subdir-ccflags-y := -Wformat
+subdir-ccflags-y := -Wformat -Os
 
 ifeq ($(CONFIG_BATTERY_SAMSUNG_MHS), y)
 obj-$(CONFIG_BATTERY_SAMSUNG)	+= sec_battery_mhs.o
