@@ -1,5 +1,4 @@
 #!/bin/bash
-
 LLVM_PATH="/home/skye/bomb/clang/bin/"
 TC_PATH="/home/skye/bomb/clang/bin/"
 GCC_PATH="/usr/bin/"
@@ -12,8 +11,8 @@ rm -rf /home/skye/bomb/out/arch/arm64/boot/Image
 rm -rf AnyKernel3/dtb
 rm -rf .version
 rm -rf .local
-make O=/home/skye/bomb/out clean
-make O=/home/skye/bomb/out mrproper
+#make O=/home/skye/bomb/out clean
+#make O=/home/skye/bomb/out mrproper
 make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV not_defconfig
 
 make -j10 O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV dtbs

@@ -176,8 +176,8 @@
 			cpu-release-addr = <0x0 0x90000000>;
 			next-level-cache = <&L2_4>;
 			qcom,freq-domain = <&cpufreq_hw 1 4>;
-			capacity-dmips-mhz = <1800>;
-			dynamic-power-coefficient = <475>;
+			capacity-dmips-mhz = <1894>;
+			dynamic-power-coefficient = <598>;
 			#cooling-cells = <2>;
 			L2_4: l2-cache {
 			      compatible = "arm,arch-cache";
@@ -202,8 +202,8 @@
 			cpu-release-addr = <0x0 0x90000000>;
 			next-level-cache = <&L2_5>;
 			qcom,freq-domain = <&cpufreq_hw 1 4>;
-			capacity-dmips-mhz = <1800>;
-			dynamic-power-coefficient = <475>;
+			capacity-dmips-mhz = <1894>;
+			dynamic-power-coefficient = <598>;
 			#cooling-cells = <2>;
 			L2_5: l2-cache {
 			      compatible = "arm,arch-cache";
@@ -227,7 +227,7 @@
 			enable-method = "psci";
 			cpu-release-addr = <0x0 0x90000000>;
 			next-level-cache = <&L2_6>;
-			qcom,freq-domain = <&cpufreq_hw 2 4>;
+			qcom,freq-domain = <&cpufreq_hw 1 4>;
 			capacity-dmips-mhz = <1894>;
 			dynamic-power-coefficient = <598>;
 			#cooling-cells = <2>;
@@ -254,8 +254,8 @@
 			cpu-release-addr = <0x0 0x90000000>;
 			next-level-cache = <&L2_7>;
 			qcom,freq-domain = <&cpufreq_hw 2 4>;
-			capacity-dmips-mhz = <1894>;
-			dynamic-power-coefficient = <598>;
+			capacity-dmips-mhz = <1921>;
+			dynamic-power-coefficient = <601>;
 			#cooling-cells = <2>;
 			L2_7: l2-cache {
 			      compatible = "arm,arch-cache";
@@ -299,14 +299,14 @@
 				core1 {
 					cpu = <&CPU5>;
 				};
+				
+				core2 {
+					cpu = <&CPU6>;
+				};
 			};
 
 			cluster2 {
 				core0 {
-					cpu = <&CPU6>;
-				};
-
-				core1 {
 					cpu = <&CPU7>;
 				};
 			};
@@ -3171,10 +3171,11 @@
 		clock-names = "iface_clk", "core_clk";
 
 		/* PM QoS */
-		qcom,pm-qos-irq-type = "affine_irq";
-		qcom,pm-qos-irq-latency = <44 44>;
+		qcom,pm-qos-irq-type = "affine_cores";
+		qcom,pm-qos-irq-latency = <34 144>;
 		qcom,pm-qos-cpu-groups = <0x3f 0xc0>;
-		qcom,pm-qos-legacy-latency-us = <44 44>, <44 44>;
+			qcom,pm-qos-irq-cpu = <1>;
+		qcom,pm-qos-legacy-latency-us = <34 144>, <34 144>;
 
 		/* DLL HSR settings. Refer go/hsr - <Target> DLL settings */
 		qcom,dll-hsr-list = <0x0007642C 0xA800 0x10
