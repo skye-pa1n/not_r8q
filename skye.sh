@@ -11,7 +11,7 @@ rm -rf /home/skye/bomb/out/arch/arm64/boot/Image
 rm -rf AnyKernel3/dtb
 rm -rf .version
 rm -rf .local
-#make O=/home/skye/bomb/out clean
+make O=/home/skye/bomb/out clean
 #make O=/home/skye/bomb/out mrproper
 make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV not_defconfig
 

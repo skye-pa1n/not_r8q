@@ -11,9 +11,9 @@
 #define L3_CLK				4
 #define CPU0_PWRCL_CLK			5
 #define CPU1_PWRCL_CLK			6
-#define CPU2_PWRCL_CLK			7
-#define CPU3_PWRCL_CLK			8
-#define PWRCL_CLK			9
+#define PWRCL_CLK			7
+#define CPU2_PERFCL_CLK			8
+#define CPU3_PERFCL_CLK			9
 #define CPU4_PERFCL_CLK			10
 #define CPU5_PERFCL_CLK			11
 #define PERFCL_CLK			12
