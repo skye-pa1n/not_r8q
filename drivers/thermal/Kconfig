@@ -436,11 +436,6 @@ depends on HAS_IOMEM
 source "drivers/thermal/ti-soc-thermal/Kconfig"
 endmenu
 
-menu "Samsung thermal drivers"
-depends on ARCH_EXYNOS || COMPILE_TEST
-source "drivers/thermal/samsung/Kconfig"
-endmenu
-
 menu "STMicroelectronics thermal drivers"
 depends on ARCH_STI && OF
 source "drivers/thermal/st/Kconfig"
@@ -454,8 +449,6 @@ config TANGO_THERMAL
 	  temperature sensor embedded in Tango chips since the SMP8758.
 	  This sensor only generates a 1-bit signal to indicate whether
 	  the die temperature exceeds a programmable threshold.
-
-source "drivers/thermal/tegra/Kconfig"
 
 config QCOM_SPMI_TEMP_ALARM
 	tristate "Qualcomm SPMI PMIC Temperature Alarm"

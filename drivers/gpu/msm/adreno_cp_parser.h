@@ -145,11 +145,6 @@ static inline int adreno_cp_parser_regindex(struct adreno_device *adreno_dev,
 	int i;
 	const unsigned int *regs;
 
-	if (!adreno_is_a3xx(adreno_dev))
-		return -EEXIST;
-
-	regs = a3xx_cp_addr_regs;
-
 	for (i = start; i <= end && i < ADRENO_CP_ADDR_MAX; i++)
 		if (regs[i] == offset)
 			return i;
