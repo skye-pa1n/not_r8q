@@ -214,7 +214,7 @@ config HISI_THERMAL
 	depends on ARCH_HISI || COMPILE_TEST
 	depends on HAS_IOMEM
 	depends on OF
-	default y
+	default n
 	help
 	  Enable this to plug hisilicon's thermal sensor driver into the Linux
 	  thermal framework. cpufreq is used as the cooling device to throttle
@@ -351,7 +351,7 @@ config X86_PKG_TEMP_THERMAL
 	depends on X86_THERMAL_VECTOR
 	select THERMAL_GOV_USER_SPACE
 	select THERMAL_WRITABLE_TRIPS
-	default m
+	default n
 	help
 	  Enable this to register CPU digital sensor for package temperature as
 	  thermal zone. Each package will have its own thermal zone. There are
@@ -420,7 +420,7 @@ config MTK_THERMAL
 	depends on HAS_IOMEM
 	depends on NVMEM || NVMEM=n
 	depends on RESET_CONTROLLER
-	default y
+	default n
 	help
 	  Enable this option if you want to have support for thermal management
 	  controller present in Mediatek SoCs
