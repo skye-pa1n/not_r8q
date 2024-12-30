@@ -19,6 +19,8 @@
 
 typedef enum {
 	attr_noop,
+	attr_sec_fs_stat,
+	attr_sec_fs_freefrag,
 	attr_delayed_allocation_blocks,
 	attr_session_write_kbytes,
 	attr_lifetime_write_kbytes,
@@ -50,6 +52,33 @@ struct ext4_attr {
 		void *explicit_ptr;
 	} u;
 };
+
+static ssize_t sec_fs_stat_show(struct ext4_attr *a,
+				struct ext4_sb_info *sbi, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "\"%s\":\"%llu\",\"%s\":\"%llu\",\"%s\":\"%u\",\"%s\":\"%llu\",\"%s\":\"%u\"\n",
+		"F_BLOCKS",
+		(unsigned long long)ext4_blocks_count(sbi->s_es),
+		"F_BFREE",
+		(unsigned long long)percpu_counter_sum_positive(
+						&sbi->s_freeclusters_counter) -
+		(unsigned long long)percpu_counter_sum_positive(
+						&sbi->s_dirtyclusters_counter),
+		"F_FILES",
+		(unsigned int)le32_to_cpu(sbi->s_es->s_inodes_count),
+		"F_FFREE",
+		(unsigned long long)percpu_counter_sum_positive(
+						&sbi->s_freeinodes_counter),
+		"FS_ERROR",
+		(unsigned int)le32_to_cpu(sbi->s_es->s_error_count));
+}
+
+static ssize_t sec_fs_freefrag_show(struct ext4_attr *a,
+				struct ext4_sb_info *sbi, char *buf)
+{
+	return ext4_mb_freefrag_show(sbi, buf);
+}
+
 
 static ssize_t session_write_kbytes_show(struct ext4_sb_info *sbi, char *buf)
 {
@@ -163,6 +192,9 @@ static struct ext4_attr ext4_attr_##_name = {			\
 
 #define ATTR_LIST(name) &ext4_attr_##name.attr
 
+EXT4_ATTR_FUNC(sec_fs_stat, 0444);
+EXT4_ATTR_FUNC(sec_fs_freefrag, 0444);
+
 EXT4_ATTR_FUNC(delayed_allocation_blocks, 0444);
 EXT4_ATTR_FUNC(session_write_kbytes, 0444);
 EXT4_ATTR_FUNC(lifetime_write_kbytes, 0444);
@@ -193,6 +225,8 @@ static unsigned int old_bump_val = 128;
 EXT4_ATTR_PTR(max_writeback_mb_bump, 0444, pointer_ui, &old_bump_val);
 
 static struct attribute *ext4_attrs[] = {
+	ATTR_LIST(sec_fs_stat),
+	ATTR_LIST(sec_fs_freefrag),
 	ATTR_LIST(delayed_allocation_blocks),
 	ATTR_LIST(session_write_kbytes),
 	ATTR_LIST(lifetime_write_kbytes),
@@ -226,7 +260,6 @@ EXT4_ATTR_FEATURE(batched_discard);
 EXT4_ATTR_FEATURE(meta_bg_resize);
 #ifdef CONFIG_FS_ENCRYPTION
 EXT4_ATTR_FEATURE(encryption);
-EXT4_ATTR_FEATURE(test_dummy_encryption_v2);
 #endif
 #ifdef CONFIG_UNICODE
 EXT4_ATTR_FEATURE(casefold);
@@ -235,9 +268,6 @@ EXT4_ATTR_FEATURE(casefold);
 EXT4_ATTR_FEATURE(verity);
 #endif
 EXT4_ATTR_FEATURE(metadata_csum_seed);
-#if defined(CONFIG_UNICODE) && defined(CONFIG_FS_ENCRYPTION)
-EXT4_ATTR_FEATURE(encrypted_casefold);
-#endif
 
 static struct attribute *ext4_feat_attrs[] = {
 	ATTR_LIST(lazy_itable_init),
@@ -245,7 +275,6 @@ static struct attribute *ext4_feat_attrs[] = {
 	ATTR_LIST(meta_bg_resize),
 #ifdef CONFIG_FS_ENCRYPTION
 	ATTR_LIST(encryption),
-	ATTR_LIST(test_dummy_encryption_v2),
 #endif
 #ifdef CONFIG_UNICODE
 	ATTR_LIST(casefold),
@@ -254,9 +283,6 @@ static struct attribute *ext4_feat_attrs[] = {
 	ATTR_LIST(verity),
 #endif
 	ATTR_LIST(metadata_csum_seed),
-#if defined(CONFIG_UNICODE) && defined(CONFIG_FS_ENCRYPTION)
-	ATTR_LIST(encrypted_casefold),
-#endif
 	NULL,
 };
 
@@ -291,6 +317,10 @@ static ssize_t ext4_attr_show(struct kobject *kobj,
 	void *ptr = calc_ptr(a, sbi);
 
 	switch (a->attr_id) {
+	case attr_sec_fs_stat:
+		return sec_fs_stat_show(a, sbi, buf);
+	case attr_sec_fs_freefrag:
+		return sec_fs_freefrag_show(a, sbi, buf);
 	case attr_delayed_allocation_blocks:
 		return snprintf(buf, PAGE_SIZE, "%llu\n",
 				(s64) EXT4_C2B(sbi,
@@ -369,11 +399,6 @@ static void ext4_sb_release(struct kobject *kobj)
 	complete(&sbi->s_kobj_unregister);
 }
 
-static void ext4_feat_release(struct kobject *kobj)
-{
-	kfree(kobj);
-}
-
 static const struct sysfs_ops ext4_attr_ops = {
 	.show	= ext4_attr_show,
 	.store	= ext4_attr_store,
@@ -388,7 +413,7 @@ static struct kobj_type ext4_sb_ktype = {
 static struct kobj_type ext4_feat_ktype = {
 	.default_attrs	= ext4_feat_attrs,
 	.sysfs_ops	= &ext4_attr_ops,
-	.release	= ext4_feat_release,
+	.release	= (void (*)(struct kobject *))kfree,
 };
 
 static struct kobject *ext4_root;
@@ -407,6 +432,15 @@ int ext4_register_sysfs(struct super_block *sb)
 		kobject_put(&sbi->s_kobj);
 		wait_for_completion(&sbi->s_kobj_unregister);
 		return err;
+	}
+
+	if (strnlen(sbi->s_es->s_volume_name, 16) == strlen("data") &&
+	    strncmp(sbi->s_es->s_volume_name, "data", strlen("data")) == 0) {
+		err = sysfs_create_link(ext4_root, &sbi->s_kobj,
+			      "userdata");
+		if (err)
+			printk(KERN_ERR "Can not create sysfs link"
+					"for userdata(%d)", err);
 	}
 
 	if (ext4_proc_root)
@@ -429,6 +463,11 @@ void ext4_unregister_sysfs(struct super_block *sb)
 
 	if (sbi->s_proc)
 		remove_proc_subtree(sb->s_id, ext4_proc_root);
+
+	if (strnlen(sbi->s_es->s_volume_name, 16) == strlen("data") &&
+	    strncmp(sbi->s_es->s_volume_name, "data", strlen("data")) == 0)
+		sysfs_delete_link(ext4_root, &sbi->s_kobj, "userdata");
+
 	kobject_del(&sbi->s_kobj);
 }
 

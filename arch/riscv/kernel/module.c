@@ -21,19 +21,6 @@
 #include <asm/pgtable.h>
 #include <asm/sections.h>
 
-/*
- * The auipc+jalr instruction pair can reach any PC-relative offset
- * in the range [-2^31 - 2^11, 2^31 - 2^11)
- */
-static bool riscv_insn_valid_32bit_offset(ptrdiff_t val)
-{
-#ifdef CONFIG_32BIT
-	return true;
-#else
-	return (-(1L << 31) - (1L << 11)) <= val && val < ((1L << 31) - (1L << 11));
-#endif
-}
-
 static int apply_r_riscv_32_rela(struct module *me, u32 *location, Elf_Addr v)
 {
 	if (v != (u32)v) {
@@ -116,7 +103,7 @@ static int apply_r_riscv_pcrel_hi20_rela(struct module *me, u32 *location,
 	ptrdiff_t offset = (void *)v - (void *)location;
 	s32 hi20;
 
-	if (!riscv_insn_valid_32bit_offset(offset)) {
+	if (offset != (s32)offset) {
 		pr_err(
 		  "%s: target %016llx can not be addressed by the 32-bit offset from PC = %p\n",
 		  me->name, (long long)v, location);
@@ -218,9 +205,10 @@ static int apply_r_riscv_call_plt_rela(struct module *me, u32 *location,
 				       Elf_Addr v)
 {
 	ptrdiff_t offset = (void *)v - (void *)location;
+	s32 fill_v = offset;
 	u32 hi20, lo12;
 
-	if (!riscv_insn_valid_32bit_offset(offset)) {
+	if (offset != fill_v) {
 		/* Only emit the plt entry if offset over 32-bit range */
 		if (IS_ENABLED(CONFIG_MODULE_SECTIONS)) {
 			offset = module_emit_plt_entry(me, v);
@@ -244,9 +232,10 @@ static int apply_r_riscv_call_rela(struct module *me, u32 *location,
 				   Elf_Addr v)
 {
 	ptrdiff_t offset = (void *)v - (void *)location;
+	s32 fill_v = offset;
 	u32 hi20, lo12;
 
-	if (!riscv_insn_valid_32bit_offset(offset)) {
+	if (offset != fill_v) {
 		pr_err(
 		  "%s: target %016llx can not be addressed by the 32-bit offset from PC = %p\n",
 		  me->name, (long long)v, location);

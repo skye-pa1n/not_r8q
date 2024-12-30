@@ -23,19 +23,6 @@
 #include <asm/pgalloc.h>
 #include "internal.h"
 
-/* gross hack for <=4.19 stable */
-#if defined(CONFIG_S390) || defined(CONFIG_ARM)
-static void tlb_remove_table_smp_sync(void *arg)
-{
-        /* Simply deliver the interrupt */
-}
-
-static void tlb_remove_table_sync_one(void)
-{
-        smp_call_function(tlb_remove_table_smp_sync, NULL, 1);
-}
-#endif
-
 enum scan_result {
 	SCAN_FAIL,
 	SCAN_SUCCEED,
@@ -65,9 +52,6 @@ enum scan_result {
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/huge_memory.h>
-
-static struct task_struct *khugepaged_thread __read_mostly;
-static DEFINE_MUTEX(khugepaged_mutex);
 
 /* default scan 8*512 pte (or vmas) every 30 second */
 static unsigned int khugepaged_pages_to_scan __read_mostly;
@@ -410,7 +394,7 @@ static void insert_to_mm_slots_hash(struct mm_struct *mm,
 
 static inline int khugepaged_test_exit(struct mm_struct *mm)
 {
-	return atomic_read(&mm->mm_users) == 0 || !mmget_still_valid(mm);
+	return atomic_read(&mm->mm_users) == 0;
 }
 
 static bool hugepage_vma_check(struct vm_area_struct *vma,
@@ -443,7 +427,7 @@ int __khugepaged_enter(struct mm_struct *mm)
 		return -ENOMEM;
 
 	/* __khugepaged_exit() must not run from under us */
-	VM_BUG_ON_MM(atomic_read(&mm->mm_users) == 0, mm);
+	VM_BUG_ON_MM(khugepaged_test_exit(mm), mm);
 	if (unlikely(test_and_set_bit(MMF_VM_HUGEPAGE, &mm->flags))) {
 		free_mm_slot(mm_slot);
 		return 0;
@@ -629,17 +613,17 @@ static int __collapse_huge_page_isolate(struct vm_area_struct *vma,
 		    mmu_notifier_test_young(vma->vm_mm, address))
 			referenced++;
 	}
-
-	if (unlikely(!writable)) {
-		result = SCAN_PAGE_RO;
-	} else if (unlikely(!referenced)) {
-		result = SCAN_LACK_REFERENCED_PAGE;
+	if (likely(writable)) {
+		if (likely(referenced)) {
+			result = SCAN_SUCCEED;
+			trace_mm_collapse_huge_page_isolate(page, none_or_zero,
+							    referenced, writable, result);
+			return 1;
+		}
 	} else {
-		result = SCAN_SUCCEED;
-		trace_mm_collapse_huge_page_isolate(page, none_or_zero,
-						    referenced, writable, result);
-		return 1;
+		result = SCAN_PAGE_RO;
 	}
+
 out:
 	release_pte_pages(pte, _pte);
 	trace_mm_collapse_huge_page_isolate(page, none_or_zero,
@@ -836,18 +820,6 @@ static struct page *khugepaged_alloc_hugepage(bool *wait)
 
 static bool khugepaged_prealloc_page(struct page **hpage, bool *wait)
 {
-	/*
-	 * If the hpage allocated earlier was briefly exposed in page cache
-	 * before collapse_file() failed, it is possible that racing lookups
-	 * have not yet completed, and would then be unpleasantly surprised by
-	 * finding the hpage reused for the same mapping at a different offset.
-	 * Just release the previous allocation if there is any danger of that.
-	 */
-	if (*hpage && page_count(*hpage) > 1) {
-		put_page(*hpage);
-		*hpage = NULL;
-	}
-
 	if (!*hpage)
 		*hpage = khugepaged_alloc_hugepage(wait);
 
@@ -1035,6 +1007,9 @@ static void collapse_huge_page(struct mm_struct *mm,
 	 * handled by the anon_vma lock + PG_lock.
 	 */
 	down_write(&mm->mmap_sem);
+	result = SCAN_ANY_PROCESS;
+	if (!mmget_still_valid(mm))
+		goto out;
 	result = hugepage_vma_revalidate(mm, address, &vma);
 	if (result)
 		goto out;
@@ -1061,7 +1036,6 @@ static void collapse_huge_page(struct mm_struct *mm,
 	_pmd = pmdp_collapse_flush(vma, address, pmd);
 	spin_unlock(pmd_ptl);
 	mmu_notifier_invalidate_range_end(mm, mmun_start, mmun_end);
-	tlb_remove_table_sync_one();
 
 	spin_lock(pte_ptl);
 	isolated = __collapse_huge_page_isolate(vma, address, pte);
@@ -1282,7 +1256,6 @@ static void collect_mm_slot(struct mm_slot *mm_slot)
 static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 {
 	struct vm_area_struct *vma;
-	struct mm_struct *mm;
 	unsigned long addr;
 	pmd_t *pmd, _pmd;
 
@@ -1296,8 +1269,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 			continue;
 		if (vma->vm_end < addr + HPAGE_PMD_SIZE)
 			continue;
-		mm = vma->vm_mm;
-		pmd = mm_find_pmd(mm, addr);
+		pmd = mm_find_pmd(vma->vm_mm, addr);
 		if (!pmd)
 			continue;
 		/*
@@ -1306,27 +1278,14 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		 * re-fault. Not ideal, but it's more important to not disturb
 		 * the system too much.
 		 */
-		if (down_write_trylock(&mm->mmap_sem)) {
-			if (!khugepaged_test_exit(mm)) {
-				spinlock_t *ptl;
-				unsigned long end = addr + HPAGE_PMD_SIZE;
-
-				vm_write_begin(vma);
-				mmu_notifier_invalidate_range_start(mm, addr,
-								    end);
-				ptl = pmd_lock(mm, pmd);
-				/* assume page table is clear */
-				_pmd = pmdp_collapse_flush(vma, addr, pmd);
-
-				spin_unlock(ptl);
-				vm_write_end(vma);
-				mm_dec_nr_ptes(mm);
-				tlb_remove_table_sync_one();
-				pte_free(mm, pmd_pgtable(_pmd));
-				mmu_notifier_invalidate_range_end(mm, addr,
-								  end);
-			}
-			up_write(&mm->mmap_sem);
+		if (down_write_trylock(&vma->vm_mm->mmap_sem)) {
+			spinlock_t *ptl = pmd_lock(vma->vm_mm, pmd);
+			/* assume page table is clear */
+			_pmd = pmdp_collapse_flush(vma, addr, pmd);
+			spin_unlock(ptl);
+			up_write(&vma->vm_mm->mmap_sem);
+			mm_dec_nr_ptes(vma->vm_mm);
+			pte_free(vma->vm_mm, pmd_pgtable(_pmd));
 		}
 	}
 	i_mmap_unlock_write(mapping);
@@ -1985,6 +1944,8 @@ static void set_recommended_min_free_kbytes(void)
 
 int start_stop_khugepaged(void)
 {
+	static struct task_struct *khugepaged_thread __read_mostly;
+	static DEFINE_MUTEX(khugepaged_mutex);
 	int err = 0;
 
 	mutex_lock(&khugepaged_mutex);
@@ -2010,12 +1971,4 @@ int start_stop_khugepaged(void)
 fail:
 	mutex_unlock(&khugepaged_mutex);
 	return err;
-}
-
-void khugepaged_min_free_kbytes_update(void)
-{
-	mutex_lock(&khugepaged_mutex);
-	if (khugepaged_enabled() && khugepaged_thread)
-		set_recommended_min_free_kbytes();
-	mutex_unlock(&khugepaged_mutex);
 }

@@ -53,6 +53,12 @@ struct ieee80211_local;
 #define IEEE80211_ENCRYPT_HEADROOM 8
 #define IEEE80211_ENCRYPT_TAILROOM 18
 
+/* IEEE 802.11 (Ch. 9.5 Defragmentation) requires support for concurrent
+ * reception of at least three fragmented frames. This limit can be increased
+ * by changing this define, at the cost of slower frame reassembly and
+ * increased memory use (about 2 kB of RAM per entry). */
+#define IEEE80211_FRAGMENT_MAX 4
+
 /* power level hasn't been configured (or set to automatic) */
 #define IEEE80211_UNSET_POWER_LEVEL	INT_MIN
 
@@ -85,6 +91,18 @@ extern const u8 ieee80211_ac_to_qos_mask[IEEE80211_NUM_ACS];
 
 #define IEEE80211_MAX_NAN_INSTANCE_ID 255
 
+struct ieee80211_fragment_entry {
+	struct sk_buff_head skb_list;
+	unsigned long first_frag_time;
+	u16 seq;
+	u16 extra_len;
+	u16 last_frag;
+	u8 rx_queue;
+	bool check_sequential_pn; /* needed for CCMP/GCMP */
+	u8 last_pn[6]; /* PN of the last fragment if CCMP was used */
+};
+
+
 struct ieee80211_bss {
 	u32 device_ts_beacon, device_ts_presp;
 
@@ -113,7 +131,7 @@ struct ieee80211_bss {
 };
 
 /**
- * enum ieee80211_bss_corrupt_data_flags - BSS data corruption flags
+ * enum ieee80211_corrupt_data_flags - BSS data corruption flags
  * @IEEE80211_BSS_CORRUPT_BEACON: last beacon frame received was corrupted
  * @IEEE80211_BSS_CORRUPT_PROBE_RESP: last probe response received was corrupted
  *
@@ -126,7 +144,7 @@ enum ieee80211_bss_corrupt_data_flags {
 };
 
 /**
- * enum ieee80211_bss_valid_data_flags - BSS valid data flags
+ * enum ieee80211_valid_data_flags - BSS valid data flags
  * @IEEE80211_BSS_VALID_WMM: WMM/UAPSD data was gathered from non-corrupt IE
  * @IEEE80211_BSS_VALID_RATES: Supported rates were gathered from non-corrupt IE
  * @IEEE80211_BSS_VALID_ERP: ERP flag was gathered from non-corrupt IE
@@ -225,15 +243,8 @@ struct ieee80211_rx_data {
 	 */
 	int security_idx;
 
-	union {
-		struct {
-			u32 iv32;
-			u16 iv16;
-		} tkip;
-		struct {
-			u8 pn[IEEE80211_CCMP_PN_LEN];
-		} ccm_gcm;
-	};
+	u32 tkip_iv32;
+	u16 tkip_iv16;
 };
 
 struct ieee80211_csa_settings {
@@ -627,26 +638,6 @@ struct mesh_csa_settings {
 	struct cfg80211_csa_settings settings;
 };
 
-/**
- * struct mesh_table
- *
- * @known_gates: list of known mesh gates and their mpaths by the station. The
- * gate's mpath may or may not be resolved and active.
- * @gates_lock: protects updates to known_gates
- * @rhead: the rhashtable containing struct mesh_paths, keyed by dest addr
- * @walk_head: linked list containing all mesh_path objects
- * @walk_lock: lock protecting walk_head
- * @entries: number of entries in the table
- */
-struct mesh_table {
-	struct hlist_head known_gates;
-	spinlock_t gates_lock;
-	struct rhashtable rhead;
-	struct hlist_head walk_head;
-	spinlock_t walk_lock;
-	atomic_t entries;		/* Up to MAX_MESH_NEIGHBOURS */
-};
-
 struct ieee80211_if_mesh {
 	struct timer_list housekeeping_timer;
 	struct timer_list mesh_path_timer;
@@ -721,8 +712,8 @@ struct ieee80211_if_mesh {
 	/* offset from skb->data while building IE */
 	int meshconf_offset;
 
-	struct mesh_table mesh_paths;
-	struct mesh_table mpp_paths; /* Store paths for MPP&MAP */
+	struct mesh_table *mesh_paths;
+	struct mesh_table *mpp_paths; /* Store paths for MPP&MAP */
 	int mesh_paths_generation;
 	int mpp_paths_generation;
 };
@@ -893,7 +884,9 @@ struct ieee80211_sub_if_data {
 
 	char name[IFNAMSIZ];
 
-	struct ieee80211_fragment_cache frags;
+	/* Fragment table for host-based reassembly */
+	struct ieee80211_fragment_entry	fragments[IEEE80211_FRAGMENT_MAX];
+	unsigned int fragment_next;
 
 	/* TID bitmap for NoAck policy */
 	u16 noack_map;
@@ -1058,7 +1051,6 @@ enum queue_stop_reason {
 	IEEE80211_QUEUE_STOP_REASON_FLUSH,
 	IEEE80211_QUEUE_STOP_REASON_TDLS_TEARDOWN,
 	IEEE80211_QUEUE_STOP_REASON_RESERVE_TID,
-	IEEE80211_QUEUE_STOP_REASON_IFTYPE_CHANGE,
 
 	IEEE80211_QUEUE_STOP_REASONS,
 };
@@ -1092,9 +1084,6 @@ struct tpt_led_trigger {
  *	a scan complete for an aborted scan.
  * @SCAN_HW_CANCELLED: Set for our scan work function when the scan is being
  *	cancelled.
- * @SCAN_BEACON_WAIT: Set whenever we're passive scanning because of radar/no-IR
- *	and could send a probe request after receiving a beacon.
- * @SCAN_BEACON_DONE: Beacon received, we can now send a probe request
  */
 enum {
 	SCAN_SW_SCANNING,
@@ -1103,8 +1092,6 @@ enum {
 	SCAN_COMPLETED,
 	SCAN_ABORTED,
 	SCAN_HW_CANCELLED,
-	SCAN_BEACON_WAIT,
-	SCAN_BEACON_DONE,
 };
 
 /**
@@ -1423,7 +1410,7 @@ ieee80211_get_sband(struct ieee80211_sub_if_data *sdata)
 	rcu_read_lock();
 	chanctx_conf = rcu_dereference(sdata->vif.chanctx_conf);
 
-	if (!chanctx_conf) {
+	if (WARN_ON_ONCE(!chanctx_conf)) {
 		rcu_read_unlock();
 		return NULL;
 	}
@@ -1742,8 +1729,7 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 				       struct net_device *dev);
 void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 				  struct net_device *dev,
-				  u32 info_flags,
-				  u32 ctrl_flags);
+				  u32 info_flags);
 void ieee80211_purge_tx_queue(struct ieee80211_hw *hw,
 			      struct sk_buff_head *skbs);
 struct sk_buff *
@@ -2215,8 +2201,5 @@ extern const struct ethtool_ops ieee80211_ethtool_ops;
 #else
 #define debug_noinline
 #endif
-
-void ieee80211_init_frag_cache(struct ieee80211_fragment_cache *cache);
-void ieee80211_destroy_frag_cache(struct ieee80211_fragment_cache *cache);
 
 #endif /* IEEE80211_I_H */

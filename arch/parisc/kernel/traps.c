@@ -265,7 +265,7 @@ void die_if_kernel(char *str, struct pt_regs *regs, long err)
 		panic("Fatal exception");
 
 	oops_exit();
-	make_task_dead(SIGSEGV);
+	do_exit(SIGSEGV);
 }
 
 /* gdb uses break 4,8 */
@@ -750,7 +750,7 @@ void notrace handle_interruption(int code, struct pt_regs *regs)
 	     * unless pagefault_disable() was called before.
 	     */
 
-	    if (faulthandler_disabled() || fault_space == 0)
+	    if (fault_space == 0 && !faulthandler_disabled())
 	    {
 		/* Clean up and return if in exception table. */
 		if (fixup_exception(regs))

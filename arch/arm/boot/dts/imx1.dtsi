@@ -268,12 +268,9 @@
 			status = "disabled";
 		};
 
-		esram: sram@300000 {
+		esram: esram@300000 {
 			compatible = "mmio-sram";
 			reg = <0x00300000 0x20000>;
-			ranges = <0 0x00300000 0x20000>;
-			#address-cells = <1>;
-			#size-cells = <1>;
 		};
 	};
 };

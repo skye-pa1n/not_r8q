@@ -71,7 +71,6 @@ static const struct reg_field afe4403_reg_fields[] = {
  * @regulator: Pointer to the regulator for the IC
  * @trig: IIO trigger for this device
  * @irq: ADC_RDY line interrupt number
- * @buffer: Used to construct data layout to push into IIO buffer.
  */
 struct afe4403_data {
 	struct device *dev;
@@ -81,8 +80,6 @@ struct afe4403_data {
 	struct regulator *regulator;
 	struct iio_trigger *trig;
 	int irq;
-	/* Ensure suitable alignment for timestamp */
-	s32 buffer[8] __aligned(8);
 };
 
 enum afe4403_chan_id {
@@ -253,14 +250,14 @@ static int afe4403_read_raw(struct iio_dev *indio_dev,
 			    int *val, int *val2, long mask)
 {
 	struct afe4403_data *afe = iio_priv(indio_dev);
-	unsigned int reg, field;
+	unsigned int reg = afe4403_channel_values[chan->address];
+	unsigned int field = afe4403_channel_leds[chan->address];
 	int ret;
 
 	switch (chan->type) {
 	case IIO_INTENSITY:
 		switch (mask) {
 		case IIO_CHAN_INFO_RAW:
-			reg = afe4403_channel_values[chan->address];
 			ret = afe4403_read(afe, reg, val);
 			if (ret)
 				return ret;
@@ -270,7 +267,6 @@ static int afe4403_read_raw(struct iio_dev *indio_dev,
 	case IIO_CURRENT:
 		switch (mask) {
 		case IIO_CHAN_INFO_RAW:
-			field = afe4403_channel_leds[chan->address];
 			ret = regmap_field_read(afe->fields[field], val);
 			if (ret)
 				return ret;
@@ -321,6 +317,7 @@ static irqreturn_t afe4403_trigger_handler(int irq, void *private)
 	struct iio_dev *indio_dev = pf->indio_dev;
 	struct afe4403_data *afe = iio_priv(indio_dev);
 	int ret, bit, i = 0;
+	s32 buffer[8];
 	u8 tx[4] = {AFE440X_CONTROL0, 0x0, 0x0, AFE440X_CONTROL0_READ};
 	u8 rx[3];
 
@@ -337,9 +334,9 @@ static irqreturn_t afe4403_trigger_handler(int irq, void *private)
 		if (ret)
 			goto err;
 
-		afe->buffer[i++] = (rx[0] << 16) |
-				   (rx[1] << 8) |
-				   (rx[2]);
+		buffer[i++] = (rx[0] << 16) |
+				(rx[1] << 8) |
+				(rx[2]);
 	}
 
 	/* Disable reading from the device */
@@ -348,8 +345,7 @@ static irqreturn_t afe4403_trigger_handler(int irq, void *private)
 	if (ret)
 		goto err;
 
-	iio_push_to_buffers_with_timestamp(indio_dev, afe->buffer,
-					   pf->timestamp);
+	iio_push_to_buffers_with_timestamp(indio_dev, buffer, pf->timestamp);
 err:
 	iio_trigger_notify_done(indio_dev->trig);
 

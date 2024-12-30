@@ -128,9 +128,6 @@ static void fuse_destroy_inode(struct inode *inode)
 
 static void fuse_evict_inode(struct inode *inode)
 {
-	/* Will write inode on close/munmap and in all other dirtiers */
-	WARN_ON(inode->i_state & I_DIRTY_INODE);
-
 	truncate_inode_pages_final(&inode->i_data);
 	clear_inode(inode);
 	if (inode->i_sb->s_flags & SB_ACTIVE) {
@@ -177,12 +174,6 @@ void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 	inode->i_uid     = make_kuid(fc->user_ns, attr->uid);
 	inode->i_gid     = make_kgid(fc->user_ns, attr->gid);
 	inode->i_blocks  = attr->blocks;
-
-	/* Sanitize nsecs */
-	attr->atimensec = min_t(u32, attr->atimensec, NSEC_PER_SEC - 1);
-	attr->mtimensec = min_t(u32, attr->mtimensec, NSEC_PER_SEC - 1);
-	attr->ctimensec = min_t(u32, attr->ctimensec, NSEC_PER_SEC - 1);
-
 	inode->i_atime.tv_sec   = attr->atime;
 	inode->i_atime.tv_nsec  = attr->atimensec;
 	/* mtime from server may be stale due to local buffered write */
@@ -215,7 +206,7 @@ void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 {
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct fuse_inode *fi = get_fuse_inode(inode);
-	bool is_wb = fc->writeback_cache;
+	bool is_wb = fc->writeback_cache && !test_bit(FUSE_I_ATTR_FORCE_SYNC, &fi->state);
 	loff_t oldsize;
 	struct timespec64 old_mtime;
 
@@ -326,12 +317,9 @@ struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 		unlock_new_inode(inode);
 	} else if ((inode->i_mode ^ attr->mode) & S_IFMT) {
 		/* Inode has changed type, any I/O on the old should fail */
-		fuse_make_bad(inode);
-		if (inode != d_inode(sb->s_root)) {
-			remove_inode_hash(inode);
-			iput(inode);
-			goto retry;
-		}
+		make_bad_inode(inode);
+		iput(inode);
+		goto retry;
 	}
 
 	fi = get_fuse_inode(inode);
@@ -618,7 +606,6 @@ void fuse_conn_init(struct fuse_conn *fc, struct user_namespace *user_ns)
 {
 	memset(fc, 0, sizeof(*fc));
 	spin_lock_init(&fc->lock);
-	spin_lock_init(&fc->passthrough_req_lock);
 	init_rwsem(&fc->killsb);
 	refcount_set(&fc->count, 1);
 	atomic_set(&fc->dev_count, 1);
@@ -628,7 +615,6 @@ void fuse_conn_init(struct fuse_conn *fc, struct user_namespace *user_ns)
 	INIT_LIST_HEAD(&fc->bg_queue);
 	INIT_LIST_HEAD(&fc->entry);
 	INIT_LIST_HEAD(&fc->devices);
-	idr_init(&fc->passthrough_req);
 	atomic_set(&fc->num_waiting, 0);
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->congestion_threshold = FUSE_DEFAULT_CONGESTION_THRESHOLD;
@@ -641,6 +627,7 @@ void fuse_conn_init(struct fuse_conn *fc, struct user_namespace *user_ns)
 	get_random_bytes(&fc->scramble_key, sizeof(fc->scramble_key));
 	fc->pid_ns = get_pid_ns(task_active_pid_ns(current));
 	fc->user_ns = get_user_ns(user_ns);
+	fc->max_pages = FUSE_DEFAULT_MAX_PAGES_PER_REQ;
 }
 EXPORT_SYMBOL_GPL(fuse_conn_init);
 
@@ -941,11 +928,10 @@ static void process_init_reply(struct fuse_conn *fc, struct fuse_req *req)
 			}
 			if (arg->flags & FUSE_ABORT_ERROR)
 				fc->abort_err = 1;
-			if (arg->flags & FUSE_PASSTHROUGH) {
-				fc->passthrough = 1;
-				/* Prevent further stacking */
-				fc->sb->s_stack_depth =
-					FILESYSTEM_MAX_STACK_DEPTH;
+			if (arg->flags & FUSE_MAX_PAGES) {
+				fc->max_pages =
+					min_t(unsigned int, FUSE_MAX_MAX_PAGES,
+					max_t(unsigned int, arg->max_pages, 1));
 			}
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
@@ -960,6 +946,8 @@ static void process_init_reply(struct fuse_conn *fc, struct fuse_req *req)
 		fc->max_write = max_t(unsigned, 4096, fc->max_write);
 		fc->conn_init = 1;
 	}
+	ST_LOG("<%s> dev = %u:%u  fuse Initialized",
+			__func__, MAJOR(fc->dev), MINOR(fc->dev));
 	fuse_set_initialized(fc);
 	wake_up_all(&fc->blocked_waitq);
 }
@@ -978,7 +966,7 @@ static void fuse_send_init(struct fuse_conn *fc, struct fuse_req *req)
 		FUSE_DO_READDIRPLUS | FUSE_READDIRPLUS_AUTO | FUSE_ASYNC_DIO |
 		FUSE_WRITEBACK_CACHE | FUSE_NO_OPEN_SUPPORT |
 		FUSE_PARALLEL_DIROPS | FUSE_HANDLE_KILLPRIV | FUSE_POSIX_ACL |
-		FUSE_ABORT_ERROR | FUSE_PASSTHROUGH;
+		FUSE_ABORT_ERROR | FUSE_MAX_PAGES;
 	req->in.h.opcode = FUSE_INIT;
 	req->in.numargs = 1;
 	req->in.args[0].size = sizeof(*arg);
@@ -991,24 +979,15 @@ static void fuse_send_init(struct fuse_conn *fc, struct fuse_req *req)
 	req->out.args[0].size = sizeof(struct fuse_init_out);
 	req->out.args[0].value = &req->misc.init_out;
 	req->end = process_init_reply;
+
+	ST_LOG("<%s> dev = %u:%u  fuse send Init request",
+			__func__, MAJOR(fc->dev), MINOR(fc->dev));
 	fuse_request_send_background(fc, req);
-}
-
-static int free_fuse_passthrough(int id, void *p, void *data)
-{
-	struct fuse_passthrough *passthrough = (struct fuse_passthrough *)p;
-
-	fuse_passthrough_release(passthrough);
-	kfree(p);
-
-	return 0;
 }
 
 static void fuse_free_conn(struct fuse_conn *fc)
 {
 	WARN_ON(!list_empty(&fc->devices));
-	idr_for_each(&fc->passthrough_req, free_fuse_passthrough, NULL);
-	idr_destroy(&fc->passthrough_req);
 	kfree_rcu(fc, rcu);
 }
 
@@ -1026,14 +1005,16 @@ static int fuse_bdi_init(struct fuse_conn *fc, struct super_block *sb)
 		bdi_put(sb->s_bdi);
 		sb->s_bdi = &noop_backing_dev_info;
 	}
-	err = super_setup_bdi_name(sb, "%u:%u%s", MAJOR(fc->dev),
+	/* @fs.sec -- 9b4d962cc783453fc63e4302012c8e28e11e31a5 -- */
+	err = sec_super_setup_bdi_name(sb, "%u:%u%s", MAJOR(fc->dev),
 				   MINOR(fc->dev), suffix);
 	if (err)
 		return err;
 
 	sb->s_bdi->ra_pages = (VM_MAX_READAHEAD * 1024) / PAGE_SIZE;
 	/* fuse does it's own writeback accounting */
-	sb->s_bdi->capabilities = BDI_CAP_NO_ACCT_WB | BDI_CAP_STRICTLIMIT;
+	sb->s_bdi->capabilities = BDI_CAP_NO_ACCT_WB | BDI_CAP_STRICTLIMIT |
+				  BDI_CAP_SEC_DEBUG;
 
 	/*
 	 * For a single fuse filesystem use max 1% of dirty +

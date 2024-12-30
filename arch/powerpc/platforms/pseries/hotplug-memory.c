@@ -31,7 +31,7 @@ static bool rtas_hp_event;
 unsigned long pseries_memory_block_size(void)
 {
 	struct device_node *np;
-	u64 memblock_size = MIN_MEMORY_BLOCK_SIZE;
+	unsigned int memblock_size = MIN_MEMORY_BLOCK_SIZE;
 	struct resource r;
 
 	np = of_find_node_by_path("/ibm,dynamic-reconfiguration-memory");
@@ -227,7 +227,7 @@ static int get_lmb_range(u32 drc_index, int n_lmbs,
 			 struct drmem_lmb **end_lmb)
 {
 	struct drmem_lmb *lmb, *start, *end;
-	struct drmem_lmb *limit;
+	struct drmem_lmb *last_lmb;
 
 	start = NULL;
 	for_each_drmem_lmb(lmb) {
@@ -240,10 +240,10 @@ static int get_lmb_range(u32 drc_index, int n_lmbs,
 	if (!start)
 		return -EINVAL;
 
-	end = &start[n_lmbs];
+	end = &start[n_lmbs - 1];
 
-	limit = &drmem_info->lmbs[drmem_info->n_lmbs];
-	if (end > limit)
+	last_lmb = &drmem_info->lmbs[drmem_info->n_lmbs - 1];
+	if (end > last_lmb)
 		return -EINVAL;
 
 	*start_lmb = start;
@@ -487,7 +487,7 @@ static int dlpar_memory_remove_by_index(u32 drc_index)
 	int lmb_found;
 	int rc;
 
-	pr_debug("Attempting to hot-remove LMB, drc index %x\n", drc_index);
+	pr_info("Attempting to hot-remove LMB, drc index %x\n", drc_index);
 
 	lmb_found = 0;
 	for_each_drmem_lmb(lmb) {
@@ -501,15 +501,14 @@ static int dlpar_memory_remove_by_index(u32 drc_index)
 		}
 	}
 
-	if (!lmb_found) {
-		pr_debug("Failed to look up LMB for drc index %x\n", drc_index);
+	if (!lmb_found)
 		rc = -EINVAL;
-	} else if (rc) {
-		pr_debug("Failed to hot-remove memory at %llx\n",
-			 lmb->base_addr);
-	} else {
-		pr_debug("Memory at %llx was hot-removed\n", lmb->base_addr);
-	}
+
+	if (rc)
+		pr_info("Failed to hot-remove memory at %llx\n",
+			lmb->base_addr);
+	else
+		pr_info("Memory at %llx was hot-removed\n", lmb->base_addr);
 
 	return rc;
 }
@@ -762,8 +761,8 @@ static int dlpar_memory_add_by_count(u32 lmbs_to_add)
 			if (!drmem_lmb_reserved(lmb))
 				continue;
 
-			pr_debug("Memory at %llx (drc index %x) was hot-added\n",
-				 lmb->base_addr, lmb->drc_index);
+			pr_info("Memory at %llx (drc index %x) was hot-added\n",
+				lmb->base_addr, lmb->drc_index);
 			drmem_remove_lmb_reservation(lmb);
 		}
 		rc = 0;

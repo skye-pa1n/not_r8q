@@ -156,7 +156,7 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 		nr_neigh->digipeat = NULL;
 		nr_neigh->ax25     = NULL;
 		nr_neigh->dev      = dev;
-		nr_neigh->quality  = READ_ONCE(sysctl_netrom_default_path_quality);
+		nr_neigh->quality  = sysctl_netrom_default_path_quality;
 		nr_neigh->locked   = 0;
 		nr_neigh->count    = 0;
 		nr_neigh->number   = nr_neigh_no++;
@@ -211,7 +211,6 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 		/* refcount initialized at 1 */
 		spin_unlock_bh(&nr_node_list_lock);
 
-		nr_neigh_put(nr_neigh);
 		return 0;
 	}
 	nr_node_lock(nr_node);
@@ -287,12 +286,20 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 	return 0;
 }
 
-static void nr_remove_node_locked(struct nr_node *nr_node)
+static inline void __nr_remove_node(struct nr_node *nr_node)
 {
-	lockdep_assert_held(&nr_node_list_lock);
-
 	hlist_del_init(&nr_node->node_node);
 	nr_node_put(nr_node);
+}
+
+#define nr_remove_node_locked(__node) \
+	__nr_remove_node(__node)
+
+static void nr_remove_node(struct nr_node *nr_node)
+{
+	spin_lock_bh(&nr_node_list_lock);
+	__nr_remove_node(nr_node);
+	spin_unlock_bh(&nr_node_list_lock);
 }
 
 static inline void __nr_remove_neigh(struct nr_neigh *nr_neigh)
@@ -333,7 +340,6 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct n
 		return -EINVAL;
 	}
 
-	spin_lock_bh(&nr_node_list_lock);
 	nr_node_lock(nr_node);
 	for (i = 0; i < nr_node->count; i++) {
 		if (nr_node->routes[i].neighbour == nr_neigh) {
@@ -347,7 +353,7 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct n
 			nr_node->count--;
 
 			if (nr_node->count == 0) {
-				nr_remove_node_locked(nr_node);
+				nr_remove_node(nr_node);
 			} else {
 				switch (i) {
 				case 0:
@@ -361,14 +367,12 @@ static int nr_del_node(ax25_address *callsign, ax25_address *neighbour, struct n
 				nr_node_put(nr_node);
 			}
 			nr_node_unlock(nr_node);
-			spin_unlock_bh(&nr_node_list_lock);
 
 			return 0;
 		}
 	}
 	nr_neigh_put(nr_neigh);
 	nr_node_unlock(nr_node);
-	spin_unlock_bh(&nr_node_list_lock);
 	nr_node_put(nr_node);
 
 	return -EINVAL;
@@ -723,7 +727,7 @@ void nr_link_failed(ax25_cb *ax25, int reason)
 	nr_neigh->ax25 = NULL;
 	ax25_cb_put(ax25);
 
-	if (++nr_neigh->failed < READ_ONCE(sysctl_netrom_link_fails_count)) {
+	if (++nr_neigh->failed < sysctl_netrom_link_fails_count) {
 		nr_neigh_put(nr_neigh);
 		return;
 	}
@@ -761,7 +765,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	if (ax25 != NULL) {
 		ret = nr_add_node(nr_src, "", &ax25->dest_addr, ax25->digipeat,
 				  ax25->ax25_dev->dev, 0,
-				  READ_ONCE(sysctl_netrom_obsolescence_count_initialiser));
+				  sysctl_netrom_obsolescence_count_initialiser);
 		if (ret)
 			return ret;
 	}
@@ -775,7 +779,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 		return ret;
 	}
 
-	if (!READ_ONCE(sysctl_netrom_routing_control) && ax25 != NULL)
+	if (!sysctl_netrom_routing_control && ax25 != NULL)
 		return 0;
 
 	/* Its Time-To-Live has expired */

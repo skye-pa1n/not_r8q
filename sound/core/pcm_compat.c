@@ -329,14 +329,10 @@ static int snd_pcm_ioctl_hw_params_compat(struct snd_pcm_substream *substream,
 		goto error;
 	}
 
-	if (refine) {
+	if (refine)
 		err = snd_pcm_hw_refine(substream, data);
-		if (err < 0)
-			goto error;
-		err = fixup_unreferenced_params(substream, data);
-	} else {
+	else
 		err = snd_pcm_hw_params(substream, data);
-	}
 	if (err < 0)
 		goto error;
 	if (copy_to_user(data32, data, sizeof(*data32)) ||

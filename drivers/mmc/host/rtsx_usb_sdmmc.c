@@ -1344,7 +1344,6 @@ static int rtsx_usb_sdmmc_drv_probe(struct platform_device *pdev)
 #ifdef RTSX_USB_USE_LEDS_CLASS
 	int err;
 #endif
-	int ret;
 
 	ucr = usb_get_intfdata(to_usb_interface(pdev->dev.parent));
 	if (!ucr)
@@ -1383,15 +1382,7 @@ static int rtsx_usb_sdmmc_drv_probe(struct platform_device *pdev)
 	INIT_WORK(&host->led_work, rtsx_usb_update_led);
 
 #endif
-	ret = mmc_add_host(mmc);
-	if (ret) {
-#ifdef RTSX_USB_USE_LEDS_CLASS
-		led_classdev_unregister(&host->led);
-#endif
-		mmc_free_host(mmc);
-		pm_runtime_disable(&pdev->dev);
-		return ret;
-	}
+	mmc_add_host(mmc);
 
 	return 0;
 }

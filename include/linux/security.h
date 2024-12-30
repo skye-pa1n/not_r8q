@@ -53,6 +53,11 @@ struct msg_msg;
 struct xattr;
 struct xfrm_sec_ctx;
 struct mm_struct;
+#ifdef CONFIG_KDP_CRED
+/* For understanding size of struct cred*/
+#include <linux/rkp.h>
+#include <linux/kdp.h>
+#endif
 
 /* Default (no) options for the capable function */
 #define CAP_OPT_NONE 0x0
@@ -72,6 +77,10 @@ struct timezone;
 enum lsm_event {
 	LSM_POLICY_CHANGE,
 };
+
+#ifndef CONFIG_KDP_CRED
+#define security_integrity_current()  0
+#endif
 
 /* These functions are in security/commoncap.c */
 extern int cap_capable(const struct cred *cred, struct user_namespace *ns,
@@ -322,8 +331,6 @@ int security_file_permission(struct file *file, int mask);
 int security_file_alloc(struct file *file);
 void security_file_free(struct file *file);
 int security_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
-int security_file_ioctl_compat(struct file *file, unsigned int cmd,
-			       unsigned long arg);
 int security_mmap_file(struct file *file, unsigned long prot,
 			unsigned long flags);
 int security_mmap_addr(unsigned long addr);
@@ -789,7 +796,7 @@ static inline int security_inode_killpriv(struct dentry *dentry)
 
 static inline int security_inode_getsecurity(struct inode *inode, const char *name, void **buffer, bool alloc)
 {
-	return cap_inode_getsecurity(inode, name, buffer, alloc);
+	return -EOPNOTSUPP;
 }
 
 static inline int security_inode_setsecurity(struct inode *inode, const char *name, const void *value, size_t size, int flags)
@@ -832,13 +839,6 @@ static inline void security_file_free(struct file *file)
 
 static inline int security_file_ioctl(struct file *file, unsigned int cmd,
 				      unsigned long arg)
-{
-	return 0;
-}
-
-static inline int security_file_ioctl_compat(struct file *file,
-					     unsigned int cmd,
-					     unsigned long arg)
 {
 	return 0;
 }

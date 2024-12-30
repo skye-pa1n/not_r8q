@@ -180,8 +180,8 @@ renesas_sdhi_internal_dmac_start_dma(struct tmio_mmc_host *host,
 			mmc_get_dma_dir(data)))
 		goto force_pio;
 
-	/* This DMAC cannot handle if buffer is not 128-bytes alignment */
-	if (!IS_ALIGNED(sg_dma_address(sg), 128))
+	/* This DMAC cannot handle if buffer is not 8-bytes alignment */
+	if (!IS_ALIGNED(sg_dma_address(sg), 8))
 		goto force_pio_with_unmap;
 
 	if (data->flags & MMC_DATA_READ) {
@@ -222,12 +222,15 @@ static void renesas_sdhi_internal_dmac_issue_tasklet_fn(unsigned long arg)
 					    DTRAN_CTRL_DM_START);
 }
 
-static bool renesas_sdhi_internal_dmac_complete(struct tmio_mmc_host *host)
+static void renesas_sdhi_internal_dmac_complete_tasklet_fn(unsigned long arg)
 {
+	struct tmio_mmc_host *host = (struct tmio_mmc_host *)arg;
 	enum dma_data_direction dir;
 
+	spin_lock_irq(&host->lock);
+
 	if (!host->data)
-		return false;
+		goto out;
 
 	if (host->data->flags & MMC_DATA_READ)
 		dir = DMA_FROM_DEVICE;
@@ -239,17 +242,6 @@ static bool renesas_sdhi_internal_dmac_complete(struct tmio_mmc_host *host)
 
 	if (dir == DMA_FROM_DEVICE)
 		clear_bit(SDHI_INTERNAL_DMAC_RX_IN_USE, &global_flags);
-
-	return true;
-}
-
-static void renesas_sdhi_internal_dmac_complete_tasklet_fn(unsigned long arg)
-{
-	struct tmio_mmc_host *host = (struct tmio_mmc_host *)arg;
-
-	spin_lock_irq(&host->lock);
-	if (!renesas_sdhi_internal_dmac_complete(host))
-		goto out;
 
 	tmio_mmc_do_data_irq(host);
 out:

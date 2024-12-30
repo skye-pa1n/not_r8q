@@ -64,8 +64,13 @@
 
 #ifdef CONFIG_STACKPROTECTOR
 #include <linux/stackprotector.h>
-unsigned long __stack_chk_guard __ro_after_init;
+unsigned long __stack_chk_guard __read_mostly;
 EXPORT_SYMBOL(__stack_chk_guard);
+#endif
+
+#ifdef CONFIG_CFP_ROPP
+#include <linux/cfp.h>
+#define RRK_MASK (1UL << 63)
 #endif
 
 /*
@@ -75,7 +80,6 @@ void (*pm_power_off)(void);
 EXPORT_SYMBOL_GPL(pm_power_off);
 
 void (*arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
-EXPORT_SYMBOL_GPL(arm_pm_restart);
 
 /*
  * This is our default idle handler.
@@ -415,6 +419,28 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 
 asmlinkage void ret_from_fork(void) asm("ret_from_fork");
 
+#ifdef CONFIG_CFP_ROPP
+static inline void ropp_change_key(struct task_struct *p)
+{
+#ifdef CONFIG_CFP_ROPP_SYSREGKEY
+	task_thread_info(p)->rrk = get_random_long() | RRK_MASK;
+
+#ifdef SYSREG_DEBUG
+	task_thread_info(p)->rrk = ropp_fixed_key ^ ropp_master_key;
+#endif
+
+#elif defined CONFIG_CFP_ROPP_RANDKEY
+	task_thread_info(p)->rrk = get_random_long();
+#elif defined CONFIG_CFP_ROPP_FIXKEY
+	task_thread_info(p)->rrk = ropp_fixed_key;
+#elif defined CONFIG_CFP_ROPP_ZEROKEY
+	task_thread_info(p)->rrk = 0x0;
+#else
+	#error "Please choose one ROPP key scheme"
+#endif
+}
+#endif
+
 int copy_thread(unsigned long clone_flags, unsigned long stack_start,
 		unsigned long stk_sz, struct task_struct *p)
 {
@@ -467,6 +493,9 @@ int copy_thread(unsigned long clone_flags, unsigned long stack_start,
 		p->thread.cpu_context.x19 = stack_start;
 		p->thread.cpu_context.x20 = stk_sz;
 	}
+#ifdef CONFIG_CFP_ROPP
+	ropp_change_key(p);
+#endif
 	p->thread.cpu_context.pc = (unsigned long)ret_from_fork;
 	p->thread.cpu_context.sp = (unsigned long)childregs;
 
@@ -486,7 +515,7 @@ static void tls_thread_switch(struct task_struct *next)
 
 	if (is_compat_thread(task_thread_info(next)))
 		write_sysreg(next->thread.uw.tp_value, tpidrro_el0);
-	else
+	else if (!arm64_kernel_unmapped_at_el0())
 		write_sysreg(0, tpidrro_el0);
 
 	write_sysreg(*task_user_tls(next), tpidr_el0);

@@ -462,8 +462,6 @@ static ssize_t export_store(struct class *class,
 	long			gpio;
 	struct gpio_desc	*desc;
 	int			status;
-	struct gpio_chip	*gc;
-	int			offset;
 
 	status = kstrtol(buf, 0, &gpio);
 	if (status < 0)
@@ -473,12 +471,6 @@ static ssize_t export_store(struct class *class,
 	/* reject invalid GPIOs */
 	if (!desc) {
 		pr_warn("%s: invalid GPIO %ld\n", __func__, gpio);
-		return -EINVAL;
-	}
-	gc = desc->gdev->chip;
-	offset = gpio_chip_hwgpio(desc);
-	if (!gpiochip_line_is_valid(gc, offset)) {
-		pr_warn("%s: GPIO %ld masked\n", __func__, gpio);
 		return -EINVAL;
 	}
 
@@ -495,16 +487,13 @@ static ssize_t export_store(struct class *class,
 	}
 
 	status = gpiod_set_transitory(desc, false);
-	if (status) {
-		gpiod_free(desc);
-		goto done;
+	if (!status) {
+		status = gpiod_export(desc, true);
+		if (status < 0)
+			gpiod_free(desc);
+		else
+			set_bit(FLAG_SYSFS, &desc->flags);
 	}
-
-	status = gpiod_export(desc, true);
-	if (status < 0)
-		gpiod_free(desc);
-	else
-		set_bit(FLAG_SYSFS, &desc->flags);
 
 done:
 	if (status)

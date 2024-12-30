@@ -80,18 +80,17 @@ static struct clk_ops clk_pll_ops = {
 	.get_parent = clk_pll_get_parent,
 };
 
-static __init struct clk_hw *__socfpga_pll_init(struct device_node *node,
+static __init struct clk *__socfpga_pll_init(struct device_node *node,
 	const struct clk_ops *ops)
 {
 	u32 reg;
-	struct clk_hw *hw_clk;
+	struct clk *clk;
 	struct socfpga_pll *pll_clk;
 	const char *clk_name = node->name;
 	const char *parent_name[SOCFPGA_MAX_PARENTS];
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 	struct device_node *clkmgr_np;
 	int rc;
-	int err;
 
 	of_property_read_u32(node, "reg", &reg);
 
@@ -119,15 +118,13 @@ static __init struct clk_hw *__socfpga_pll_init(struct device_node *node,
 	clk_pll_ops.enable = clk_gate_ops.enable;
 	clk_pll_ops.disable = clk_gate_ops.disable;
 
-	hw_clk = &pll_clk->hw.hw;
-
-	err = clk_hw_register(NULL, hw_clk);
-	if (err) {
+	clk = clk_register(NULL, &pll_clk->hw.hw);
+	if (WARN_ON(IS_ERR(clk))) {
 		kfree(pll_clk);
-		return ERR_PTR(err);
+		return NULL;
 	}
-	rc = of_clk_add_provider(node, of_clk_src_simple_get, hw_clk);
-	return hw_clk;
+	rc = of_clk_add_provider(node, of_clk_src_simple_get, clk);
+	return clk;
 }
 
 void __init socfpga_pll_init(struct device_node *node)

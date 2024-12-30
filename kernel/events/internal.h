@@ -121,7 +121,7 @@ static inline unsigned long perf_data_size(struct ring_buffer *rb)
 
 static inline unsigned long perf_aux_size(struct ring_buffer *rb)
 {
-	return (unsigned long)rb->aux_nr_pages << PAGE_SHIFT;
+	return rb->aux_nr_pages << PAGE_SHIFT;
 }
 
 #define __DEFINE_OUTPUT_COPY_BODY(advance_buf, memcpy_func, ...)	\
@@ -209,7 +209,7 @@ static inline int get_recursion_context(int *recursion)
 		rctx = 3;
 	else if (in_irq())
 		rctx = 2;
-	else if (in_serving_softirq())
+	else if (in_softirq())
 		rctx = 1;
 	else
 		rctx = 0;

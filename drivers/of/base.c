@@ -1342,7 +1342,6 @@ int of_phandle_iterator_args(struct of_phandle_iterator *it,
 
 	return count;
 }
-EXPORT_SYMBOL_GPL(of_phandle_iterator_args);
 
 static int __of_parse_phandle_with_args(const struct device_node *np,
 					const char *list_name,
@@ -1635,7 +1634,6 @@ int of_parse_phandle_with_args_map(const struct device_node *np,
 		out_args->np = new;
 		of_node_put(cur);
 		cur = new;
-		new = NULL;
 	}
 put:
 	of_node_put(cur);

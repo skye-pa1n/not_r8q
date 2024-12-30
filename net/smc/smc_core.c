@@ -321,8 +321,8 @@ void smc_conn_free(struct smc_connection *conn)
 	} else {
 		smc_cdc_tx_dismiss_slots(conn);
 	}
-	smc_buf_unuse(conn, lgr);		/* allow buffer reuse */
 	smc_lgr_unregister_conn(conn);		/* unsets conn->lgr */
+	smc_buf_unuse(conn, lgr);		/* allow buffer reuse */
 
 	if (!lgr->conns_num)
 		smc_lgr_schedule_free_work(lgr);
@@ -609,8 +609,7 @@ int smc_conn_create(struct smc_sock *smc, bool is_smcd, int srv_first_contact,
 		    !lgr->sync_err &&
 		    lgr->vlan_id == vlan_id &&
 		    (role == SMC_CLNT ||
-		    (lgr->conns_num < SMC_RMBS_PER_LGR_MAX &&
-		      !bitmap_full(lgr->rtokens_used_mask, SMC_RMBS_PER_LGR_MAX)))) {
+		     lgr->conns_num < SMC_RMBS_PER_LGR_MAX)) {
 			/* link group found */
 			local_contact = SMC_REUSE_CONTACT;
 			conn->lgr = lgr;
@@ -656,31 +655,21 @@ out:
 	return rc ? rc : local_contact;
 }
 
-#define SMCD_DMBE_SIZES		6 /* 0 -> 16KB, 1 -> 32KB, .. 6 -> 1MB */
-#define SMCR_RMBE_SIZES		5 /* 0 -> 16KB, 1 -> 32KB, .. 5 -> 512KB */
-
-/* convert the RMB size into the compressed notation (minimum 16K, see
- * SMCD/R_DMBE_SIZES.
+/* convert the RMB size into the compressed notation - minimum 16K.
  * In contrast to plain ilog2, this rounds towards the next power of 2,
  * so the socket application gets at least its desired sndbuf / rcvbuf size.
  */
-static u8 smc_compress_bufsize(int size, bool is_smcd, bool is_rmb)
+static u8 smc_compress_bufsize(int size)
 {
 	u8 compressed;
 
 	if (size <= SMC_BUF_MIN_SIZE)
 		return 0;
 
-	size = (size - 1) >> 14;  /* convert to 16K multiple */
-	compressed = min_t(u8, ilog2(size) + 1,
-			   is_smcd ? SMCD_DMBE_SIZES : SMCR_RMBE_SIZES);
-
-#ifdef CONFIG_ARCH_NO_SG_CHAIN
-	if (!is_smcd && is_rmb)
-		/* RMBs are backed by & limited to max size of scatterlists */
-		compressed = min_t(u8, compressed, ilog2((SG_MAX_SINGLE_ALLOC * PAGE_SIZE) >> 14));
-#endif
-
+	size = (size - 1) >> 14;
+	compressed = ilog2(size) + 1;
+	if (compressed >= SMC_RMBE_SIZES)
+		compressed = SMC_RMBE_SIZES - 1;
 	return compressed;
 }
 
@@ -719,7 +708,7 @@ static struct smc_buf_desc *smc_buf_get_slot(int compressed_bufsize,
  */
 static inline int smc_rmb_wnd_update_limit(int rmbe_size)
 {
-	return max_t(int, rmbe_size / 10, SOCK_MIN_SNDBUF / 2);
+	return min_t(int, rmbe_size / 10, SOCK_MIN_SNDBUF / 2);
 }
 
 static struct smc_buf_desc *smcr_new_buf_create(struct smc_link_group *lgr,
@@ -781,11 +770,16 @@ static struct smc_buf_desc *smcr_new_buf_create(struct smc_link_group *lgr,
 	return buf_desc;
 }
 
+#define SMCD_DMBE_SIZES		7 /* 0 -> 16KB, 1 -> 32KB, .. 6 -> 1MB */
+
 static struct smc_buf_desc *smcd_new_buf_create(struct smc_link_group *lgr,
 						bool is_dmb, int bufsize)
 {
 	struct smc_buf_desc *buf_desc;
 	int rc;
+
+	if (smc_compress_bufsize(bufsize) > SMCD_DMBE_SIZES)
+		return ERR_PTR(-EAGAIN);
 
 	/* try to alloc a new DMB */
 	buf_desc = kzalloc(sizeof(*buf_desc), GFP_KERNEL);
@@ -830,8 +824,9 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 		/* use socket send buffer size (w/o overhead) as start value */
 		sk_buf_size = smc->sk.sk_sndbuf / 2;
 
-	for (bufsize_short = smc_compress_bufsize(sk_buf_size, is_smcd, is_rmb);
+	for (bufsize_short = smc_compress_bufsize(sk_buf_size);
 	     bufsize_short >= 0; bufsize_short--) {
+
 		if (is_rmb) {
 			lock = &lgr->rmbs_lock;
 			buf_list = &lgr->rmbs[bufsize_short];
@@ -840,6 +835,8 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 			buf_list = &lgr->sndbufs[bufsize_short];
 		}
 		bufsize = smc_uncompress_bufsize(bufsize_short);
+		if ((1 << get_order(bufsize)) > SG_MAX_SINGLE_ALLOC)
+			continue;
 
 		/* check for reusable slot in the link group */
 		buf_desc = smc_buf_get_slot(bufsize_short, lock, buf_list);

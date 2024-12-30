@@ -390,7 +390,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	int			solicited;
 	u16			pkey;
 	u32			qp_num;
-	int			ack_req = 0;
+	int			ack_req;
 
 	/* length from start of bth to end of icrc */
 	paylen = rxe_opcode[opcode].length + payload + pad + RXE_ICRC_SIZE;
@@ -426,9 +426,8 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	qp_num = (pkt->mask & RXE_DETH_MASK) ? ibwr->wr.ud.remote_qpn :
 					 qp->attr.dest_qp_num;
 
-	if (qp_type(qp) != IB_QPT_UD && qp_type(qp) != IB_QPT_UC)
-		ack_req = ((pkt->mask & RXE_END_MASK) ||
-			   (qp->req.noack_pkts++ > RXE_MAX_PKT_PER_ACK));
+	ack_req = ((pkt->mask & RXE_END_MASK) ||
+		(qp->req.noack_pkts++ > RXE_MAX_PKT_PER_ACK));
 	if (ack_req)
 		qp->req.noack_pkts = 0;
 
@@ -665,8 +664,7 @@ next_wqe:
 	}
 
 	if (unlikely(qp_type(qp) == IB_QPT_RC &&
-		psn_compare(qp->req.psn, (qp->comp.psn +
-				RXE_MAX_UNACKED_PSNS)) > 0)) {
+		     qp->req.psn > (qp->comp.psn + RXE_MAX_UNACKED_PSNS))) {
 		qp->req.wait_psn = 1;
 		goto exit;
 	}
@@ -681,7 +679,7 @@ next_wqe:
 	opcode = next_opcode(qp, wqe, wqe->wr.opcode);
 	if (unlikely(opcode < 0)) {
 		wqe->status = IB_WC_LOC_QP_OP_ERR;
-		goto err;
+		goto exit;
 	}
 
 	mask = rxe_opcode[opcode].mask;

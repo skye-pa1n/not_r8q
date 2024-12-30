@@ -244,7 +244,6 @@
 #define DATA_DATA							\
 	*(.xiptext)							\
 	*(DATA_MAIN)							\
-	*(.data..decrypted)						\
 	*(.ref.data)							\
 	*(.data..shared_aligned) /* percpu related */			\
 	MEM_KEEP(init.data*)						\
@@ -282,8 +281,7 @@
 
 #define PAGE_ALIGNED_DATA(page_align)					\
 	. = ALIGN(page_align);						\
-	*(.data..page_aligned)						\
-	. = ALIGN(page_align);
+	*(.data..page_aligned)
 
 #define READ_MOSTLY_DATA(align)						\
 	. = ALIGN(align);						\
@@ -310,11 +308,64 @@
  */
 #ifndef RO_AFTER_INIT_DATA
 #define RO_AFTER_INIT_DATA						\
-	. = ALIGN(8);							\
 	__start_ro_after_init = .;					\
 	*(.data..ro_after_init)						\
 	__end_ro_after_init = .;
 #endif
+
+#ifdef CONFIG_UH_RKP
+#define PG_IDMAP							\
+	. = ALIGN(PAGE_SIZE);						\
+	idmap_pg_dir = .;						\
+	. += IDMAP_DIR_SIZE;
+
+#define PG_SWAP								\
+	. = ALIGN(PAGE_SIZE);						\
+	swapper_pg_dir = .;						\
+	. += SWAPPER_DIR_SIZE;						\
+	swapper_pg_end = .;						
+
+#ifdef CONFIG_ARM64_SW_TTBR0_PAN
+#define PG_RESERVED							\
+	. = ALIGN(PAGE_SIZE);						\
+	reserved_ttbr0 = .;						\
+	. += RESERVED_TTBR0_SIZE;
+#else
+#define PG_RESERVED
+#endif
+
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+#define PG_TRAMP							\
+	. = ALIGN(PAGE_SIZE);						\
+	tramp_pg_dir = .;						\
+	. += PAGE_SIZE;
+#else
+#define PG_TRAMP
+#endif
+
+#define RKP_RO_DATA							\
+	PG_IDMAP							\
+	PG_SWAP								\
+	PG_RESERVED							\
+	PG_TRAMP
+
+#define RKP_RO_SECTION							\
+	. = ALIGN(4096);						\
+	.rkp_bss          : AT(ADDR(.rkp_bss) - LOAD_OFFSET) {		\
+		*(.rkp_bss.page_aligned)				\
+		*(.rkp_bss)						\
+	} = 0								\
+				 					\
+	.rkp_ro          : AT(ADDR(.rkp_ro) - LOAD_OFFSET) {		\
+		*(.rkp_ro)						\
+		*(.kdp_ro)						\
+		RKP_RO_DATA	/* Read only after init */		\
+	}								\
+
+#else
+#define RKP_RO_SECTION
+#endif
+
 
 /*
  * Read only Data
@@ -337,6 +388,8 @@
 		*(.rodata1)						\
 	}								\
 									\
+	/*CONFIG_RKP_UH*/						\
+	RKP_RO_SECTION							\
 	/* PCI quirks */						\
 	.pci_fixup        : AT(ADDR(.pci_fixup) - LOAD_OFFSET) {	\
 		__start_pci_fixups_early = .;				\
@@ -366,7 +419,7 @@
 	}								\
 									\
 	/* Built-in firmware blobs */					\
-	.builtin_fw : AT(ADDR(.builtin_fw) - LOAD_OFFSET) ALIGN(8) {	\
+	.builtin_fw        : AT(ADDR(.builtin_fw) - LOAD_OFFSET) {	\
 		__start_builtin_fw = .;					\
 		KEEP(*(.builtin_fw))					\
 		__end_builtin_fw = .;					\
@@ -504,16 +557,12 @@
  */
 #define TEXT_TEXT							\
 		ALIGN_FUNCTION();					\
-		*(.text.hot .text.hot.*)				\
-		*(TEXT_MAIN .text.fixup)				\
-		*(.text.unlikely .text.unlikely.*)			\
-		*(.text.unknown .text.unknown.*)			\
+		*(.text.hot TEXT_MAIN .text.fixup .text.unlikely)	\
 		*(TEXT_CFI_MAIN) 					\
 		NOINSTR_TEXT						\
 		*(.text..refcount)					\
 		*(.text..ftrace)					\
 		*(.ref.text)						\
-		*(.text.asan.* .text.tsan.*)				\
 	MEM_KEEP(init.text*)						\
 	MEM_KEEP(exit.text*)						\
 
@@ -671,9 +720,7 @@
 	. = ALIGN(bss_align);						\
 	.bss : AT(ADDR(.bss) - LOAD_OFFSET) {				\
 		BSS_FIRST_SECTIONS					\
-		. = ALIGN(PAGE_SIZE);					\
 		*(.bss..page_aligned)					\
-		. = ALIGN(PAGE_SIZE);					\
 		*(.dynbss)						\
 		*(BSS_MAIN)						\
 		*(COMMON)						\
@@ -717,13 +764,8 @@
 		/* DWARF 4 */						\
 		.debug_types	0 : { *(.debug_types) }			\
 		/* DWARF 5 */						\
-		.debug_addr	0 : { *(.debug_addr) }			\
-		.debug_line_str	0 : { *(.debug_line_str) }		\
-		.debug_loclists	0 : { *(.debug_loclists) }		\
 		.debug_macro	0 : { *(.debug_macro) }			\
-		.debug_names	0 : { *(.debug_names) }			\
-		.debug_rnglists	0 : { *(.debug_rnglists) }		\
-		.debug_str_offsets	0 : { *(.debug_str_offsets) }
+		.debug_addr	0 : { *(.debug_addr) }
 
 		/* Stabs debugging sections.  */
 #define STABS_DEBUG							\

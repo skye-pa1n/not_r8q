@@ -494,7 +494,7 @@ int dm_bm_write_lock(struct dm_block_manager *bm,
 	void *p;
 	int r;
 
-	if (dm_bm_is_read_only(bm))
+	if (bm->read_only)
 		return -EPERM;
 
 	p = dm_bufio_read(bm->bufio, b, (struct dm_buffer **) result);
@@ -563,7 +563,7 @@ int dm_bm_write_lock_zero(struct dm_block_manager *bm,
 	struct buffer_aux *aux;
 	void *p;
 
-	if (dm_bm_is_read_only(bm))
+	if (bm->read_only)
 		return -EPERM;
 
 	p = dm_bufio_new(bm->bufio, b, (struct dm_buffer **) result);
@@ -603,7 +603,7 @@ EXPORT_SYMBOL_GPL(dm_bm_unlock);
 
 int dm_bm_flush(struct dm_block_manager *bm)
 {
-	if (dm_bm_is_read_only(bm))
+	if (bm->read_only)
 		return -EPERM;
 
 	return dm_bufio_write_dirty_buffers(bm->bufio);
@@ -617,21 +617,19 @@ void dm_bm_prefetch(struct dm_block_manager *bm, dm_block_t b)
 
 bool dm_bm_is_read_only(struct dm_block_manager *bm)
 {
-	return (bm ? bm->read_only : true);
+	return bm->read_only;
 }
 EXPORT_SYMBOL_GPL(dm_bm_is_read_only);
 
 void dm_bm_set_read_only(struct dm_block_manager *bm)
 {
-	if (bm)
-		bm->read_only = true;
+	bm->read_only = true;
 }
 EXPORT_SYMBOL_GPL(dm_bm_set_read_only);
 
 void dm_bm_set_read_write(struct dm_block_manager *bm)
 {
-	if (bm)
-		bm->read_only = false;
+	bm->read_only = false;
 }
 EXPORT_SYMBOL_GPL(dm_bm_set_read_write);
 

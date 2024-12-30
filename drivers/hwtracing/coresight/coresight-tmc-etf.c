@@ -413,7 +413,7 @@ static int tmc_set_etf_buffer(struct coresight_device *csdev,
 		return -EINVAL;
 
 	/* wrap head around to the amount of space we have */
-	head = handle->head & (((unsigned long)buf->nr_pages << PAGE_SHIFT) - 1);
+	head = handle->head & ((buf->nr_pages << PAGE_SHIFT) - 1);
 
 	/* find the page to write to */
 	buf->cur = head / PAGE_SIZE;
@@ -510,7 +510,7 @@ static unsigned long tmc_update_etf_buffer(struct coresight_device *csdev,
 		buf_ptr = buf->data_pages[cur] + offset;
 		*buf_ptr = readl_relaxed(drvdata->base + TMC_RRD);
 
-		if (lost && i < CORESIGHT_BARRIER_PKT_SIZE) {
+		if (lost && *barrier) {
 			*buf_ptr = *barrier;
 			barrier++;
 		}
@@ -623,15 +623,18 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
-	drvdata->reading = false;
-	/* Re-enable the TMC if need be */
-	if (drvdata->mode == CS_MODE_SYSFS) {
+	if (drvdata->enable) {
 		/* There is no point in reading a TMC in HW FIFO mode */
 		mode = readl_relaxed(drvdata->base + TMC_MODE);
 		if (mode != TMC_MODE_CIRCULAR_BUFFER) {
 			spin_unlock_irqrestore(&drvdata->spinlock, flags);
 			return -EINVAL;
 		}
+	}
+
+	drvdata->reading = false;
+	/* Re-enable the TMC if need be */
+	if (drvdata->mode == CS_MODE_SYSFS) {
 		/*
 		 * The trace run will continue with the same allocated trace
 		 * buffer. As such zero-out the buffer so that we don't end

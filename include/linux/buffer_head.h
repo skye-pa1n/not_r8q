@@ -5,6 +5,8 @@
  * Everything to do with buffer_heads.
  */
 
+/* @fs.sec -- c853aa20d912cceb3e932a91b6bc8aa3 -- */
+
 #ifndef _LINUX_BUFFER_HEAD_H
 #define _LINUX_BUFFER_HEAD_H
 
@@ -37,6 +39,7 @@ enum bh_state_bits {
 	BH_Quiet,	/* Buffer Error Prinks to be quiet */
 	BH_Meta,	/* Buffer contains metadata */
 	BH_Prio,	/* Buffer should be submitted with REQ_PRIO */
+	BH_Sync_Flush,	/* Buffer should be submttted with REQ_SYNC_FLUSH */
 	BH_Defer_Completion, /* Defer AIO completion to workqueue */
 
 	BH_PrivateStart,/* not a state bit, but the first bit available
@@ -117,6 +120,7 @@ static __always_inline int test_clear_buffer_##name(struct buffer_head *bh) \
  * of the form "mark_buffer_foo()".  These are higher-level functions which
  * do something in addition to setting a b_state bit.
  */
+BUFFER_FNS(Uptodate, uptodate)
 BUFFER_FNS(Dirty, dirty)
 TAS_BUFFER_FNS(Dirty, dirty)
 BUFFER_FNS(Lock, locked)
@@ -132,42 +136,8 @@ BUFFER_FNS(Write_EIO, write_io_error)
 BUFFER_FNS(Unwritten, unwritten)
 BUFFER_FNS(Meta, meta)
 BUFFER_FNS(Prio, prio)
+BUFFER_FNS(Sync_Flush, sync_flush)
 BUFFER_FNS(Defer_Completion, defer_completion)
-
-static __always_inline void set_buffer_uptodate(struct buffer_head *bh)
-{
-	/*
-	 * If somebody else already set this uptodate, they will
-	 * have done the memory barrier, and a reader will thus
-	 * see *some* valid buffer state.
-	 *
-	 * Any other serialization (with IO errors or whatever that
-	 * might clear the bit) has to come from other state (eg BH_Lock).
-	 */
-	if (test_bit(BH_Uptodate, &bh->b_state))
-		return;
-
-	/*
-	 * make it consistent with folio_mark_uptodate
-	 * pairs with smp_load_acquire in buffer_uptodate
-	 */
-	smp_mb__before_atomic();
-	set_bit(BH_Uptodate, &bh->b_state);
-}
-
-static __always_inline void clear_buffer_uptodate(struct buffer_head *bh)
-{
-	clear_bit(BH_Uptodate, &bh->b_state);
-}
-
-static __always_inline int buffer_uptodate(const struct buffer_head *bh)
-{
-	/*
-	 * make it consistent with folio_test_uptodate
-	 * pairs with smp_mb__before_atomic in set_buffer_uptodate
-	 */
-	return (smp_load_acquire(&bh->b_state) & (1UL << BH_Uptodate)) != 0;
-}
 
 #define bh_offset(bh)		((unsigned long)(bh)->b_data & ~PAGE_MASK)
 
@@ -187,6 +157,8 @@ void buffer_check_dirty_writeback(struct page *page,
  */
 
 void mark_buffer_dirty(struct buffer_head *bh);
+void mark_buffer_dirty_sync(struct buffer_head *bh);
+void init_buffer(struct buffer_head *, bh_end_io_t *, void *);
 void mark_buffer_write_io_error(struct buffer_head *bh);
 void touch_buffer(struct buffer_head *bh);
 void set_bh_page(struct buffer_head *bh,
@@ -202,6 +174,7 @@ void end_buffer_async_write(struct buffer_head *bh, int uptodate);
 
 /* Things to do with buffers at mapping->private_list */
 void mark_buffer_dirty_inode(struct buffer_head *bh, struct inode *inode);
+void mark_buffer_dirty_inode_sync(struct buffer_head *bh, struct inode *inode);
 int inode_has_buffers(struct inode *);
 void invalidate_inode_buffers(struct inode *);
 int remove_inode_buffers(struct inode *inode);
@@ -223,8 +196,6 @@ struct buffer_head *__getblk_gfp(struct block_device *bdev, sector_t block,
 void __brelse(struct buffer_head *);
 void __bforget(struct buffer_head *);
 void __breadahead(struct block_device *, sector_t block, unsigned int size);
-void __breadahead_gfp(struct block_device *, sector_t block, unsigned int size,
-		  gfp_t gfp);
 struct buffer_head *__bread_gfp(struct block_device *,
 				sector_t block, unsigned size, gfp_t gfp);
 void invalidate_bh_lrus(void);
@@ -353,12 +324,6 @@ static inline void
 sb_breadahead(struct super_block *sb, sector_t block)
 {
 	__breadahead(sb->s_bdev, block, sb->s_blocksize);
-}
-
-static inline void
-sb_breadahead_unmovable(struct super_block *sb, sector_t block)
-{
-	__breadahead_gfp(sb->s_bdev, block, sb->s_blocksize, 0);
 }
 
 static inline struct buffer_head *

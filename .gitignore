@@ -136,7 +136,16 @@ all.config
 # fetched Android config fragments
 kernel/configs/android-*.cfg
 
-#
-#Ignoring Android.bp link file
-#
-Android.bp
+out/
+*.zip
+*.gz
+*.pyc
+*.out
+zImage
+
+# Samsung
+scripts/cfp/common.pyc
+scripts/crypto/__pycache__/
+scripts/fmp/__pycache__/
+security/samsung/defex_lsm/defex_packed_rules.inc
+security/samsung/defex_lsm/pack_rules

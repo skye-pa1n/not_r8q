@@ -17,7 +17,6 @@
 #include <linux/percpu-refcount.h>
 #include <linux/uuid.h>
 #include <linux/blk_types.h>
-#include <linux/android_kabi.h>
 
 #ifdef CONFIG_BLOCK
 
@@ -83,6 +82,7 @@ struct partition {
 	__le32 nr_sects;		/* nr of sectors in partition */
 } __attribute__((packed));
 
+#define FSYNC_TIME_GROUP_MAX 4
 #define IO_SIZE_GROUP_MAX 8
 struct disk_stats {
 	u64 nsecs[NR_STAT_GROUPS];
@@ -134,11 +134,6 @@ struct hd_struct {
 #endif
 	struct percpu_ref ref;
 	struct rcu_work rcu_work;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 #define GENHD_FL_REMOVABLE			1
@@ -179,9 +174,6 @@ struct blk_integrity {
 	unsigned char				tuple_size;
 	unsigned char				interval_exp;
 	unsigned char				tag_size;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
 };
 
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
@@ -191,6 +183,7 @@ struct accumulated_io_stats {
 	unsigned long sectors[3];	/* READ, WRITE, DISCARD */
 	unsigned long ios[3];
 	unsigned long size_cnt[3][IO_SIZE_GROUP_MAX];
+	unsigned long fsync_time_cnt[FSYNC_TIME_GROUP_MAX];
 	unsigned long iot;		/* sec */
 };
 
@@ -240,12 +233,6 @@ struct gendisk {
 #endif
 	struct badblocks *bb;
 	struct lockdep_map lockdep_map;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
-
 };
 
 static inline struct gendisk *part_to_disk(struct hd_struct *part)
@@ -433,7 +420,8 @@ static inline void free_part_info(struct hd_struct *part)
 	kfree(part->info);
 }
 
-void update_io_ticks(struct hd_struct *part, unsigned long now);
+/* block/blk-core.c */
+extern void part_round_stats(struct request_queue *q, int cpu, struct hd_struct *part);
 
 /* block/genhd.c */
 extern void device_add_disk(struct device *parent, struct gendisk *disk);
@@ -763,11 +751,9 @@ static inline sector_t part_nr_sects_read(struct hd_struct *part)
 static inline void part_nr_sects_write(struct hd_struct *part, sector_t size)
 {
 #if BITS_PER_LONG==32 && defined(CONFIG_LBDAF) && defined(CONFIG_SMP)
-	preempt_disable();
 	write_seqcount_begin(&part->nr_sects_seq);
 	part->nr_sects = size;
 	write_seqcount_end(&part->nr_sects_seq);
-	preempt_enable();
 #elif BITS_PER_LONG==32 && defined(CONFIG_LBDAF) && defined(CONFIG_PREEMPT)
 	preempt_disable();
 	part->nr_sects = size;

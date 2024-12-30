@@ -256,7 +256,7 @@ sort__sym_cmp(struct hist_entry *left, struct hist_entry *right)
 	 * comparing symbol address alone is not enough since it's a
 	 * relative address within a dso.
 	 */
-	if (!hists__has(left->hists, dso)) {
+	if (!hists__has(left->hists, dso) || hists__has(right->hists, dso)) {
 		ret = sort__dso_cmp(left, right);
 		if (ret != 0)
 			return ret;
@@ -735,7 +735,8 @@ static int hist_entry__dso_to_filter(struct hist_entry *he, int type,
 static int64_t
 sort__sym_from_cmp(struct hist_entry *left, struct hist_entry *right)
 {
-	struct addr_map_symbol *from_l, *from_r;
+	struct addr_map_symbol *from_l = &left->branch_info->from;
+	struct addr_map_symbol *from_r = &right->branch_info->from;
 
 	if (!left->branch_info || !right->branch_info)
 		return cmp_null(left->branch_info, right->branch_info);
@@ -2689,7 +2690,7 @@ static char *prefix_if_not_in(const char *pre, char *str)
 		return str;
 
 	if (asprintf(&n, "%s,%s", pre, str) < 0)
-		n = NULL;
+		return NULL;
 
 	free(str);
 	return n;

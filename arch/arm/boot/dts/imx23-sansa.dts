@@ -175,8 +175,10 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "i2c-gpio";
-		sda-gpios = <&gpio1 24 0>;
-		scl-gpios = <&gpio1 22 0>;
+		gpios = <
+			&gpio1 24 0		/* SDA */
+			&gpio1 22 0		/* SCL */
+		>;
 		i2c-gpio,delay-us = <2>;	/* ~100 kHz */
 	};
 
@@ -184,8 +186,10 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		compatible = "i2c-gpio";
-		sda-gpios = <&gpio0 31 0>;
-		scl-gpios = <&gpio0 30 0>;
+		gpios = <
+			&gpio0 31 0		/* SDA */
+			&gpio0 30 0		/* SCL */
+		>;
 		i2c-gpio,delay-us = <2>;	/* ~100 kHz */
 
 		touch: touch@20 {

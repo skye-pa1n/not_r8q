@@ -26,7 +26,6 @@
 #include <linux/uidgid.h>
 #include <linux/gfp.h>
 #include <linux/overflow.h>
-#include <linux/android_kabi.h>
 #include <asm/device.h>
 
 struct device;
@@ -154,11 +153,6 @@ struct bus_type {
 	struct lock_class_key lock_key;
 
 	bool need_parent_lock;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 extern int __must_check bus_register(struct bus_type *bus);
@@ -322,11 +316,6 @@ struct device_driver {
 	void (*coredump) (struct device *dev);
 
 	struct driver_private *p;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 
@@ -359,8 +348,6 @@ extern int __must_check driver_create_file(struct device_driver *driver,
 extern void driver_remove_file(struct device_driver *driver,
 			       const struct driver_attribute *attr);
 
-int driver_set_override(struct device *dev, const char **override,
-			const char *s, size_t len);
 extern int __must_check driver_for_each_device(struct device_driver *drv,
 					       struct device *start,
 					       void *data,
@@ -455,11 +442,6 @@ struct class {
 	const struct dev_pm_ops *pm;
 
 	struct subsys_private *p;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 struct class_dev_iter {
@@ -905,11 +887,6 @@ struct device_link {
 	struct rcu_head rcu_head;
 #endif
 	bool supplier_preactivated; /* Owned by consumer probe. */
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 /**
@@ -931,8 +908,7 @@ enum dl_dev_state {
  * @suppliers: List of links to supplier devices.
  * @consumers: List of links to consumer devices.
  * @needs_suppliers: Hook to global list of devices waiting for suppliers.
- * @defer_hook: Hook to global list of devices that have deferred sync_state or
- *		deferred fw_devlink.
+ * @defer_sync: Hook to global list of devices that have deferred sync_state.
  * @need_for_probe: If needs_suppliers is on a list, this indicates if the
  *		    suppliers are needed for probe or not.
  * @status: Driver status information.
@@ -941,14 +917,9 @@ struct dev_links_info {
 	struct list_head suppliers;
 	struct list_head consumers;
 	struct list_head needs_suppliers;
-	struct list_head defer_hook;
+	struct list_head defer_sync;
 	bool need_for_probe;
 	enum dl_dev_state status;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 /**
@@ -1114,15 +1085,6 @@ struct device {
 	bool			offline:1;
 	bool			of_node_reused:1;
 	bool			state_synced:1;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
-	ANDROID_KABI_RESERVE(5);
-	ANDROID_KABI_RESERVE(6);
-	ANDROID_KABI_RESERVE(7);
-	ANDROID_KABI_RESERVE(8);
 };
 
 static inline struct device *kobj_to_dev(struct kobject *kobj)
@@ -1677,9 +1639,6 @@ do {									\
 #define dev_WARN_ONCE(dev, condition, format, arg...) \
 	WARN_ONCE(condition, "%s %s: " format, \
 			dev_driver_string(dev), dev_name(dev), ## arg)
-
-extern __printf(3, 4)
-int dev_err_probe(const struct device *dev, int err, const char *fmt, ...);
 
 /* Create alias, so I can be autoloaded. */
 #define MODULE_ALIAS_CHARDEV(major,minor) \

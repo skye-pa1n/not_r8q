@@ -362,8 +362,8 @@ static void tcp_options(const struct sk_buff *skb,
 				 length, buff);
 	BUG_ON(ptr == NULL);
 
-	state->td_scale = 0;
-	state->flags &= IP_CT_TCP_FLAG_BE_LIBERAL;
+	state->td_scale =
+	state->flags = 0;
 
 	while (length > 0) {
 		int opcode=*ptr++;
@@ -549,20 +549,13 @@ static bool tcp_in_window(const struct nf_conn *ct,
 			swin = win << sender->td_scale;
 			sender->td_maxwin = (swin == 0 ? 1 : swin);
 			sender->td_maxend = end + sender->td_maxwin;
-			if (receiver->td_maxwin == 0) {
-				/* We haven't seen traffic in the other
-				 * direction yet but we have to tweak window
-				 * tracking to pass III and IV until that
-				 * happens.
-				 */
+			/*
+			 * We haven't seen traffic in the other direction yet
+			 * but we have to tweak window tracking to pass III
+			 * and IV until that happens.
+			 */
+			if (receiver->td_maxwin == 0)
 				receiver->td_end = receiver->td_maxend = sack;
-			} else if (sack == receiver->td_end + 1) {
-				/* Likely a reply to a keepalive.
-				 * Needed for III.
-				 */
-				receiver->td_end++;
-			}
-
 		}
 	} else if (((state->state == TCP_CONNTRACK_SYN_SENT
 		     && dir == IP_CT_DIR_ORIGINAL)
@@ -784,16 +777,6 @@ static bool nf_conntrack_tcp_established(const struct nf_conn *ct)
 	       test_bit(IPS_ASSURED_BIT, &ct->status);
 }
 
-static void nf_ct_tcp_state_reset(struct ip_ct_tcp_state *state)
-{
-	state->td_end		= 0;
-	state->td_maxend	= 0;
-	state->td_maxwin	= 0;
-	state->td_maxack	= 0;
-	state->td_scale		= 0;
-	state->flags		&= IP_CT_TCP_FLAG_BE_LIBERAL;
-}
-
 /* Returns verdict for packet, or -1 for invalid. */
 static int tcp_packet(struct nf_conn *ct,
 		      const struct sk_buff *skb,
@@ -892,7 +875,8 @@ static int tcp_packet(struct nf_conn *ct,
 			ct->proto.tcp.last_flags &= ~IP_CT_EXP_CHALLENGE_ACK;
 			ct->proto.tcp.seen[ct->proto.tcp.last_dir].flags =
 				ct->proto.tcp.last_flags;
-			nf_ct_tcp_state_reset(&ct->proto.tcp.seen[dir]);
+			memset(&ct->proto.tcp.seen[dir], 0,
+			       sizeof(struct ip_ct_tcp_state));
 			break;
 		}
 		ct->proto.tcp.last_index = index;
@@ -1094,16 +1078,6 @@ static int tcp_packet(struct nf_conn *ct,
 			nf_ct_kill_acct(ct, ctinfo, skb);
 			return NF_ACCEPT;
 		}
-
-		if (index == TCP_SYN_SET && old_state == TCP_CONNTRACK_SYN_SENT) {
-			/* do not renew timeout on SYN retransmit.
-			 *
-			 * Else port reuse by client or NAT middlebox can keep
-			 * entry alive indefinitely (including nat info).
-			 */
-			return NF_ACCEPT;
-		}
-
 		/* ESTABLISHED without SEEN_REPLY, i.e. mid-connection
 		 * pickup with loose=1. Avoid large ESTABLISHED timeout.
 		 */

@@ -100,8 +100,8 @@ struct br_vlan_stats {
 };
 
 struct br_tunnel_info {
-	__be64				tunnel_id;
-	struct metadata_dst __rcu	*tunnel_dst;
+	__be64			tunnel_id;
+	struct metadata_dst	*tunnel_dst;
 };
 
 /**
@@ -168,15 +168,6 @@ struct net_bridge_vlan_group {
 	u16				pvid;
 };
 
-/* bridge fdb flags */
-enum {
-	BR_FDB_LOCAL,
-	BR_FDB_STATIC,
-	BR_FDB_STICKY,
-	BR_FDB_ADDED_BY_USER,
-	BR_FDB_ADDED_BY_EXT_LEARN,
-};
-
 struct net_bridge_fdb_key {
 	mac_addr addr;
 	u16 vlan_id;
@@ -188,8 +179,11 @@ struct net_bridge_fdb_entry {
 
 	struct net_bridge_fdb_key	key;
 	struct hlist_node		fdb_node;
-	unsigned long			flags;
-	unsigned char			offloaded:1;
+	unsigned char			is_local:1,
+					is_static:1,
+					added_by_user:1,
+					added_by_external_learn:1,
+					offloaded:1;
 
 	/* write-heavy members should not affect lookups */
 	unsigned long			updated ____cacheline_aligned_in_smp;
@@ -208,8 +202,8 @@ struct net_bridge_port_group {
 	struct rcu_head			rcu;
 	struct timer_list		timer;
 	struct br_ip			addr;
-	unsigned char			eth_addr[ETH_ALEN] __aligned(2);
 	unsigned char			flags;
+	unsigned char			eth_addr[ETH_ALEN];
 };
 
 struct net_bridge_mdb_entry
@@ -570,7 +564,7 @@ int br_fdb_external_learn_del(struct net_bridge *br, struct net_bridge_port *p,
 			      const unsigned char *addr, u16 vid,
 			      bool swdev_notify);
 void br_fdb_offloaded_set(struct net_bridge *br, struct net_bridge_port *p,
-			  const unsigned char *addr, u16 vid, bool offloaded);
+			  const unsigned char *addr, u16 vid);
 
 /* br_forward.c */
 enum br_pkt_type {

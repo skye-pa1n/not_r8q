@@ -386,7 +386,7 @@ static const struct file_operations xlog_dump_ops = {
 };
 
 #define SS_ONCE_LOG_BUF_MAX	(1024)
-static int debug_display_read_once(struct samsung_display_driver_data *vdd,
+static ssize_t debug_display_read_once(struct samsung_display_driver_data *vdd,
 				char __user *buff, loff_t *ppos)
 {
 	struct dsi_panel *panel = GET_DSI_PANEL(vdd);
@@ -459,6 +459,10 @@ static ssize_t debug_display_read(struct file *file, char __user *buff,
 	if (len)
 		return len;
 
+	len = ss_sde_evtlog_dump_read(file, buff, count, ppos);
+	if (len)
+		return len;
+
 	LCD_INFO("done");
 	return len;
 }
@@ -477,6 +481,9 @@ static int debug_display_open(struct inode *inode, struct file *file)
 
 	vdd->debug_data->report_once = true;
 	LCD_INFO("done");
+
+	/* MDP XLOG */
+	ss_sde_dbg_debugfs_open();
 
 	return 0;
 }

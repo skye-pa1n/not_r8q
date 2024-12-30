@@ -740,7 +740,8 @@ struct xfrm_spi_skb_cb {
 
 #define XFRM_SPI_SKB_CB(__skb) ((struct xfrm_spi_skb_cb *)&((__skb)->cb[0]))
 
-#ifdef CONFIG_AUDITSYSCALL
+// [ SEC_SELINUX_PORTING_COMMON - remove AUDIT_MAC_IPSEC_EVENT audit log, it conflict with security notification
+#if 0 // #ifdef CONFIG_AUDITSYSCALL
 static inline struct audit_buffer *xfrm_audit_start(const char *op)
 {
 	struct audit_buffer *audit_buf = NULL;
@@ -829,6 +830,7 @@ static inline void xfrm_audit_state_icvfail(struct xfrm_state *x,
 {
 }
 #endif /* CONFIG_AUDITSYSCALL */
+// ] SEC_SELINUX_PORTING_COMMON - remove AUDIT_MAC_IPSEC_EVENT audit log, it conflict with security notification
 
 static inline void xfrm_pol_hold(struct xfrm_policy *policy)
 {
@@ -1016,7 +1018,7 @@ struct xfrm_dst {
 static inline struct dst_entry *xfrm_dst_path(const struct dst_entry *dst)
 {
 #ifdef CONFIG_XFRM
-	if (dst->xfrm || (dst->flags & DST_XFRM_QUEUE)) {
+	if (dst->xfrm) {
 		const struct xfrm_dst *xdst = (const struct xfrm_dst *) dst;
 
 		return xdst->path;
@@ -1028,7 +1030,7 @@ static inline struct dst_entry *xfrm_dst_path(const struct dst_entry *dst)
 static inline struct dst_entry *xfrm_dst_child(const struct dst_entry *dst)
 {
 #ifdef CONFIG_XFRM
-	if (dst->xfrm || (dst->flags & DST_XFRM_QUEUE)) {
+	if (dst->xfrm) {
 		struct xfrm_dst *xdst = (struct xfrm_dst *) dst;
 		return xdst->child;
 	}
@@ -1083,7 +1085,6 @@ struct xfrm_offload {
 #define	XFRM_GRO		32
 #define	XFRM_ESP_NO_TRAILER	64
 #define	XFRM_DEV_RESUME		128
-#define	XFRM_XMIT		256
 
 	__u32			status;
 #define CRYPTO_SUCCESS				1
@@ -1739,16 +1740,13 @@ int xfrm_policy_walk(struct net *net, struct xfrm_policy_walk *walk,
 		     void *);
 void xfrm_policy_walk_done(struct xfrm_policy_walk *walk, struct net *net);
 int xfrm_policy_insert(int dir, struct xfrm_policy *policy, int excl);
-struct xfrm_policy *xfrm_policy_bysel_ctx(struct net *net,
-					  const struct xfrm_mark *mark,
-					  u32 if_id, u8 type, int dir,
+struct xfrm_policy *xfrm_policy_bysel_ctx(struct net *net, u32 mark, u32 if_id,
+					  u8 type, int dir,
 					  struct xfrm_selector *sel,
 					  struct xfrm_sec_ctx *ctx, int delete,
 					  int *err);
-struct xfrm_policy *xfrm_policy_byid(struct net *net,
-				     const struct xfrm_mark *mark, u32 if_id,
-				     u8 type, int dir, u32 id, int delete,
-				     int *err);
+struct xfrm_policy *xfrm_policy_byid(struct net *net, u32 mark, u32 if_id, u8,
+				     int dir, u32 id, int delete, int *err);
 int xfrm_policy_flush(struct net *net, u8 type, bool task_valid);
 void xfrm_policy_hash_rebuild(struct net *net);
 u32 xfrm_get_acqseq(void);
@@ -1766,15 +1764,14 @@ int km_migrate(const struct xfrm_selector *sel, u8 dir, u8 type,
 	       const struct xfrm_migrate *m, int num_bundles,
 	       const struct xfrm_kmaddress *k,
 	       const struct xfrm_encap_tmpl *encap);
-struct xfrm_state *xfrm_migrate_state_find(struct xfrm_migrate *m, struct net *net,
-						u32 if_id);
+struct xfrm_state *xfrm_migrate_state_find(struct xfrm_migrate *m, struct net *net);
 struct xfrm_state *xfrm_state_migrate(struct xfrm_state *x,
 				      struct xfrm_migrate *m,
 				      struct xfrm_encap_tmpl *encap);
 int xfrm_migrate(const struct xfrm_selector *sel, u8 dir, u8 type,
 		 struct xfrm_migrate *m, int num_bundles,
 		 struct xfrm_kmaddress *k, struct net *net,
-		 struct xfrm_encap_tmpl *encap, u32 if_id);
+		 struct xfrm_encap_tmpl *encap);
 #endif
 
 int km_new_mapping(struct xfrm_state *x, xfrm_address_t *ipaddr, __be16 sport);
@@ -1877,17 +1874,21 @@ static inline unsigned int xfrm_replay_state_esn_len(struct xfrm_replay_state_es
 static inline int xfrm_replay_clone(struct xfrm_state *x,
 				     struct xfrm_state *orig)
 {
-
-	x->replay_esn = kmemdup(orig->replay_esn,
-				xfrm_replay_state_esn_len(orig->replay_esn),
+	x->replay_esn = kzalloc(xfrm_replay_state_esn_len(orig->replay_esn),
 				GFP_KERNEL);
 	if (!x->replay_esn)
 		return -ENOMEM;
-	x->preplay_esn = kmemdup(orig->preplay_esn,
-				 xfrm_replay_state_esn_len(orig->preplay_esn),
+
+	x->replay_esn->bmp_len = orig->replay_esn->bmp_len;
+	x->replay_esn->replay_window = orig->replay_esn->replay_window;
+
+	x->preplay_esn = kmemdup(x->replay_esn,
+				 xfrm_replay_state_esn_len(x->replay_esn),
 				 GFP_KERNEL);
-	if (!x->preplay_esn)
+	if (!x->preplay_esn) {
+		kfree(x->replay_esn);
 		return -ENOMEM;
+	}
 
 	return 0;
 }
@@ -2097,38 +2098,4 @@ static inline int xfrm_tunnel_check(struct sk_buff *skb, struct xfrm_state *x,
 
 	return 0;
 }
-
-extern const int xfrm_msg_min[XFRM_NR_MSGTYPES];
-extern const struct nla_policy xfrma_policy[XFRMA_MAX+1];
-
-struct xfrm_translator {
-	/* Allocate frag_list and put compat translation there */
-	int (*alloc_compat)(struct sk_buff *skb, const struct nlmsghdr *src);
-
-	/* Allocate nlmsg with 64-bit translaton of received 32-bit message */
-	struct nlmsghdr *(*rcv_msg_compat)(const struct nlmsghdr *nlh,
-			int maxtype, const struct nla_policy *policy,
-			struct netlink_ext_ack *extack);
-
-	/* Translate 32-bit user_policy from sockptr */
-	int (*xlate_user_policy_sockptr)(u8 **pdata32, int optlen);
-
-	struct module *owner;
-};
-
-#if IS_ENABLED(CONFIG_XFRM_USER_COMPAT)
-extern int xfrm_register_translator(struct xfrm_translator *xtr);
-extern int xfrm_unregister_translator(struct xfrm_translator *xtr);
-extern struct xfrm_translator *xfrm_get_translator(void);
-extern void xfrm_put_translator(struct xfrm_translator *xtr);
-#else
-static inline struct xfrm_translator *xfrm_get_translator(void)
-{
-	return NULL;
-}
-static inline void xfrm_put_translator(struct xfrm_translator *xtr)
-{
-}
-#endif
-
 #endif	/* _NET_XFRM_H */

@@ -914,7 +914,9 @@ void tipc_link_reset(struct tipc_link *l)
 int tipc_link_xmit(struct tipc_link *l, struct sk_buff_head *list,
 		   struct sk_buff_head *xmitq)
 {
+	struct tipc_msg *hdr = buf_msg(skb_peek(list));
 	unsigned int maxwin = l->window;
+	int imp = msg_importance(hdr);
 	unsigned int mtu = l->mtu;
 	u16 ack = l->rcv_nxt - 1;
 	u16 seqno = l->snd_nxt;
@@ -923,20 +925,13 @@ int tipc_link_xmit(struct tipc_link *l, struct sk_buff_head *list,
 	struct sk_buff_head *backlogq = &l->backlogq;
 	struct sk_buff *skb, *_skb, **tskb;
 	int pkt_cnt = skb_queue_len(list);
-	struct tipc_msg *hdr;
 	int rc = 0;
-	int imp;
 
-	if (pkt_cnt <= 0)
-		return 0;
-
-	hdr = buf_msg(skb_peek(list));
 	if (unlikely(msg_size(hdr) > mtu)) {
-		__skb_queue_purge(list);
+		skb_queue_purge(list);
 		return -EMSGSIZE;
 	}
 
-	imp = msg_importance(hdr);
 	/* Allow oversubscription of one data msg per source at congestion */
 	if (unlikely(l->backlog[imp].len >= l->backlog[imp].limit)) {
 		if (imp == TIPC_SYSTEM_IMPORTANCE) {
@@ -962,7 +957,7 @@ int tipc_link_xmit(struct tipc_link *l, struct sk_buff_head *list,
 		if (likely(skb_queue_len(transmq) < maxwin)) {
 			_skb = skb_clone(skb, GFP_ATOMIC);
 			if (!_skb) {
-				__skb_queue_purge(list);
+				skb_queue_purge(list);
 				return -ENOBUFS;
 			}
 			__skb_dequeue(list);
@@ -1434,7 +1429,7 @@ void tipc_link_create_dummy_tnl_msg(struct tipc_link *l,
 	struct sk_buff *skb;
 	u32 dnode = l->addr;
 
-	__skb_queue_head_init(&tnlq);
+	skb_queue_head_init(&tnlq);
 	skb = tipc_msg_create(TUNNEL_PROTOCOL, FAILOVER_MSG,
 			      INT_H_SIZE, BASIC_H_SIZE,
 			      dnode, onode, 0, 0, 0);
@@ -1470,8 +1465,8 @@ void tipc_link_tnl_prepare(struct tipc_link *l, struct tipc_link *tnl,
 	if (!tnl)
 		return;
 
-	__skb_queue_head_init(&tnlq);
-	__skb_queue_head_init(&tmpxq);
+	skb_queue_head_init(&tnlq);
+	skb_queue_head_init(&tmpxq);
 
 	/* At least one packet required for safe algorithm => add dummy */
 	skb = tipc_msg_create(TIPC_LOW_IMPORTANCE, TIPC_DIRECT_MSG,
@@ -1481,7 +1476,7 @@ void tipc_link_tnl_prepare(struct tipc_link *l, struct tipc_link *tnl,
 		pr_warn("%sunable to create tunnel packet\n", link_co_err);
 		return;
 	}
-	__skb_queue_tail(&tnlq, skb);
+	skb_queue_tail(&tnlq, skb);
 	tipc_link_xmit(l, &tnlq, &tmpxq);
 	__skb_queue_purge(&tmpxq);
 
@@ -1579,15 +1574,12 @@ static int tipc_link_proto_rcv(struct tipc_link *l, struct sk_buff *skb,
 	u16 peers_tol = msg_link_tolerance(hdr);
 	u16 peers_prio = msg_linkprio(hdr);
 	u16 rcv_nxt = l->rcv_nxt;
-	u32 dlen = msg_data_sz(hdr);
+	u16 dlen = msg_data_sz(hdr);
 	int mtyp = msg_type(hdr);
 	bool reply = msg_probe(hdr);
 	void *data;
 	char *if_name;
 	int rc = 0;
-
-	if (dlen > U16_MAX)
-		goto exit;
 
 	if (tipc_link_is_blocked(l) || !xmitq)
 		goto exit;
@@ -1595,9 +1587,7 @@ static int tipc_link_proto_rcv(struct tipc_link *l, struct sk_buff *skb,
 	if (tipc_own_addr(l->net) > msg_prevnode(hdr))
 		l->net_plane = msg_net_plane(hdr);
 
-	if (skb_linearize(skb))
-		goto exit;
-
+	skb_linearize(skb);
 	hdr = buf_msg(skb);
 	data = msg_data(hdr);
 

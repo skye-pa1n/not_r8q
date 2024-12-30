@@ -13,20 +13,14 @@
 #include <linux/sched/mm.h>
 #include <linux/sched/clock.h>
 #include <linux/sched/task.h>
-#include <linux/sched/smt.h>
 #include <linux/init.h>
 #include <linux/kprobes.h>
 #include <linux/kgdb.h>
-#include <linux/mem_encrypt.h>
 #include <linux/smp.h>
-#include <linux/cpu.h>
 #include <linux/io.h>
 #include <linux/syscore_ops.h>
 
 #include <asm/stackprotector.h>
-#include <linux/utsname.h>
-
-#include <asm/alternative.h>
 #include <asm/perf_event.h>
 #include <asm/mmu_context.h>
 #include <asm/archrandom.h>
@@ -62,7 +56,6 @@
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/uv/uv.h>
 #endif
-#include <asm/set_memory.h>
 
 #include "cpu.h"
 
@@ -961,8 +954,6 @@ static void identify_cpu_without_cpuid(struct cpuinfo_x86 *c)
 #define MSBDS_ONLY		BIT(5)
 #define NO_SWAPGS		BIT(6)
 #define NO_ITLB_MULTIHIT	BIT(7)
-#define NO_MMIO			BIT(8)
-#define NO_EIBRS_PBRSB		BIT(9)
 
 #define VULNWL(_vendor, _family, _model, _whitelist)	\
 	{ X86_VENDOR_##_vendor, _family, _model, X86_FEATURE_ANY, _whitelist }
@@ -980,11 +971,6 @@ static const __initconst struct x86_cpu_id cpu_vuln_whitelist[] = {
 	VULNWL(NSC,	5, X86_MODEL_ANY,	NO_SPECULATION),
 
 	/* Intel Family 6 */
-	VULNWL_INTEL(TIGERLAKE,			NO_MMIO),
-	VULNWL_INTEL(TIGERLAKE_L,		NO_MMIO),
-	VULNWL_INTEL(ALDERLAKE,			NO_MMIO),
-	VULNWL_INTEL(ALDERLAKE_L,		NO_MMIO),
-
 	VULNWL_INTEL(ATOM_SALTWELL,		NO_SPECULATION | NO_ITLB_MULTIHIT),
 	VULNWL_INTEL(ATOM_SALTWELL_TABLET,	NO_SPECULATION | NO_ITLB_MULTIHIT),
 	VULNWL_INTEL(ATOM_SALTWELL_MID,		NO_SPECULATION | NO_ITLB_MULTIHIT),
@@ -1002,9 +988,9 @@ static const __initconst struct x86_cpu_id cpu_vuln_whitelist[] = {
 
 	VULNWL_INTEL(ATOM_AIRMONT_MID,		NO_L1TF | MSBDS_ONLY | NO_SWAPGS | NO_ITLB_MULTIHIT),
 
-	VULNWL_INTEL(ATOM_GOLDMONT,		NO_MDS | NO_L1TF | NO_SWAPGS | NO_ITLB_MULTIHIT | NO_MMIO),
-	VULNWL_INTEL(ATOM_GOLDMONT_X,		NO_MDS | NO_L1TF | NO_SWAPGS | NO_ITLB_MULTIHIT | NO_MMIO),
-	VULNWL_INTEL(ATOM_GOLDMONT_PLUS,	NO_MDS | NO_L1TF | NO_SWAPGS | NO_ITLB_MULTIHIT | NO_MMIO | NO_EIBRS_PBRSB),
+	VULNWL_INTEL(ATOM_GOLDMONT,		NO_MDS | NO_L1TF | NO_SWAPGS | NO_ITLB_MULTIHIT),
+	VULNWL_INTEL(ATOM_GOLDMONT_X,		NO_MDS | NO_L1TF | NO_SWAPGS | NO_ITLB_MULTIHIT),
+	VULNWL_INTEL(ATOM_GOLDMONT_PLUS,	NO_MDS | NO_L1TF | NO_SWAPGS | NO_ITLB_MULTIHIT),
 
 	/*
 	 * Technically, swapgs isn't serializing on AMD (despite it previously
@@ -1014,84 +1000,22 @@ static const __initconst struct x86_cpu_id cpu_vuln_whitelist[] = {
 	 * good enough for our purposes.
 	 */
 
-	VULNWL_INTEL(ATOM_TREMONT,		NO_EIBRS_PBRSB),
-	VULNWL_INTEL(ATOM_TREMONT_L,		NO_EIBRS_PBRSB),
-	VULNWL_INTEL(ATOM_TREMONT_X,		NO_ITLB_MULTIHIT | NO_EIBRS_PBRSB),
+	VULNWL_INTEL(ATOM_TREMONT_X,		NO_ITLB_MULTIHIT),
 
 	/* AMD Family 0xf - 0x12 */
-	VULNWL_AMD(0x0f,	NO_MELTDOWN | NO_SSB | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT | NO_MMIO),
-	VULNWL_AMD(0x10,	NO_MELTDOWN | NO_SSB | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT | NO_MMIO),
-	VULNWL_AMD(0x11,	NO_MELTDOWN | NO_SSB | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT | NO_MMIO),
-	VULNWL_AMD(0x12,	NO_MELTDOWN | NO_SSB | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT | NO_MMIO),
+	VULNWL_AMD(0x0f,	NO_MELTDOWN | NO_SSB | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT),
+	VULNWL_AMD(0x10,	NO_MELTDOWN | NO_SSB | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT),
+	VULNWL_AMD(0x11,	NO_MELTDOWN | NO_SSB | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT),
+	VULNWL_AMD(0x12,	NO_MELTDOWN | NO_SSB | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT),
 
 	/* FAMILY_ANY must be last, otherwise 0x0f - 0x12 matches won't work */
-	VULNWL_AMD(X86_FAMILY_ANY,	NO_MELTDOWN | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT | NO_MMIO | NO_EIBRS_PBRSB),
+	VULNWL_AMD(X86_FAMILY_ANY,	NO_MELTDOWN | NO_L1TF | NO_MDS | NO_SWAPGS | NO_ITLB_MULTIHIT),
 	{}
 };
 
-#define VULNBL(vendor, family, model, blacklist)	\
-	X86_MATCH_VENDOR_FAM_MODEL(vendor, family, model, blacklist)
-
-#define VULNBL_INTEL_STEPPINGS(model, steppings, issues)		   \
-	X86_MATCH_VENDOR_FAM_MODEL_STEPPINGS_FEATURE(INTEL, 6,		   \
-					    INTEL_FAM6_##model, steppings, \
-					    X86_FEATURE_ANY, issues)
-
-#define VULNBL_AMD(family, blacklist)		\
-	VULNBL(AMD, family, X86_MODEL_ANY, blacklist)
-
-#define SRBDS		BIT(0)
-/* CPU is affected by X86_BUG_MMIO_STALE_DATA */
-#define MMIO		BIT(1)
-/* CPU is affected by Shared Buffers Data Sampling (SBDS), a variant of X86_BUG_MMIO_STALE_DATA */
-#define MMIO_SBDS	BIT(2)
-/* CPU is affected by RETbleed, speculating where you would not expect it */
-#define RETBLEED	BIT(3)
-/* CPU is affected by SMT (cross-thread) return predictions */
-#define SMT_RSB		BIT(4)
-/* CPU is affected by SRSO */
-#define SRSO		BIT(5)
-/* CPU is affected by GDS */
-#define GDS		BIT(6)
-
-static const struct x86_cpu_id cpu_vuln_blacklist[] __initconst = {
-	VULNBL_INTEL_STEPPINGS(IVYBRIDGE,	X86_STEPPING_ANY,		SRBDS),
-	VULNBL_INTEL_STEPPINGS(HASWELL_CORE,	X86_STEPPING_ANY,		SRBDS),
-	VULNBL_INTEL_STEPPINGS(HASWELL_ULT,	X86_STEPPING_ANY,		SRBDS),
-	VULNBL_INTEL_STEPPINGS(HASWELL_GT3E,	X86_STEPPING_ANY,		SRBDS),
-	VULNBL_INTEL_STEPPINGS(HASWELL_X,	X86_STEPPING_ANY,		MMIO),
-	VULNBL_INTEL_STEPPINGS(BROADWELL_XEON_D,X86_STEPPING_ANY,		MMIO),
-	VULNBL_INTEL_STEPPINGS(BROADWELL_GT3E,	X86_STEPPING_ANY,		SRBDS),
-	VULNBL_INTEL_STEPPINGS(BROADWELL_X,	X86_STEPPING_ANY,		MMIO),
-	VULNBL_INTEL_STEPPINGS(BROADWELL_CORE,	X86_STEPPING_ANY,		SRBDS),
-	VULNBL_INTEL_STEPPINGS(SKYLAKE_MOBILE,	X86_STEPPING_ANY,		SRBDS | MMIO | RETBLEED),
-	VULNBL_INTEL_STEPPINGS(SKYLAKE_X,	X86_STEPPING_ANY,		MMIO | RETBLEED | GDS),
-	VULNBL_INTEL_STEPPINGS(SKYLAKE_DESKTOP,	X86_STEPPING_ANY,		SRBDS | MMIO | RETBLEED),
-	VULNBL_INTEL_STEPPINGS(KABYLAKE_MOBILE,	X86_STEPPING_ANY,		SRBDS | MMIO | RETBLEED | GDS),
-	VULNBL_INTEL_STEPPINGS(KABYLAKE_DESKTOP,X86_STEPPING_ANY,		SRBDS | MMIO | RETBLEED | GDS),
-	VULNBL_INTEL_STEPPINGS(CANNONLAKE_MOBILE,X86_STEPPING_ANY,		RETBLEED),
-	VULNBL_INTEL_STEPPINGS(ICELAKE_MOBILE,	X86_STEPPING_ANY,		MMIO | MMIO_SBDS | RETBLEED | GDS),
-	VULNBL_INTEL_STEPPINGS(ICELAKE_XEON_D,	X86_STEPPING_ANY,		MMIO | GDS),
-	VULNBL_INTEL_STEPPINGS(ICELAKE_X,	X86_STEPPING_ANY,		MMIO | GDS),
-	VULNBL_INTEL_STEPPINGS(COMETLAKE,	X86_STEPPING_ANY,		MMIO | MMIO_SBDS | RETBLEED | GDS),
-	VULNBL_INTEL_STEPPINGS(COMETLAKE_L,	X86_STEPPING_ANY,		MMIO | MMIO_SBDS | RETBLEED | GDS),
-	VULNBL_INTEL_STEPPINGS(TIGERLAKE_L,	X86_STEPPING_ANY,		GDS),
-	VULNBL_INTEL_STEPPINGS(TIGERLAKE,	X86_STEPPING_ANY,		GDS),
-	VULNBL_INTEL_STEPPINGS(LAKEFIELD,	X86_STEPPING_ANY,		MMIO | MMIO_SBDS | RETBLEED),
-	VULNBL_INTEL_STEPPINGS(ROCKETLAKE,	X86_STEPPING_ANY,		MMIO | RETBLEED | GDS),
-	VULNBL_INTEL_STEPPINGS(ATOM_TREMONT,	X86_STEPPING_ANY,		MMIO | MMIO_SBDS),
-	VULNBL_INTEL_STEPPINGS(ATOM_TREMONT_X,	X86_STEPPING_ANY,		MMIO),
-	VULNBL_INTEL_STEPPINGS(ATOM_TREMONT_L,	X86_STEPPING_ANY,		MMIO | MMIO_SBDS),
-
-	VULNBL_AMD(0x15, RETBLEED),
-	VULNBL_AMD(0x16, RETBLEED),
-	VULNBL_AMD(0x17, RETBLEED),
-	{}
-};
-
-static bool __init cpu_matches(const struct x86_cpu_id *table, unsigned long which)
+static bool __init cpu_matches(unsigned long which)
 {
-	const struct x86_cpu_id *m = x86_match_cpu(table);
+	const struct x86_cpu_id *m = x86_match_cpu(cpu_vuln_whitelist);
 
 	return m && !!(m->driver_data & which);
 }
@@ -1106,52 +1030,34 @@ u64 x86_read_arch_cap_msr(void)
 	return ia32_cap;
 }
 
-static bool arch_cap_mmio_immune(u64 ia32_cap)
-{
-	return (ia32_cap & ARCH_CAP_FBSDP_NO &&
-		ia32_cap & ARCH_CAP_PSDP_NO &&
-		ia32_cap & ARCH_CAP_SBDR_SSDP_NO);
-}
-
 static void __init cpu_set_bug_bits(struct cpuinfo_x86 *c)
 {
 	u64 ia32_cap = x86_read_arch_cap_msr();
 
 	/* Set ITLB_MULTIHIT bug if cpu is not in the whitelist and not mitigated */
-	if (!cpu_matches(cpu_vuln_whitelist, NO_ITLB_MULTIHIT) &&
-	    !(ia32_cap & ARCH_CAP_PSCHANGE_MC_NO))
+	if (!cpu_matches(NO_ITLB_MULTIHIT) && !(ia32_cap & ARCH_CAP_PSCHANGE_MC_NO))
 		setup_force_cpu_bug(X86_BUG_ITLB_MULTIHIT);
 
-	if (cpu_matches(cpu_vuln_whitelist, NO_SPECULATION))
+	if (cpu_matches(NO_SPECULATION))
 		return;
 
 	setup_force_cpu_bug(X86_BUG_SPECTRE_V1);
 	setup_force_cpu_bug(X86_BUG_SPECTRE_V2);
 
-	if (!cpu_matches(cpu_vuln_whitelist, NO_SSB) &&
-	    !(ia32_cap & ARCH_CAP_SSB_NO) &&
+	if (!cpu_matches(NO_SSB) && !(ia32_cap & ARCH_CAP_SSB_NO) &&
 	   !cpu_has(c, X86_FEATURE_AMD_SSB_NO))
 		setup_force_cpu_bug(X86_BUG_SPEC_STORE_BYPASS);
 
-	/*
-	 * AMD's AutoIBRS is equivalent to Intel's eIBRS - use the Intel feature
-	 * flag and protect from vendor-specific bugs via the whitelist.
-	 */
-	if ((ia32_cap & ARCH_CAP_IBRS_ALL) || cpu_has(c, X86_FEATURE_AUTOIBRS)) {
+	if (ia32_cap & ARCH_CAP_IBRS_ALL)
 		setup_force_cpu_cap(X86_FEATURE_IBRS_ENHANCED);
-		if (!cpu_matches(cpu_vuln_whitelist, NO_EIBRS_PBRSB) &&
-		    !(ia32_cap & ARCH_CAP_PBRSB_NO))
-			setup_force_cpu_bug(X86_BUG_EIBRS_PBRSB);
-	}
 
-	if (!cpu_matches(cpu_vuln_whitelist, NO_MDS) &&
-	    !(ia32_cap & ARCH_CAP_MDS_NO)) {
+	if (!cpu_matches(NO_MDS) && !(ia32_cap & ARCH_CAP_MDS_NO)) {
 		setup_force_cpu_bug(X86_BUG_MDS);
-		if (cpu_matches(cpu_vuln_whitelist, MSBDS_ONLY))
+		if (cpu_matches(MSBDS_ONLY))
 			setup_force_cpu_bug(X86_BUG_MSBDS_ONLY);
 	}
 
-	if (!cpu_matches(cpu_vuln_whitelist, NO_SWAPGS))
+	if (!cpu_matches(NO_SWAPGS))
 		setup_force_cpu_bug(X86_BUG_SWAPGS);
 
 	/*
@@ -1169,52 +1075,7 @@ static void __init cpu_set_bug_bits(struct cpuinfo_x86 *c)
 	     (ia32_cap & ARCH_CAP_TSX_CTRL_MSR)))
 		setup_force_cpu_bug(X86_BUG_TAA);
 
-	/*
-	 * SRBDS affects CPUs which support RDRAND or RDSEED and are listed
-	 * in the vulnerability blacklist.
-	 *
-	 * Some of the implications and mitigation of Shared Buffers Data
-	 * Sampling (SBDS) are similar to SRBDS. Give SBDS same treatment as
-	 * SRBDS.
-	 */
-	if ((cpu_has(c, X86_FEATURE_RDRAND) ||
-	     cpu_has(c, X86_FEATURE_RDSEED)) &&
-	    cpu_matches(cpu_vuln_blacklist, SRBDS | MMIO_SBDS))
-		    setup_force_cpu_bug(X86_BUG_SRBDS);
-
-	/*
-	 * Processor MMIO Stale Data bug enumeration
-	 *
-	 * Affected CPU list is generally enough to enumerate the vulnerability,
-	 * but for virtualization case check for ARCH_CAP MSR bits also, VMM may
-	 * not want the guest to enumerate the bug.
-	 *
-	 * Set X86_BUG_MMIO_UNKNOWN for CPUs that are neither in the blacklist,
-	 * nor in the whitelist and also don't enumerate MSR ARCH_CAP MMIO bits.
-	 */
-	if (!arch_cap_mmio_immune(ia32_cap)) {
-		if (cpu_matches(cpu_vuln_blacklist, MMIO))
-			setup_force_cpu_bug(X86_BUG_MMIO_STALE_DATA);
-		else if (!cpu_matches(cpu_vuln_whitelist, NO_MMIO))
-			setup_force_cpu_bug(X86_BUG_MMIO_UNKNOWN);
-	}
-
-	if (!cpu_has(c, X86_FEATURE_BTC_NO)) {
-		if (cpu_matches(cpu_vuln_blacklist, RETBLEED) || (ia32_cap & ARCH_CAP_RSBA))
-			setup_force_cpu_bug(X86_BUG_RETBLEED);
-	}
-
-	/*
-	 * Check if CPU is vulnerable to GDS. If running in a virtual machine on
-	 * an affected processor, the VMM may have disabled the use of GATHER by
-	 * disabling AVX2. The only way to do this in HW is to clear XCR0[2],
-	 * which means that AVX will be disabled.
-	 */
-	if (cpu_matches(cpu_vuln_blacklist, GDS) && !(ia32_cap & ARCH_CAP_GDS_NO) &&
-	    boot_cpu_has(X86_FEATURE_AVX))
-		setup_force_cpu_bug(X86_BUG_GDS);
-
-	if (cpu_matches(cpu_vuln_whitelist, NO_MELTDOWN))
+	if (cpu_matches(NO_MELTDOWN))
 		return;
 
 	/* Rogue Data Cache Load? No! */
@@ -1223,7 +1084,7 @@ static void __init cpu_set_bug_bits(struct cpuinfo_x86 *c)
 
 	setup_force_cpu_bug(X86_BUG_CPU_MELTDOWN);
 
-	if (cpu_matches(cpu_vuln_whitelist, NO_L1TF))
+	if (cpu_matches(NO_L1TF))
 		return;
 
 	setup_force_cpu_bug(X86_BUG_L1TF);
@@ -1299,6 +1160,8 @@ static void __init early_identify_cpu(struct cpuinfo_x86 *c)
 
 	cpu_set_bug_bits(c);
 
+	fpu__init_system(c);
+
 #ifdef CONFIG_X86_32
 	/*
 	 * Regardless of whether PCID is enumerated, the SDM says
@@ -1358,8 +1221,9 @@ void __init early_cpu_init(void)
 	early_identify_cpu(&boot_cpu_data);
 }
 
-static bool detect_null_seg_behavior(void)
+static void detect_null_seg_behavior(struct cpuinfo_x86 *c)
 {
+#ifdef CONFIG_X86_64
 	/*
 	 * Empirically, writing zero to a segment selector on AMD does
 	 * not clear the base, whereas writing zero to a segment
@@ -1380,43 +1244,10 @@ static bool detect_null_seg_behavior(void)
 	wrmsrl(MSR_FS_BASE, 1);
 	loadsegment(fs, 0);
 	rdmsrl(MSR_FS_BASE, tmp);
-	wrmsrl(MSR_FS_BASE, old_base);
-	return tmp == 0;
-}
-
-void check_null_seg_clears_base(struct cpuinfo_x86 *c)
-{
-	/* BUG_NULL_SEG is only relevant with 64bit userspace */
-	if (!IS_ENABLED(CONFIG_X86_64))
-		return;
-
-	/* Zen3 CPUs advertise Null Selector Clears Base in CPUID. */
-	if (c->extended_cpuid_level >= 0x80000021 &&
-	    cpuid_eax(0x80000021) & BIT(6))
-		return;
-
-	/*
-	 * CPUID bit above wasn't set. If this kernel is still running
-	 * as a HV guest, then the HV has decided not to advertize
-	 * that CPUID bit for whatever reason.	For example, one
-	 * member of the migration pool might be vulnerable.  Which
-	 * means, the bug is present: set the BUG flag and return.
-	 */
-	if (cpu_has(c, X86_FEATURE_HYPERVISOR)) {
+	if (tmp != 0)
 		set_cpu_bug(c, X86_BUG_NULL_SEG);
-		return;
-	}
-
-	/*
-	 * Zen2 CPUs also have this behaviour, but no CPUID bit.
-	 * 0x18 is the respective family for Hygon.
-	 */
-	if ((c->x86 == 0x17 || c->x86 == 0x18) &&
-	    detect_null_seg_behavior())
-		return;
-
-	/* All the remaining ones are affected */
-	set_cpu_bug(c, X86_BUG_NULL_SEG);
+	wrmsrl(MSR_FS_BASE, old_base);
+#endif
 }
 
 static void generic_identify(struct cpuinfo_x86 *c)
@@ -1451,6 +1282,8 @@ static void generic_identify(struct cpuinfo_x86 *c)
 	}
 
 	get_model_name(c); /* Default name */
+
+	detect_null_seg_behavior(c);
 
 	/*
 	 * ESPFIX is a strange bug.  All real CPUs have it.  Paravirt
@@ -1686,9 +1519,6 @@ void identify_secondary_cpu(struct cpuinfo_x86 *c)
 	mtrr_ap_init();
 	validate_apic_and_package_id(c);
 	x86_spec_ctrl_setup_ap();
-	update_srbds_msr();
-	if (boot_cpu_has_bug(X86_BUG_GDS))
-		update_gds_msr();
 }
 
 static __init int setup_noclflush(char *arg)
@@ -1899,29 +1729,6 @@ static void wait_for_master_cpu(int cpu)
 #endif
 }
 
-#ifdef CONFIG_X86_64
-static void setup_getcpu(int cpu)
-{
-	unsigned long cpudata = vdso_encode_cpunode(cpu, early_cpu_to_node(cpu));
-	struct desc_struct d = { };
-
-	if (boot_cpu_has(X86_FEATURE_RDTSCP))
-		write_rdtscp_aux(cpudata);
-
-	/* Store CPU and node number in limit. */
-	d.limit0 = cpudata;
-	d.limit1 = cpudata >> 16;
-
-	d.type = 5;		/* RO data, expand down, accessed */
-	d.dpl = 3;		/* Visible to user code */
-	d.s = 1;		/* Not a system segment */
-	d.p = 1;		/* Present */
-	d.d = 1;		/* 32-bit */
-
-	write_gdt_entry(get_cpu_gdt_rw(cpu), GDT_ENTRY_CPUNODE, &d, DESCTYPE_S);
-}
-#endif
-
 /*
  * cpu_init() initializes state that is per-CPU. Some data is already
  * initialized (naturally) in the bootstrap process, such as the GDT
@@ -1959,7 +1766,6 @@ void cpu_init(void)
 	    early_cpu_to_node(cpu) != NUMA_NO_NODE)
 		set_numa_node(early_cpu_to_node(cpu));
 #endif
-	setup_getcpu(cpu);
 
 	me = current;
 
@@ -2030,6 +1836,8 @@ void cpu_init(void)
 	clear_all_debug_regs();
 	dbg_restore_debug_regs();
 
+	fpu__init_cpu();
+
 	if (is_uv_system())
 		uv_cpu_init();
 
@@ -2093,6 +1901,8 @@ void cpu_init(void)
 	clear_all_debug_regs();
 	dbg_restore_debug_regs();
 
+	fpu__init_cpu();
+
 	load_fixmap_gdt(cpu);
 }
 #endif
@@ -2125,8 +1935,6 @@ void microcode_check(void)
 
 	perf_check_microcode();
 
-	amd_check_microcode();
-
 	/* Reload CPUID max function as it might've changed. */
 	info.cpuid_level = cpuid_eax(0);
 
@@ -2144,70 +1952,4 @@ void microcode_check(void)
 
 	pr_warn("x86/CPU: CPU features have changed after loading microcode, but might not take effect.\n");
 	pr_warn("x86/CPU: Please consider either early loading through initrd/built-in or a potential BIOS update.\n");
-}
-
-void __init arch_cpu_finalize_init(void)
-{
-	identify_boot_cpu();
-
-	/*
-	 * identify_boot_cpu() initialized SMT support information, let the
-	 * core code know.
-	 */
-	cpu_smt_check_topology();
-
-	if (!IS_ENABLED(CONFIG_SMP)) {
-		pr_info("CPU: ");
-		print_cpu_info(&boot_cpu_data);
-	}
-
-	cpu_select_mitigations();
-
-	arch_smt_update();
-
-	if (IS_ENABLED(CONFIG_X86_32)) {
-		/*
-		 * Check whether this is a real i386 which is not longer
-		 * supported and fixup the utsname.
-		 */
-		if (boot_cpu_data.x86 < 4)
-			panic("Kernel requires i486+ for 'invlpg' and other features");
-
-		init_utsname()->machine[1] =
-			'0' + (boot_cpu_data.x86 > 6 ? 6 : boot_cpu_data.x86);
-	}
-
-	/*
-	 * Must be before alternatives because it might set or clear
-	 * feature bits.
-	 */
-	fpu__init_system();
-	fpu__init_cpu();
-
-	alternative_instructions();
-
-	if (IS_ENABLED(CONFIG_X86_64)) {
-		/*
-		 * Make sure the first 2MB area is not mapped by huge pages
-		 * There are typically fixed size MTRRs in there and overlapping
-		 * MTRRs into large pages causes slow downs.
-		 *
-		 * Right now we don't do that with gbpages because there seems
-		 * very little benefit for that case.
-		 */
-		if (!direct_gbpages)
-			set_memory_4k((unsigned long)__va(0), 1);
-	} else {
-		fpu__init_check_bugs();
-	}
-
-	/*
-	 * This needs to be called before any devices perform DMA
-	 * operations that might use the SWIOTLB bounce buffers. It will
-	 * mark the bounce buffers as decrypted so that their usage will
-	 * not cause "plain-text" data to be decrypted when accessed. It
-	 * must be called after late_time_init() so that Hyper-V x86/x64
-	 * hypercalls work when the SWIOTLB bounce buffers are decrypted.
-	 */
-	mem_encrypt_init();
 }

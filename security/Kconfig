@@ -18,6 +18,15 @@ config SECURITY_DMESG_RESTRICT
 
 	  If you are unsure how to answer this question, answer N.
 
+config SECURITY_PERF_EVENTS_RESTRICT
+	bool "Restrict unprivileged use of performance events"
+	depends on PERF_EVENTS
+	help
+	  If you say Y here, the kernel.perf_event_paranoid sysctl
+	  will be set to 3 by default, and no unprivileged use of the
+	  perf_event_open syscall will be permitted unless it is
+	  changed.
+
 config SECURITY
 	bool "Enable different security models"
 	depends on SYSFS
@@ -191,9 +200,6 @@ config HARDENED_USERCOPY_PAGESPAN
 config FORTIFY_SOURCE
 	bool "Harden common str/mem functions against buffer overflows"
 	depends on ARCH_HAS_FORTIFY_SOURCE
-	# https://bugs.llvm.org/show_bug.cgi?id=50322
-	# https://bugs.llvm.org/show_bug.cgi?id=41459
-	depends on !CC_IS_CLANG
 	help
 	  Detect overflows of buffers in common string and memory functions
 	  where the compiler can determine and validate the buffer sizes.
@@ -243,6 +249,10 @@ source security/mstdrv/Kconfig
 source security/hdm/Kconfig
 
 source security/integrity/Kconfig
+source security/samsung/defex_lsm/Kconfig
+source security/samsung/dsms/Kconfig
+source security/samsung/five/Kconfig
+source security/proca/Kconfig
 
 choice
 	prompt "Default security module"
@@ -280,6 +290,22 @@ config DEFAULT_SECURITY
 	default "tomoyo" if DEFAULT_SECURITY_TOMOYO
 	default "apparmor" if DEFAULT_SECURITY_APPARMOR
 	default "" if DEFAULT_SECURITY_DAC
+
+config SDP
+	bool "Enables SDP"
+	default n
+	help
+	Sensitive Data Protection
+
+config DDAR
+	bool "Enables dual encryption"
+	default n
+	help
+	Knox Dual-DAR (Data-At-Rest) protection
+
+config SDP_KEY_DUMP
+	bool "SDP KEY DUMP"
+	default n
 
 source "security/Kconfig.hardening"
 

@@ -231,16 +231,7 @@ static int deferred_devs_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(deferred_devs);
 
-#ifdef CONFIG_MODULES
-/*
- * In the case of modules, set the default probe timeout to
- * 30 seconds to give userland some time to load needed modules
- */
-static int deferred_probe_timeout = 30;
-#else
-/* In the case of !modules, no probe timeout needed */
 static int deferred_probe_timeout = -1;
-#endif
 static int __init deferred_probe_timeout_setup(char *str)
 {
 	deferred_probe_timeout = simple_strtol(str, NULL, 10);
@@ -274,16 +265,14 @@ int driver_deferred_probe_check_state(struct device *dev)
 
 static void deferred_probe_timeout_work_func(struct work_struct *work)
 {
-	struct device_private *p;
+	struct device_private *private, *p;
 
 	deferred_probe_timeout = 0;
 	driver_deferred_probe_trigger();
 	flush_work(&deferred_probe_work);
 
-	mutex_lock(&deferred_probe_mutex);
-	list_for_each_entry(p, &deferred_probe_pending_list, deferred_probe)
-		dev_info(p->device, "deferred probe pending\n");
-	mutex_unlock(&deferred_probe_mutex);
+	list_for_each_entry_safe(private, p, &deferred_probe_pending_list, deferred_probe)
+		dev_info(private->device, "deferred probe pending");
 }
 static DECLARE_DELAYED_WORK(deferred_probe_timeout_work, deferred_probe_timeout_work_func);
 
@@ -504,8 +493,7 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 		 drv->bus->name, __func__, drv->name, dev_name(dev));
 	if (!list_empty(&dev->devres_head)) {
 		dev_crit(dev, "Resources present before probing\n");
-		ret = -EBUSY;
-		goto done;
+		return -EBUSY;
 	}
 
 re_probe:
@@ -612,7 +600,7 @@ pinctrl_bind_failed:
 	ret = 0;
 done:
 	atomic_dec(&probe_count);
-	wake_up_all(&probe_waitqueue);
+	wake_up(&probe_waitqueue);
 	return ret;
 }
 
@@ -768,11 +756,6 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	} else if (ret == -EPROBE_DEFER) {
 		dev_dbg(dev, "Device match requests probe deferral\n");
 		driver_deferred_probe_add(dev);
-		/*
-		 * Device can't match with a driver right now, so don't attempt
-		 * to match or bind with other drivers on the bus.
-		 */
-		return ret;
 	} else if (ret < 0) {
 		dev_dbg(dev, "Bus failed to match device: %d", ret);
 		return ret;
@@ -830,9 +813,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 	int ret = 0;
 
 	device_lock(dev);
-	if (dev->p->dead) {
-		goto out_unlock;
-	} else if (dev->driver) {
+	if (dev->driver) {
 		if (device_is_bound(dev)) {
 			ret = 1;
 			goto out_unlock;
@@ -926,18 +907,9 @@ static int __driver_attach(struct device *dev, void *data)
 	} else if (ret == -EPROBE_DEFER) {
 		dev_dbg(dev, "Device match requests probe deferral\n");
 		driver_deferred_probe_add(dev);
-		/*
-		 * Driver could not match with device, but may match with
-		 * another device on the bus.
-		 */
-		return 0;
 	} else if (ret < 0) {
-		dev_dbg(dev, "Bus failed to match device: %d\n", ret);
-		/*
-		 * Driver could not match with device, but may match with
-		 * another device on the bus.
-		 */
-		return 0;
+		dev_dbg(dev, "Bus failed to match device: %d", ret);
+		return ret;
 	} /* ret > 0 means positive match */
 
 	if (dev->parent && dev->bus->need_parent_lock)
@@ -977,8 +949,6 @@ static void __device_release_driver(struct device *dev, struct device *parent)
 
 	drv = dev->driver;
 	if (drv) {
-		pm_runtime_get_sync(dev);
-
 		while (device_links_busy(dev)) {
 			device_unlock(dev);
 			if (parent && dev->bus->need_parent_lock)
@@ -994,12 +964,11 @@ static void __device_release_driver(struct device *dev, struct device *parent)
 			 * have released the driver successfully while this one
 			 * was waiting, so check for that.
 			 */
-			if (dev->driver != drv) {
-				pm_runtime_put(dev);
+			if (dev->driver != drv)
 				return;
-			}
 		}
 
+		pm_runtime_get_sync(dev);
 		pm_runtime_clean_up_links(dev);
 
 		driver_sysfs_remove(dev);
@@ -1016,6 +985,8 @@ static void __device_release_driver(struct device *dev, struct device *parent)
 		else if (drv->remove)
 			drv->remove(dev);
 
+		device_links_driver_cleanup(dev);
+
 		devres_release_all(dev);
 		dma_deconfigure(dev);
 		dev->driver = NULL;
@@ -1024,8 +995,6 @@ static void __device_release_driver(struct device *dev, struct device *parent)
 			dev->pm_domain->dismiss(dev);
 		pm_runtime_reinit(dev);
 		dev_pm_set_driver_flags(dev, 0);
-
-		device_links_driver_cleanup(dev);
 
 		klist_remove(&dev->p->knode_driver);
 		device_pm_check_callbacks(dev);

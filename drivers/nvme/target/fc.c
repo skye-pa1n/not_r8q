@@ -1325,10 +1325,8 @@ nvmet_fc_ls_create_association(struct nvmet_fc_tgtport *tgtport,
 		else {
 			queue = nvmet_fc_alloc_target_queue(iod->assoc, 0,
 					be16_to_cpu(rqst->assoc_cmd.sqsize));
-			if (!queue) {
+			if (!queue)
 				ret = VERR_QUEUE_ALLOC_FAIL;
-				nvmet_fc_tgt_a_put(iod->assoc);
-			}
 		}
 	}
 
@@ -1988,9 +1986,9 @@ nvmet_fc_fod_op_done(struct nvmet_fc_fcp_iod *fod)
 			return;
 		if (fcpreq->fcp_error ||
 		    fcpreq->transferred_length != fcpreq->transfer_length) {
-			spin_lock_irqsave(&fod->flock, flags);
+			spin_lock(&fod->flock);
 			fod->abort = true;
-			spin_unlock_irqrestore(&fod->flock, flags);
+			spin_unlock(&fod->flock);
 
 			nvmet_req_complete(&fod->req, NVME_SC_INTERNAL);
 			return;

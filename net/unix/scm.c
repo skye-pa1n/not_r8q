@@ -8,6 +8,7 @@
 #include <net/af_unix.h>
 #include <net/scm.h>
 #include <linux/init.h>
+#include <linux/sched/signal.h>
 
 #include "scm.h"
 
@@ -50,17 +51,15 @@ void unix_inflight(struct user_struct *user, struct file *fp)
 	if (s) {
 		struct unix_sock *u = unix_sk(s);
 
-		if (!u->inflight) {
+		if (atomic_long_inc_return(&u->inflight) == 1) {
 			BUG_ON(!list_empty(&u->link));
 			list_add_tail(&u->link, &gc_inflight_list);
 		} else {
 			BUG_ON(list_empty(&u->link));
 		}
-		u->inflight++;
-		/* Paired with READ_ONCE() in wait_for_unix_gc() */
-		WRITE_ONCE(unix_tot_inflight, unix_tot_inflight + 1);
+		unix_tot_inflight++;
 	}
-	WRITE_ONCE(user->unix_inflight, user->unix_inflight + 1);
+	user->unix_inflight++;
 	spin_unlock(&unix_gc_lock);
 }
 
@@ -73,16 +72,14 @@ void unix_notinflight(struct user_struct *user, struct file *fp)
 	if (s) {
 		struct unix_sock *u = unix_sk(s);
 
-		BUG_ON(!u->inflight);
+		BUG_ON(!atomic_long_read(&u->inflight));
 		BUG_ON(list_empty(&u->link));
 
-		u->inflight--;
-		if (!u->inflight)
+		if (atomic_long_dec_and_test(&u->inflight))
 			list_del_init(&u->link);
-		/* Paired with READ_ONCE() in wait_for_unix_gc() */
-		WRITE_ONCE(unix_tot_inflight, unix_tot_inflight - 1);
+		unix_tot_inflight--;
 	}
-	WRITE_ONCE(user->unix_inflight, user->unix_inflight - 1);
+	user->unix_inflight--;
 	spin_unlock(&unix_gc_lock);
 }
 
@@ -96,7 +93,7 @@ static inline bool too_many_unix_fds(struct task_struct *p)
 {
 	struct user_struct *user = current_user();
 
-	if (unlikely(READ_ONCE(user->unix_inflight) > task_rlimit(p, RLIMIT_NOFILE)))
+	if (unlikely(user->unix_inflight > task_rlimit(p, RLIMIT_NOFILE)))
 		return !capable(CAP_SYS_RESOURCE) && !capable(CAP_SYS_ADMIN);
 	return false;
 }

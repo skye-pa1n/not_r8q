@@ -28,10 +28,6 @@
 #include <asm/tlbflush.h>
 #include "internal.h"
 
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
-#endif
-
 #ifdef CONFIG_ZRAM_LRU_WRITEBACK
 #include <linux/delay.h>
 #include "../../drivers/block/zram/zram_drv.h"
@@ -391,37 +387,16 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	unsigned long start, end;
 	dev_t dev = 0;
 	const char *name = NULL;
-	
+
 	if (file) {
 		struct inode *inode = file_inode(vma->vm_file);
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-		if (unlikely(inode->i_state & 67108864)) {
-			susfs_sus_ino_for_show_map_vma(inode->i_ino, &dev, &ino);
-			goto bypass_orig_flow;
-		}
-#endif
 		dev = inode->i_sb->s_dev;
 		ino = inode->i_ino;
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-bypass_orig_flow:
-#endif
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
-	struct dentry *dentry = file->f_path.dentry;
-        if (dentry) {
-        	const char *path = (const char *)dentry->d_name.name; 
-            	if (strstr(path, "lineage") || strstr(path, "boot.oat")) {
-	  	start = vma->vm_start;
-		end = vma->vm_end;
-		show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
-            	name = "/dev/ashmem (deleted)";
-		goto done;
-            	 	}
-            	}
 	}
 
 	start = vma->vm_start;
 	end = vma->vm_end;
-
 	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
 
 	/*
@@ -820,7 +795,9 @@ static int smaps_hugetlb_range(pte_t *pte, unsigned long hmask,
 			page = device_private_entry_to_page(swpent);
 	}
 	if (page) {
-		if (page_mapcount(page) >= 2 || hugetlb_pmd_shared(pte))
+		int mapcount = page_mapcount(page);
+
+		if (mapcount >= 2)
 			mss->shared_hugetlb += huge_page_size(hstate_vma(vma));
 		else
 			mss->private_hugetlb += huge_page_size(hstate_vma(vma));
@@ -968,7 +945,7 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 		last_vma_end = vma->vm_end;
 	}
 
-	show_vma_header_prefix(m, priv->mm->mmap ? priv->mm->mmap->vm_start : 0,
+	show_vma_header_prefix(m, priv->mm->mmap->vm_start,
 			       last_vma_end, 0, 0, 0, 0);
 	seq_pad(m, ' ');
 	seq_puts(m, "[rollup]\n");

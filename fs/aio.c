@@ -169,7 +169,6 @@ struct fsync_iocb {
 	struct file		*file;
 	struct work_struct	work;
 	bool			datasync;
-	struct cred		*creds;
 };
 
 struct poll_iocb {
@@ -332,9 +331,6 @@ static int aio_ring_mremap(struct vm_area_struct *vma)
 	spin_lock(&mm->ioctx_lock);
 	rcu_read_lock();
 	table = rcu_dereference(mm->ioctx_table);
-	if (!table)
-		goto out_unlock;
-
 	for (i = 0; i < table->nr; i++) {
 		struct kioctx *ctx;
 
@@ -348,7 +344,6 @@ static int aio_ring_mremap(struct vm_area_struct *vma)
 		}
 	}
 
-out_unlock:
 	rcu_read_unlock();
 	spin_unlock(&mm->ioctx_lock);
 	return res;
@@ -562,23 +557,12 @@ static int aio_setup_ring(struct kioctx *ctx, unsigned int nr_events)
 
 void kiocb_set_cancel_fn(struct kiocb *iocb, kiocb_cancel_fn *cancel)
 {
-	struct aio_kiocb *req;
-	struct kioctx *ctx;
+	struct aio_kiocb *req = container_of(iocb, struct aio_kiocb, rw);
+	struct kioctx *ctx = req->ki_ctx;
 	unsigned long flags;
-
-	/*
-	 * kiocb didn't come from aio or is neither a read nor a write, hence
-	 * ignore it.
-	 */
-	if (!(iocb->ki_flags & IOCB_AIO_RW))
-		return;
-
-	req = container_of(iocb, struct aio_kiocb, rw);
 
 	if (WARN_ON_ONCE(!list_empty(&req->ki_list)))
 		return;
-
-	ctx = req->ki_ctx;
 
 	spin_lock_irqsave(&ctx->ctx_lock, flags);
 	list_add_tail(&req->ki_list, &ctx->active_reqs);
@@ -1457,7 +1441,7 @@ static int aio_prep_rw(struct kiocb *req, const struct iocb *iocb)
 	req->ki_complete = aio_complete_rw;
 	req->private = NULL;
 	req->ki_pos = iocb->aio_offset;
-	req->ki_flags = iocb_flags(req->ki_filp) | IOCB_AIO_RW;
+	req->ki_flags = iocb_flags(req->ki_filp);
 	if (iocb->aio_flags & IOCB_FLAG_RESFD)
 		req->ki_flags |= IOCB_EVENTFD;
 	req->ki_hint = ki_hint_validate(file_write_hint(req->ki_filp));
@@ -1596,11 +1580,8 @@ static ssize_t aio_write(struct kiocb *req, const struct iocb *iocb,
 static void aio_fsync_work(struct work_struct *work)
 {
 	struct aio_kiocb *iocb = container_of(work, struct aio_kiocb, fsync.work);
-	const struct cred *old_cred = override_creds(iocb->fsync.creds);
 
 	iocb->ki_res.res = vfs_fsync(iocb->fsync.file, iocb->fsync.datasync);
-	revert_creds(old_cred);
-	put_cred(iocb->fsync.creds);
 	iocb_put(iocb);
 }
 
@@ -1613,10 +1594,6 @@ static int aio_fsync(struct fsync_iocb *req, const struct iocb *iocb,
 
 	if (unlikely(!req->file->f_op->fsync))
 		return -EINVAL;
-
-	req->creds = prepare_creds();
-	if (!req->creds)
-		return -ENOMEM;
 
 	req->datasync = datasync;
 	INIT_WORK(&req->work, aio_fsync_work);
@@ -1756,17 +1733,17 @@ static int aio_poll_wake(struct wait_queue_entry *wait, unsigned mode, int sync,
 	 * Complete the request inline if possible.  This requires that three
 	 * conditions be met:
 	 *   1. An event mask must have been passed.  If a plain wakeup was done
-	 *	instead, then mask == 0 and we have to call vfs_poll() to get
-	 *	the events, so inline completion isn't possible.
+	 *      instead, then mask == 0 and we have to call vfs_poll() to get
+	 *      the events, so inline completion isn't possible.
 	 *   2. The completion work must not have already been scheduled.
 	 *   3. ctx_lock must not be busy.  We have to use trylock because we
-	 *	already hold the waitqueue lock, so this inverts the normal
-	 *	locking order.  Use irqsave/irqrestore because not all
-	 *	filesystems (e.g. fuse) call this function with IRQs disabled,
-	 *	yet IRQs have to be disabled before ctx_lock is obtained.
+	 *      already hold the waitqueue lock, so this inverts the normal
+	 *      locking order.  Use irqsave/irqrestore because not all
+	 *      filesystems (e.g. fuse) call this function with IRQs disabled,
+	 *      yet IRQs have to be disabled before ctx_lock is obtained.
 	 */
 	if (mask && !req->work_scheduled &&
-	    spin_trylock_irqsave(&iocb->ki_ctx->ctx_lock, flags)) {
+		spin_trylock_irqsave(&iocb->ki_ctx->ctx_lock, flags)) {
 		struct kioctx *ctx = iocb->ki_ctx;
 
 		list_del_init(&req->wait.entry);

@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _RMNET_QMI_I_H
@@ -72,7 +71,6 @@ struct svc_info {
 
 struct mq_map {
 	struct rmnet_bearer_map *bearer;
-	bool drop_on_remove;
 };
 
 struct qos_info {
@@ -153,6 +151,7 @@ int dfc_qmap_client_init(void *port, int index, struct svc_info *psvc,
 void dfc_qmap_client_exit(void *dfc_data);
 
 void dfc_qmap_send_ack(struct qos_info *qos, u8 bearer_id, u16 seq, u8 type);
+
 
 struct rmnet_bearer_map *qmi_rmnet_get_bearer_noref(struct qos_info *qos_info,
 						    u8 bearer_id);

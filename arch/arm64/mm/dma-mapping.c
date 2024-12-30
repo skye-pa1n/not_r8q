@@ -41,6 +41,7 @@
 #include <linux/dma-mapping-fast.h>
 #include <linux/msm_dma_iommu_mapping.h>
 
+
 static int swiotlb __ro_after_init;
 
 static pgprot_t __get_dma_pgprot(unsigned long attrs, pgprot_t prot,
@@ -68,7 +69,7 @@ static bool is_dma_coherent(struct device *dev, unsigned long attrs)
 static struct gen_pool *atomic_pool __ro_after_init;
 
 #define NO_KERNEL_MAPPING_DUMMY 0x2222
-#define DEFAULT_DMA_COHERENT_POOL_SIZE  SZ_256K
+#define DEFAULT_DMA_COHERENT_POOL_SIZE  SZ_4M
 static size_t atomic_pool_size __initdata = DEFAULT_DMA_COHERENT_POOL_SIZE;
 
 static int __init early_coherent_pool(char *p)
@@ -1009,7 +1010,7 @@ void arch_setup_dma_ops(struct device *dev, u64 dma_base, u64 size,
 	}
 #endif
 }
-EXPORT_SYMBOL_GPL(arch_setup_dma_ops);
+EXPORT_SYMBOL(arch_setup_dma_ops);
 
 #ifdef CONFIG_ARM64_DMA_USE_IOMMU
 
@@ -1156,3 +1157,4 @@ static void arm_iommu_setup_dma_ops(struct device *dev, u64 dma_base, u64 size)
 {
 }
 #endif
+

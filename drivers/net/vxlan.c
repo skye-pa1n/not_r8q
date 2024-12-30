@@ -524,11 +524,11 @@ static int vxlan_fdb_append(struct vxlan_fdb *f,
 
 	rd = kmalloc(sizeof(*rd), GFP_ATOMIC);
 	if (rd == NULL)
-		return -ENOMEM;
+		return -ENOBUFS;
 
 	if (dst_cache_init(&rd->dst_cache, GFP_ATOMIC)) {
 		kfree(rd);
-		return -ENOMEM;
+		return -ENOBUFS;
 	}
 
 	rd->remote_ip = *ip;
@@ -540,32 +540,6 @@ static int vxlan_fdb_append(struct vxlan_fdb *f,
 
 	*rdp = rd;
 	return 1;
-}
-
-static bool vxlan_parse_gpe_proto(struct vxlanhdr *hdr, __be16 *protocol)
-{
-	struct vxlanhdr_gpe *gpe = (struct vxlanhdr_gpe *)hdr;
-
-	/* Need to have Next Protocol set for interfaces in GPE mode. */
-	if (!gpe->np_applied)
-		return false;
-	/* "The initial version is 0. If a receiver does not support the
-	 * version indicated it MUST drop the packet.
-	 */
-	if (gpe->version != 0)
-		return false;
-	/* "When the O bit is set to 1, the packet is an OAM packet and OAM
-	 * processing MUST occur." However, we don't implement OAM
-	 * processing, thus drop the packet.
-	 */
-	if (gpe->oam_flag)
-		return false;
-
-	*protocol = tun_p_to_eth_p(gpe->next_protocol);
-	if (!*protocol)
-		return false;
-
-	return true;
 }
 
 static struct vxlanhdr *vxlan_gro_remcsum(struct sk_buff *skb,
@@ -1001,7 +975,6 @@ static int vxlan_fdb_dump(struct sk_buff *skb, struct netlink_callback *cb,
 	for (h = 0; h < FDB_HASH_SIZE; ++h) {
 		struct vxlan_fdb *f;
 
-		rcu_read_lock();
 		hlist_for_each_entry_rcu(f, &vxlan->fdb_head[h], hlist) {
 			struct vxlan_rdst *rd;
 
@@ -1014,15 +987,12 @@ static int vxlan_fdb_dump(struct sk_buff *skb, struct netlink_callback *cb,
 						     cb->nlh->nlmsg_seq,
 						     RTM_NEWNEIGH,
 						     NLM_F_MULTI, rd);
-				if (err < 0) {
-					rcu_read_unlock();
+				if (err < 0)
 					goto out;
-				}
 skip:
 				*idx += 1;
 			}
 		}
-		rcu_read_unlock();
 	}
 out:
 	return err;
@@ -1039,10 +1009,6 @@ static bool vxlan_snoop(struct net_device *dev,
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct vxlan_fdb *f;
 	u32 ifindex = 0;
-
-	/* Ignore packets from invalid src-address */
-	if (!is_valid_ether_addr(src_mac))
-		return true;
 
 #if IS_ENABLED(CONFIG_IPV6)
 	if (src_ip->sa.sa_family == AF_INET6 &&
@@ -1309,6 +1275,35 @@ out:
 	unparsed->vx_flags &= ~VXLAN_GBP_USED_BITS;
 }
 
+static bool vxlan_parse_gpe_hdr(struct vxlanhdr *unparsed,
+				__be16 *protocol,
+				struct sk_buff *skb, u32 vxflags)
+{
+	struct vxlanhdr_gpe *gpe = (struct vxlanhdr_gpe *)unparsed;
+
+	/* Need to have Next Protocol set for interfaces in GPE mode. */
+	if (!gpe->np_applied)
+		return false;
+	/* "The initial version is 0. If a receiver does not support the
+	 * version indicated it MUST drop the packet.
+	 */
+	if (gpe->version != 0)
+		return false;
+	/* "When the O bit is set to 1, the packet is an OAM packet and OAM
+	 * processing MUST occur." However, we don't implement OAM
+	 * processing, thus drop the packet.
+	 */
+	if (gpe->oam_flag)
+		return false;
+
+	*protocol = tun_p_to_eth_p(gpe->next_protocol);
+	if (!*protocol)
+		return false;
+
+	unparsed->vx_flags &= ~VXLAN_GPE_USED_BITS;
+	return true;
+}
+
 static bool vxlan_set_mac(struct vxlan_dev *vxlan,
 			  struct vxlan_sock *vs,
 			  struct sk_buff *skb, __be32 vni)
@@ -1410,9 +1405,8 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	 * used by VXLAN extensions if explicitly requested.
 	 */
 	if (vs->flags & VXLAN_F_GPE) {
-		if (!vxlan_parse_gpe_proto(&unparsed, &protocol))
+		if (!vxlan_parse_gpe_hdr(&unparsed, &protocol, skb, vs->flags))
 			goto drop;
-		unparsed.vx_flags &= ~VXLAN_GPE_USED_BITS;
 		raw_proto = true;
 	}
 
@@ -1617,10 +1611,6 @@ static struct sk_buff *vxlan_na_create(struct sk_buff *request,
 	ns_olen = request->len - skb_network_offset(request) -
 		sizeof(struct ipv6hdr) - sizeof(*ns);
 	for (i = 0; i < ns_olen-1; i += (ns->opt[i+1]<<3)) {
-		if (!ns->opt[i + 1]) {
-			kfree_skb(reply);
-			return NULL;
-		}
 		if (ns->opt[i] == ND_OPT_SOURCE_LL_ADDR) {
 			daddr = ns->opt + i + sizeof(struct nd_opt_hdr);
 			break;
@@ -1684,7 +1674,6 @@ static int neigh_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 	struct neighbour *n;
 	struct nd_msg *msg;
 
-	rcu_read_lock();
 	in6_dev = __in6_dev_get(dev);
 	if (!in6_dev)
 		goto out;
@@ -1736,7 +1725,6 @@ static int neigh_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 	}
 
 out:
-	rcu_read_unlock();
 	consume_skb(skb);
 	return NETDEV_TX_OK;
 }
@@ -1975,6 +1963,7 @@ static struct dst_entry *vxlan6_get_route(struct vxlan_dev *vxlan,
 	bool use_cache = ip_tunnel_dst_cache_usable(skb, info);
 	struct dst_entry *ndst;
 	struct flowi6 fl6;
+	int err;
 
 	if (!sock6)
 		return ERR_PTR(-EIO);
@@ -1997,9 +1986,10 @@ static struct dst_entry *vxlan6_get_route(struct vxlan_dev *vxlan,
 	fl6.fl6_dport = dport;
 	fl6.fl6_sport = sport;
 
-	ndst = ipv6_stub->ipv6_dst_lookup_flow(vxlan->net, sock6->sock->sk,
-					       &fl6, NULL);
-	if (unlikely(IS_ERR(ndst))) {
+	err = ipv6_stub->ipv6_dst_lookup(vxlan->net,
+					 sock6->sock->sk,
+					 &ndst, &fl6);
+	if (unlikely(err < 0)) {
 		netdev_dbg(dev, "no route to %pI6\n", daddr);
 		return ERR_PTR(-ENETUNREACH);
 	}
@@ -2227,7 +2217,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		ndst = &rt->dst;
 		skb_tunnel_check_pmtu(skb, ndst, VXLAN_HEADROOM);
 
-		tos = ip_tunnel_ecn_encap(tos, old_iph, skb);
+		tos = ip_tunnel_ecn_encap(RT_TOS(tos), old_iph, skb);
 		ttl = ttl ? : ip4_dst_hoplimit(&rt->dst);
 		err = vxlan_build_skb(skb, ndst, sizeof(struct iphdr),
 				      vni, md, flags, udp_sum);
@@ -2264,7 +2254,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 
 		skb_tunnel_check_pmtu(skb, ndst, VXLAN6_HEADROOM);
 
-		tos = ip_tunnel_ecn_encap(tos, old_iph, skb);
+		tos = ip_tunnel_ecn_encap(RT_TOS(tos), old_iph, skb);
 		ttl = ttl ? : ip6_dst_hoplimit(ndst);
 		skb_scrub_packet(skb, xnet);
 		err = vxlan_build_skb(skb, ndst, sizeof(struct ipv6hdr),
@@ -2461,18 +2451,9 @@ static void vxlan_vs_add_dev(struct vxlan_sock *vs, struct vxlan_dev *vxlan,
 /* Setup stats when device is created */
 static int vxlan_init(struct net_device *dev)
 {
-	struct vxlan_dev *vxlan = netdev_priv(dev);
-	int err;
-
 	dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!dev->tstats)
 		return -ENOMEM;
-
-	err = gro_cells_init(&vxlan->gro_cells, dev);
-	if (err) {
-		free_percpu(dev->tstats);
-		return err;
-	}
 
 	return 0;
 }
@@ -2730,6 +2711,8 @@ static void vxlan_setup(struct net_device *dev)
 	timer_setup(&vxlan->age_timer, vxlan_cleanup, TIMER_DEFERRABLE);
 
 	vxlan->dev = dev;
+
+	gro_cells_init(&vxlan->gro_cells, dev);
 
 	for (h = 0; h < FDB_HASH_SIZE; ++h)
 		INIT_HLIST_HEAD(&vxlan->fdb_head[h]);
@@ -3184,9 +3167,6 @@ static void vxlan_config_apply(struct net_device *dev,
 		dev->gso_max_segs = lowerdev->gso_max_segs;
 
 		needed_headroom = lowerdev->hard_header_len;
-		needed_headroom += lowerdev->needed_headroom;
-
-		dev->needed_tailroom = lowerdev->needed_tailroom;
 
 		max_mtu = lowerdev->mtu - (use_ipv6 ? VXLAN6_HEADROOM :
 					   VXLAN_HEADROOM);
@@ -3816,6 +3796,7 @@ static void vxlan_destroy_tunnels(struct net *net, struct list_head *head)
 	struct vxlan_net *vn = net_generic(net, vxlan_net_id);
 	struct vxlan_dev *vxlan, *next;
 	struct net_device *dev, *aux;
+	unsigned int h;
 
 	for_each_netdev_safe(net, dev, aux)
 		if (dev->rtnl_link_ops == &vxlan_link_ops)
@@ -3829,13 +3810,14 @@ static void vxlan_destroy_tunnels(struct net *net, struct list_head *head)
 			unregister_netdevice_queue(vxlan->dev, head);
 	}
 
+	for (h = 0; h < PORT_HASH_SIZE; ++h)
+		WARN_ON_ONCE(!hlist_empty(&vn->sock_list[h]));
 }
 
 static void __net_exit vxlan_exit_batch_net(struct list_head *net_list)
 {
 	struct net *net;
 	LIST_HEAD(list);
-	unsigned int h;
 
 	rtnl_lock();
 	list_for_each_entry(net, net_list, exit_list)
@@ -3843,13 +3825,6 @@ static void __net_exit vxlan_exit_batch_net(struct list_head *net_list)
 
 	unregister_netdevice_many(&list);
 	rtnl_unlock();
-
-	list_for_each_entry(net, net_list, exit_list) {
-		struct vxlan_net *vn = net_generic(net, vxlan_net_id);
-
-		for (h = 0; h < PORT_HASH_SIZE; ++h)
-			WARN_ON_ONCE(!hlist_empty(&vn->sock_list[h]));
-	}
 }
 
 static struct pernet_operations vxlan_net_ops = {

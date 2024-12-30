@@ -381,8 +381,7 @@ static bool f2fs_lookup_extent_tree(struct inode *inode, pgoff_t pgofs,
 	struct extent_node *en;
 	bool ret = false;
 
-	if (!et)
-		return false;
+	f2fs_bug_on(sbi, !et);
 
 	trace_f2fs_lookup_extent_tree_start(inode, pgofs);
 
@@ -730,8 +729,9 @@ void f2fs_drop_extent_tree(struct inode *inode)
 	if (!f2fs_may_extent_tree(inode))
 		return;
 
-	write_lock(&et->lock);
 	set_inode_flag(inode, FI_NO_EXTENT);
+
+	write_lock(&et->lock);
 	__free_extent_tree(sbi, et);
 	if (et->largest.len) {
 		et->largest.len = 0;

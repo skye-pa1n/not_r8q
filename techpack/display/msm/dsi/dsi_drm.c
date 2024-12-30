@@ -193,8 +193,7 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		return;
 	}
 
-	if (bridge->encoder->crtc->state->active_changed)
-		atomic_set(&c_bridge->display->panel->esd_recovery_pending, 0);
+	atomic_set(&c_bridge->display->panel->esd_recovery_pending, 0);
 
 	/* By this point mode should have been validated through mode_fixup */
 	rc = dsi_display_set_mode(c_bridge->display,
@@ -722,16 +721,14 @@ int dsi_conn_set_info_blob(struct drm_connector *connector,
 	case DSI_OP_VIDEO_MODE:
 		sde_kms_info_add_keystr(info, "panel mode", "video");
 		sde_kms_info_add_keystr(info, "qsync support",
-				panel->qsync_caps.qsync_min_fps ?
-				"true" : "false");
+				panel->qsync_min_fps ? "true" : "false");
 		break;
 	case DSI_OP_CMD_MODE:
 		sde_kms_info_add_keystr(info, "panel mode", "command");
 		sde_kms_info_add_keyint(info, "mdp_transfer_time_us",
 				mode_info->mdp_transfer_time_us);
 		sde_kms_info_add_keystr(info, "qsync support",
-				panel->qsync_caps.qsync_min_fps ?
-				"true" : "false");
+				panel->qsync_min_fps ? "true" : "false");
 		break;
 	default:
 		DSI_DEBUG("invalid panel type:%d\n", panel->panel_mode);

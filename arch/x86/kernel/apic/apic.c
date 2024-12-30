@@ -41,7 +41,6 @@
 #include <asm/x86_init.h>
 #include <asm/pgalloc.h>
 #include <linux/atomic.h>
-#include <asm/barrier.h>
 #include <asm/mpspec.h>
 #include <asm/i8259.h>
 #include <asm/proto.h>
@@ -166,7 +165,7 @@ static __init int setup_apicpmtimer(char *s)
 {
 	apic_calibrate_pmtmr = 1;
 	notsc_setup(NULL);
-	return 1;
+	return 0;
 }
 __setup("apicpmtimer", setup_apicpmtimer);
 #endif
@@ -346,6 +345,8 @@ static void __setup_APIC_LVTT(unsigned int clocks, int oneshot, int irqen)
 		 * According to Intel, MFENCE can do the serialization here.
 		 */
 		asm volatile("mfence" : : : "memory");
+
+		printk_once(KERN_DEBUG "TSC deadline timer enabled\n");
 		return;
 	}
 
@@ -403,9 +404,10 @@ static unsigned int reserve_eilvt_offset(int offset, unsigned int new)
 		if (vector && !eilvt_entry_is_changeable(vector, new))
 			/* may not change if vectors are different */
 			return rsvd;
-	} while (!atomic_try_cmpxchg(&eilvt_offsets[offset], &rsvd, new));
+		rsvd = atomic_cmpxchg(&eilvt_offsets[offset], rsvd, new);
+	} while (rsvd != new);
 
-	rsvd = new & ~APIC_EILVT_MASKED;
+	rsvd &= ~APIC_EILVT_MASKED;
 	if (rsvd && rsvd != vector)
 		pr_info("LVT offset %d assigned for vector 0x%02x\n",
 			offset, rsvd);
@@ -464,9 +466,6 @@ static int lapic_next_deadline(unsigned long delta,
 			       struct clock_event_device *evt)
 {
 	u64 tsc;
-
-	/* This MSR is special and need a special fence: */
-	weak_wrmsr_fence();
 
 	tsc = rdtsc();
 	wrmsrl(MSR_IA32_TSC_DEADLINE, tsc + (((u64) delta) * TSC_DIVISOR));
@@ -546,7 +545,7 @@ static DEFINE_PER_CPU(struct clock_event_device, lapic_events);
 #define DEADLINE_MODEL_MATCH_REV(model, rev)	\
 	{ X86_VENDOR_INTEL, 6, model, X86_FEATURE_ANY, (unsigned long)rev }
 
-static __init u32 hsx_deadline_rev(void)
+static u32 hsx_deadline_rev(void)
 {
 	switch (boot_cpu_data.x86_stepping) {
 	case 0x02: return 0x3a; /* EP */
@@ -556,7 +555,7 @@ static __init u32 hsx_deadline_rev(void)
 	return ~0U;
 }
 
-static __init u32 bdx_deadline_rev(void)
+static u32 bdx_deadline_rev(void)
 {
 	switch (boot_cpu_data.x86_stepping) {
 	case 0x02: return 0x00000011;
@@ -568,7 +567,7 @@ static __init u32 bdx_deadline_rev(void)
 	return ~0U;
 }
 
-static __init u32 skx_deadline_rev(void)
+static u32 skx_deadline_rev(void)
 {
 	switch (boot_cpu_data.x86_stepping) {
 	case 0x03: return 0x01000136;
@@ -581,7 +580,7 @@ static __init u32 skx_deadline_rev(void)
 	return ~0U;
 }
 
-static const struct x86_cpu_id deadline_match[] __initconst = {
+static const struct x86_cpu_id deadline_match[] = {
 	DEADLINE_MODEL_MATCH_FUNC( INTEL_FAM6_HASWELL_X,	hsx_deadline_rev),
 	DEADLINE_MODEL_MATCH_REV ( INTEL_FAM6_BROADWELL_X,	0x0b000020),
 	DEADLINE_MODEL_MATCH_FUNC( INTEL_FAM6_BROADWELL_XEON_D,	bdx_deadline_rev),
@@ -603,19 +602,18 @@ static const struct x86_cpu_id deadline_match[] __initconst = {
 	{},
 };
 
-static __init bool apic_validate_deadline_timer(void)
+static void apic_check_deadline_errata(void)
 {
 	const struct x86_cpu_id *m;
 	u32 rev;
 
-	if (!boot_cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER))
-		return false;
-	if (boot_cpu_has(X86_FEATURE_HYPERVISOR))
-		return true;
+	if (!boot_cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER) ||
+	    boot_cpu_has(X86_FEATURE_HYPERVISOR))
+		return;
 
 	m = x86_match_cpu(deadline_match);
 	if (!m)
-		return true;
+		return;
 
 	/*
 	 * Function pointers will have the MSB set due to address layout,
@@ -627,12 +625,11 @@ static __init bool apic_validate_deadline_timer(void)
 		rev = (u32)m->driver_data;
 
 	if (boot_cpu_data.microcode >= rev)
-		return true;
+		return;
 
 	setup_clear_cpu_cap(X86_FEATURE_TSC_DEADLINE_TIMER);
 	pr_err(FW_BUG "TSC_DEADLINE disabled due to Errata; "
 	       "please update microcode to version: 0x%x (or later)\n", rev);
-	return false;
 }
 
 /*
@@ -1816,22 +1813,20 @@ static __init void try_to_enable_x2apic(int remap_mode)
 		return;
 
 	if (remap_mode != IRQ_REMAP_X2APIC_MODE) {
-		/*
-		 * Using X2APIC without IR is not architecturally supported
-		 * on bare metal but may be supported in guests.
+		/* IR is required if there is APIC ID > 255 even when running
+		 * under KVM
 		 */
-		if (!x86_init.hyper.x2apic_available()) {
+		if (max_physical_apicid > 255 ||
+		    !x86_init.hyper.x2apic_available()) {
 			pr_info("x2apic: IRQ remapping doesn't support X2APIC mode\n");
 			x2apic_disable();
 			return;
 		}
 
 		/*
-		 * Without IR, all CPUs can be addressed by IOAPIC/MSI only
-		 * in physical mode, and CPUs with an APIC ID that cannnot
-		 * be addressed must not be brought online.
+		 * without IR all CPUs can be addressed by IOAPIC/MSI
+		 * only in physical mode
 		 */
-		x2apic_set_max_apicid(255);
 		x2apic_phys = 1;
 	}
 	x2apic_enable();
@@ -2028,8 +2023,7 @@ void __init init_apic_mappings(void)
 {
 	unsigned int new_apicid;
 
-	if (apic_validate_deadline_timer())
-		pr_info("TSC deadline timer available\n");
+	apic_check_deadline_errata();
 
 	if (x2apic_mode) {
 		boot_cpu_physical_apicid = read_apic_id();
@@ -2278,11 +2272,6 @@ static int cpuid_to_apicid[] = {
 	[0 ... NR_CPUS - 1] = -1,
 };
 
-bool arch_match_cpu_phys_id(int cpu, u64 phys_id)
-{
-	return phys_id == cpuid_to_apicid[cpu];
-}
-
 #ifdef CONFIG_SMP
 /**
  * apic_id_is_primary_thread - Check whether APIC ID belongs to a primary thread
@@ -2506,7 +2495,6 @@ void __init apic_bsp_setup(bool upmode)
 	end_local_APIC_setup();
 	irq_remap_enable_fault_handling();
 	setup_IO_APIC();
-	lapic_update_legacy_vectors();
 }
 
 #ifdef CONFIG_UP_LATE_INIT

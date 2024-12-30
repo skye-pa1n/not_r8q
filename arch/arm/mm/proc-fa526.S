@@ -190,7 +190,7 @@ fa526_cr1_set:
 
 	.align
 
-	.section ".proc.info.init", "a"
+	.section ".proc.info.init", #alloc
 
 	.type	__fa526_proc_info,#object
 __fa526_proc_info:

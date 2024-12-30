@@ -563,10 +563,8 @@ static unsigned long scpi_clk_get_val(u16 clk_id)
 
 	ret = scpi_send_message(CMD_GET_CLOCK_VALUE, &le_clk_id,
 				sizeof(le_clk_id), &rate, sizeof(rate));
-	if (ret)
-		return 0;
 
-	return le32_to_cpu(rate);
+	return ret ? ret : le32_to_cpu(rate);
 }
 
 static int scpi_clk_set_val(u16 clk_id, unsigned long rate)
@@ -637,9 +635,6 @@ static struct scpi_dvfs_info *scpi_dvfs_get_info(u8 domain)
 				&buf, sizeof(buf));
 	if (ret)
 		return ERR_PTR(ret);
-
-	if (!buf.opp_count)
-		return ERR_PTR(-ENOENT);
 
 	info = kmalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
@@ -829,7 +824,7 @@ static int scpi_init_versions(struct scpi_drvinfo *info)
 		info->firmware_version = le32_to_cpu(caps.platform_version);
 	}
 	/* Ignore error if not implemented */
-	if (info->is_legacy && ret == -EOPNOTSUPP)
+	if (scpi_info->is_legacy && ret == -EOPNOTSUPP)
 		return 0;
 
 	return ret;
@@ -919,14 +914,13 @@ static int scpi_probe(struct platform_device *pdev)
 	struct resource res;
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
-	struct scpi_drvinfo *scpi_drvinfo;
 
-	scpi_drvinfo = devm_kzalloc(dev, sizeof(*scpi_drvinfo), GFP_KERNEL);
-	if (!scpi_drvinfo)
+	scpi_info = devm_kzalloc(dev, sizeof(*scpi_info), GFP_KERNEL);
+	if (!scpi_info)
 		return -ENOMEM;
 
 	if (of_match_device(legacy_scpi_of_match, &pdev->dev))
-		scpi_drvinfo->is_legacy = true;
+		scpi_info->is_legacy = true;
 
 	count = of_count_phandle_with_args(np, "mboxes", "#mbox-cells");
 	if (count < 0) {
@@ -934,19 +928,19 @@ static int scpi_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	scpi_drvinfo->channels =
-		devm_kcalloc(dev, count, sizeof(struct scpi_chan), GFP_KERNEL);
-	if (!scpi_drvinfo->channels)
+	scpi_info->channels = devm_kcalloc(dev, count, sizeof(struct scpi_chan),
+					   GFP_KERNEL);
+	if (!scpi_info->channels)
 		return -ENOMEM;
 
-	ret = devm_add_action(dev, scpi_free_channels, scpi_drvinfo);
+	ret = devm_add_action(dev, scpi_free_channels, scpi_info);
 	if (ret)
 		return ret;
 
-	for (; scpi_drvinfo->num_chans < count; scpi_drvinfo->num_chans++) {
+	for (; scpi_info->num_chans < count; scpi_info->num_chans++) {
 		resource_size_t size;
-		int idx = scpi_drvinfo->num_chans;
-		struct scpi_chan *pchan = scpi_drvinfo->channels + idx;
+		int idx = scpi_info->num_chans;
+		struct scpi_chan *pchan = scpi_info->channels + idx;
 		struct mbox_client *cl = &pchan->cl;
 		struct device_node *shmem = of_parse_phandle(np, "shmem", idx);
 
@@ -990,57 +984,49 @@ static int scpi_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	scpi_drvinfo->commands = scpi_std_commands;
+	scpi_info->commands = scpi_std_commands;
 
-	platform_set_drvdata(pdev, scpi_drvinfo);
+	platform_set_drvdata(pdev, scpi_info);
 
-	if (scpi_drvinfo->is_legacy) {
+	if (scpi_info->is_legacy) {
 		/* Replace with legacy variants */
 		scpi_ops.clk_set_val = legacy_scpi_clk_set_val;
-		scpi_drvinfo->commands = scpi_legacy_commands;
+		scpi_info->commands = scpi_legacy_commands;
 
 		/* Fill priority bitmap */
 		for (idx = 0; idx < ARRAY_SIZE(legacy_hpriority_cmds); idx++)
 			set_bit(legacy_hpriority_cmds[idx],
-				scpi_drvinfo->cmd_priority);
+				scpi_info->cmd_priority);
 	}
 
-	scpi_info = scpi_drvinfo;
-
-	ret = scpi_init_versions(scpi_drvinfo);
+	ret = scpi_init_versions(scpi_info);
 	if (ret) {
 		dev_err(dev, "incorrect or no SCP firmware found\n");
-		scpi_info = NULL;
 		return ret;
 	}
 
-	if (scpi_drvinfo->is_legacy && !scpi_drvinfo->protocol_version &&
-	    !scpi_drvinfo->firmware_version)
+	if (scpi_info->is_legacy && !scpi_info->protocol_version &&
+	    !scpi_info->firmware_version)
 		dev_info(dev, "SCP Protocol legacy pre-1.0 firmware\n");
 	else
 		dev_info(dev, "SCP Protocol %lu.%lu Firmware %lu.%lu.%lu version\n",
 			 FIELD_GET(PROTO_REV_MAJOR_MASK,
-				   scpi_drvinfo->protocol_version),
+				   scpi_info->protocol_version),
 			 FIELD_GET(PROTO_REV_MINOR_MASK,
-				   scpi_drvinfo->protocol_version),
+				   scpi_info->protocol_version),
 			 FIELD_GET(FW_REV_MAJOR_MASK,
-				   scpi_drvinfo->firmware_version),
+				   scpi_info->firmware_version),
 			 FIELD_GET(FW_REV_MINOR_MASK,
-				   scpi_drvinfo->firmware_version),
+				   scpi_info->firmware_version),
 			 FIELD_GET(FW_REV_PATCH_MASK,
-				   scpi_drvinfo->firmware_version));
+				   scpi_info->firmware_version));
+	scpi_info->scpi_ops = &scpi_ops;
 
 	ret = devm_device_add_groups(dev, versions_groups);
 	if (ret)
 		dev_err(dev, "unable to create sysfs version group\n");
 
-	scpi_drvinfo->scpi_ops = &scpi_ops;
-
-	ret = devm_of_platform_populate(dev);
-	if (ret)
-		scpi_info = NULL;
-
-	return ret;
+	return devm_of_platform_populate(dev);
 }
 
 static const struct of_device_id scpi_of_match[] = {

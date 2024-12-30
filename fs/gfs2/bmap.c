@@ -72,6 +72,9 @@ static int gfs2_unstuffer_page(struct gfs2_inode *ip, struct buffer_head *dibh,
 		void *kaddr = kmap(page);
 		u64 dsize = i_size_read(inode);
  
+		if (dsize > gfs2_max_stuffed_size(ip))
+			dsize = gfs2_max_stuffed_size(ip);
+
 		memcpy(kaddr, dibh->b_data + sizeof(struct gfs2_dinode), dsize);
 		memset(kaddr + dsize, 0, PAGE_SIZE - dsize);
 		kunmap(page);
@@ -527,12 +530,10 @@ lower_metapath:
 
 		/* Advance in metadata tree. */
 		(mp->mp_list[hgt])++;
-		if (hgt) {
-			if (mp->mp_list[hgt] >= sdp->sd_inptrs)
-				goto lower_metapath;
-		} else {
-			if (mp->mp_list[hgt] >= sdp->sd_diptrs)
+		if (mp->mp_list[hgt] >= sdp->sd_inptrs) {
+			if (!hgt)
 				break;
+			goto lower_metapath;
 		}
 
 fill_up_metapath:
@@ -878,9 +879,10 @@ static int gfs2_iomap_get(struct inode *inode, loff_t pos, loff_t length,
 					ret = -ENOENT;
 					goto unlock;
 				} else {
+					/* report a hole */
 					iomap->offset = pos;
 					iomap->length = length;
-					goto hole_found;
+					goto do_alloc;
 				}
 			}
 			iomap->length = size;
@@ -934,13 +936,15 @@ unlock:
 	return ret;
 
 do_alloc:
+	iomap->addr = IOMAP_NULL_ADDR;
+	iomap->type = IOMAP_HOLE;
 	if (flags & IOMAP_REPORT) {
 		if (pos >= size)
 			ret = -ENOENT;
 		else if (height == ip->i_height)
 			ret = gfs2_hole_size(inode, lblock, len, mp, iomap);
 		else
-			iomap->length = size - iomap->offset;
+			iomap->length = size - pos;
 	} else if (flags & IOMAP_WRITE) {
 		u64 alloc_size;
 
@@ -955,9 +959,6 @@ do_alloc:
 		if (pos < size && height == ip->i_height)
 			ret = gfs2_hole_size(inode, lblock, len, mp, iomap);
 	}
-hole_found:
-	iomap->addr = IOMAP_NULL_ADDR;
-	iomap->type = IOMAP_HOLE;
 	goto out;
 }
 
@@ -1165,12 +1166,13 @@ static int gfs2_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 
 	if (length != written && (iomap->flags & IOMAP_F_NEW)) {
 		/* Deallocate blocks that were just allocated. */
-		loff_t hstart = round_up(pos + written, i_blocksize(inode));
-		loff_t hend = iomap->offset + iomap->length;
+		loff_t blockmask = i_blocksize(inode) - 1;
+		loff_t end = (pos + length) & ~blockmask;
 
-		if (hstart < hend) {
-			truncate_pagecache_range(inode, hstart, hend - 1);
-			punch_hole(ip, hstart, hend - hstart);
+		pos = (pos + written + blockmask) & ~blockmask;
+		if (pos < end) {
+			truncate_pagecache_range(inode, pos, end - 1);
+			punch_hole(ip, pos, end - pos);
 		}
 	}
 
@@ -1751,11 +1753,10 @@ static int punch_hole(struct gfs2_inode *ip, u64 offset, u64 length)
 	struct buffer_head *dibh, *bh;
 	struct gfs2_holder rd_gh;
 	unsigned int bsize_shift = sdp->sd_sb.sb_bsize_shift;
-	unsigned int bsize = 1 << bsize_shift;
-	u64 lblock = (offset + bsize - 1) >> bsize_shift;
+	u64 lblock = (offset + (1 << bsize_shift) - 1) >> bsize_shift;
 	__u16 start_list[GFS2_MAX_META_HEIGHT];
 	__u16 __end_list[GFS2_MAX_META_HEIGHT], *end_list = NULL;
-	unsigned int start_aligned, end_aligned;
+	unsigned int start_aligned, uninitialized_var(end_aligned);
 	unsigned int strip_h = ip->i_height - 1;
 	u32 btotal = 0;
 	int ret, state;
@@ -1763,7 +1764,7 @@ static int punch_hole(struct gfs2_inode *ip, u64 offset, u64 length)
 	u64 prev_bnr = 0;
 	__be64 *start, *end;
 
-	if (offset + bsize - 1 >= maxsize) {
+	if (offset >= maxsize) {
 		/*
 		 * The starting point lies beyond the allocated meta-data;
 		 * there are no blocks do deallocate.

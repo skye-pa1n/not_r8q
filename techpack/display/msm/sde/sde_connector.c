@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -831,22 +830,11 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 		vdd = display->panel->panel_private;
 		finger_mask_state = sde_connector_get_property(c_conn->base.state,
 				CONNECTOR_PROP_FINGERPRINT_MASK);
-                if (is_aosp) {
-	                if (finger_mask_state == 0 && vdd->finger_mask == 1) {
-        	                finger_mask_state = vdd->finger_mask;
-                	        SDE_ERROR("[FINGER_MASK]updated finger mask mode %d\n", vdd->finger_mask);
-	                } else if (finger_mask_state == 1 && vdd->finger_mask == 0) {
-        	                finger_mask_state = vdd->finger_mask;
-                	        vdd->finger_mask_updated = false;
-                        	SDE_ERROR("[FINGER_MASK]updated finger mask mode %d\n", vdd->finger_mask);
-	                }
-		} else {
-			vdd->finger_mask_updated = false;
-			if (finger_mask_state != vdd->finger_mask) {
-				SDE_ERROR("[FINGER MASK]updated finger mask mode %d\n", finger_mask_state);
-				vdd->finger_mask_updated = true;
-				vdd->finger_mask = finger_mask_state;
-			}
+		vdd->finger_mask_updated = false;
+		if (finger_mask_state != vdd->finger_mask) {
+			SDE_ERROR("[FINGER MASK]updated finger mask mode %d\n", finger_mask_state);
+			vdd->finger_mask_updated = true;
+			vdd->finger_mask = finger_mask_state;
 		}
 	}
 #endif
@@ -2186,6 +2174,8 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 		struct drm_connector_state *new_conn_state)
 {
 	struct sde_connector *c_conn;
+	struct sde_connector_state *c_state;
+	bool qsync_dirty = false, has_modeset = false;
 
 	if (!connector) {
 		SDE_ERROR("invalid connector\n");
@@ -2198,6 +2188,20 @@ static int sde_connector_atomic_check(struct drm_connector *connector,
 	}
 
 	c_conn = to_sde_connector(connector);
+	c_state = to_sde_connector_state(new_conn_state);
+
+	has_modeset = sde_crtc_atomic_check_has_modeset(new_conn_state->state,
+						new_conn_state->crtc);
+	qsync_dirty = msm_property_is_dirty(&c_conn->property_info,
+					&c_state->property_state,
+					CONNECTOR_PROP_QSYNC_MODE);
+
+	SDE_DEBUG("has_modeset %d qsync_dirty %d\n", has_modeset, qsync_dirty);
+	SDE_EVT32(connector->base.id, has_modeset, has_modeset);
+	if (has_modeset && qsync_dirty) {
+		SDE_ERROR("invalid qsync update during modeset\n");
+		return -EINVAL;
+	}
 
 	if (c_conn->ops.atomic_check)
 		return c_conn->ops.atomic_check(connector,
@@ -2445,7 +2449,7 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 		return -EINVAL;
 	}
 
-	info = vzalloc(sizeof(*info));
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
@@ -2503,7 +2507,7 @@ int sde_connector_set_blob_data(struct drm_connector *conn,
 			SDE_KMS_INFO_DATALEN(info),
 			prop_id);
 exit:
-	vfree(info);
+	kfree(info);
 
 	return rc;
 }

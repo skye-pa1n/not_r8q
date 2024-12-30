@@ -100,7 +100,6 @@ config ARM64
 	select GENERIC_STRNCPY_FROM_USER
 	select GENERIC_STRNLEN_USER
 	select GENERIC_TIME_VSYSCALL
-	select GENERIC_GETTIMEOFDAY
 	select HANDLE_DOMAIN_IRQ
 	select HARDIRQS_SW_RESEND
 	select HAVE_ACPI_APEI if (ACPI && EFI)
@@ -139,8 +138,6 @@ config ARM64
 	select HAVE_GENERIC_DMA_COHERENT
 	select HAVE_HW_BREAKPOINT if PERF_EVENTS
 	select HAVE_IRQ_TIME_ACCOUNTING
-	select HAVE_KERNEL_GZIP
-	select HAVE_KERNEL_LZ4
 	select HAVE_MEMBLOCK
 	select HAVE_MEMBLOCK_NODE_MAP if NUMA
 	select HAVE_NMI
@@ -155,7 +152,6 @@ config ARM64
 	select HAVE_SYSCALL_TRACEPOINTS
 	select HAVE_KPROBES
 	select HAVE_KRETPROBES
-	select HAVE_GENERIC_VDSO
 	select IOMMU_DMA if IOMMU_SUPPORT
 	select IRQ_DOMAIN
 	select IRQ_FORCED_THREADING
@@ -176,34 +172,6 @@ config ARM64
 	select SYSCTL_EXCEPTION_TRACE
 	select THREAD_INFO_IN_TASK
 	select ARCH_SUPPORTS_SPECULATIVE_PAGE_FAULT
-	select ARCH_INLINE_SPIN_TRYLOCK
-	select ARCH_INLINE_SPIN_TRYLOCK_BH
-	select ARCH_INLINE_SPIN_LOCK
-	select ARCH_INLINE_SPIN_LOCK_BH
-	select ARCH_INLINE_SPIN_LOCK_IRQ
-	select ARCH_INLINE_SPIN_LOCK_IRQSAVE
-	select ARCH_INLINE_SPIN_UNLOCK
-	select ARCH_INLINE_SPIN_UNLOCK_BH
-	select ARCH_INLINE_SPIN_UNLOCK_IRQ
-	select ARCH_INLINE_SPIN_UNLOCK_IRQRESTORE
-	select ARCH_INLINE_READ_TRYLOCK
-	select ARCH_INLINE_READ_LOCK
-	select ARCH_INLINE_READ_LOCK_BH
-	select ARCH_INLINE_READ_LOCK_IRQ
-	select ARCH_INLINE_READ_LOCK_IRQSAVE
-	select ARCH_INLINE_READ_UNLOCK
-	select ARCH_INLINE_READ_UNLOCK_BH
-	select ARCH_INLINE_READ_UNLOCK_IRQ
-	select ARCH_INLINE_READ_UNLOCK_IRQRESTORE
-	select ARCH_INLINE_WRITE_TRYLOCK
-	select ARCH_INLINE_WRITE_LOCK
-	select ARCH_INLINE_WRITE_LOCK_BH
-	select ARCH_INLINE_WRITE_LOCK_IRQ
-	select ARCH_INLINE_WRITE_LOCK_IRQSAVE
-	select ARCH_INLINE_WRITE_UNLOCK
-	select ARCH_INLINE_WRITE_UNLOCK_BH
-	select ARCH_INLINE_WRITE_UNLOCK_IRQ
-	select ARCH_INLINE_WRITE_UNLOCK_IRQRESTORE
 	help
 	  ARM 64-bit (AArch64) Linux support.
 
@@ -522,7 +490,7 @@ config ARM64_ERRATUM_1024718
 	help
 	  This option adds work around for Arm Cortex-A55 Erratum 1024718.
 
-	  Affected Cortex-A55 cores (all revisions) could cause incorrect
+	  Affected Cortex-A55 cores (r0p0, r0p1, r1p0) could cause incorrect
 	  update of the hardware dirty bit when the DBM/AP bits are updated
 	  without a break-before-make. The work around is to disable the usage
 	  of hardware DBM locally on the affected cores. CPUs not affected by
@@ -573,76 +541,6 @@ config ARM64_ERRATUM_1542418
 
 	  Work around the erratum by ensuring that 60 ASIDs are selected
 	  before any ASID is reused.
-
-	  If unsure, say Y.
-
-config ARM64_ERRATUM_1542419
-	bool "Neoverse-N1: workaround mis-ordering of instruction fetches"
-	default y
-	help
-	  This option adds a workaround for ARM Neoverse-N1 erratum
-	  1542419.
-
-	  Affected Neoverse-N1 cores could execute a stale instruction when
-	  modified by another CPU. The workaround depends on a firmware
-	  counterpart.
-
-	  Workaround the issue by hiding the DIC feature from EL0. This
-	  forces user-space to perform cache maintenance.
-
-	  If unsure, say Y.
-
-config ARM64_ERRATUM_1742098
-	bool "Cortex-A57/A72: 1742098: ELR recorded incorrectly on interrupt taken between cryptographic instructions in a sequence"
-	depends on COMPAT
-	default y
-	help
-	  This option removes the AES hwcap for aarch32 user-space to
-	  workaround erratum 1742098 on Cortex-A57 and Cortex-A72.
-
-	  Affected parts may corrupt the AES state if an interrupt is
-	  taken between a pair of AES instructions. These instructions
-	  are only present if the cryptography extensions are present.
-	  All software should have a fallback implementation for CPUs
-	  that don't implement the cryptography extensions.
-
-	  If unsure, say Y.
-
-config ARM64_ERRATUM_3194386
-	bool "Cortex-*/Neoverse-*: workaround for MSR SSBS not self-synchronizing"
-	default y
-	help
-	  This option adds the workaround for the following errata:
-
-	  * ARM Cortex-A76 erratum 3324349
-	  * ARM Cortex-A77 erratum 3324348
-	  * ARM Cortex-A78 erratum 3324344
-	  * ARM Cortex-A78C erratum 3324346
-	  * ARM Cortex-A78C erratum 3324347
-	  * ARM Cortex-A710 erratam 3324338
-	  * ARM Cortex-A720 erratum 3456091
-	  * ARM Cortex-A725 erratum 3456106
-	  * ARM Cortex-X1 erratum 3324344
-	  * ARM Cortex-X1C erratum 3324346
-	  * ARM Cortex-X2 erratum 3324338
-	  * ARM Cortex-X3 erratum 3324335
-	  * ARM Cortex-X4 erratum 3194386
-	  * ARM Cortex-X925 erratum 3324334
-	  * ARM Neoverse-N1 erratum 3324349
-	  * ARM Neoverse N2 erratum 3324339
-	  * ARM Neoverse-V1 erratum 3324341
-	  * ARM Neoverse V2 erratum 3324336
-	  * ARM Neoverse-V3 erratum 3312417
-
-	  On affected cores "MSR SSBS, #0" instructions may not affect
-	  subsequent speculative instructions, which may permit unexepected
-	  speculative store bypassing.
-
-	  Work around this problem by placing a Speculation Barrier (SB) or
-	  Instruction Synchronization Barrier (ISB) after kernel changes to
-	  SSBS. The presence of the SSBS special-purpose register is hidden
-	  from hwcaps and EL0 reads of ID_AA64PFR1_EL1, such that userspace
-	  will use the PR_SPEC_STORE_BYPASS prctl to change SSBS.
 
 	  If unsure, say Y.
 
@@ -895,14 +793,6 @@ config HOTPLUG_CPU
 	  Say Y here to experiment with turning CPUs off and on.  CPUs
 	  can be controlled through /sys/devices/system/cpu.
 
-config ASMP
-	bool "Multi-core automatic hotplug support"
-	depends on SMP && HOTPLUG_CPU
-	default n
-	help
-	  Automatically hotplugs the multiple cpu cores on and off
-	  based on cpu load and suspend state
-
 config ARCH_ENABLE_MEMORY_HOTPLUG
     depends on !NUMA
 	def_bool y
@@ -914,7 +804,7 @@ config ARCH_ENABLE_MEMORY_HOTREMOVE
 # a multiplatform kernel, we just want the highest value required by the
 # selected platforms.
 config ARCH_NR_GPIO
-	int "Number of GPIOs in the system"
+	int
 	default 1280 if ARCH_QCOM
 	default 256
 	help
@@ -1033,37 +923,6 @@ config ARCH_MEMORY_PROBE
 # Supported by clang >= 7.0
 config CC_HAVE_SHADOW_CALL_STACK
 	def_bool $(cc-option, -fsanitize=shadow-call-stack -ffixed-x18)
-
-config ARM64_DMA_USE_IOMMU
-	bool "ARM64 DMA iommu integration"
-	select ARM_HAS_SG_CHAIN
-	select NEED_SG_DMA_LENGTH
-	help
-	  Enable using iommu through the standard dma apis.
-	  dma_alloc_coherent() will allocate scatter-gather memory
-	  which is made virtually contiguous via iommu.
-	  Enable if system contains IOMMU hardware.
-
-if ARM64_DMA_USE_IOMMU
-
-config ARM64_DMA_IOMMU_ALIGNMENT
-	int "Maximum PAGE_SIZE order of alignment for DMA IOMMU buffers"
-	range 4 9
-	default 9
-	help
-	  DMA mapping framework by default aligns all buffers to the smallest
-	  PAGE_SIZE order which is greater than or equal to the requested buffer
-	  size. This works well for buffers up to a few hundreds kilobytes, but
-	  for larger buffers it just a waste of address space. Drivers which has
-	  relatively small addressing window (like 64Mib) might run out of
-	  virtual space with just a few allocations.
-
-	  With this parameter you can specify the maximum PAGE_SIZE order for
-	  DMA IOMMU buffers. Larger buffers will be aligned only to this
-	  specified order. The order is expressed as a power of two multiplied
-	  by the PAGE_SIZE.
-
-endif
 
 config SECCOMP
 	bool "Enable seccomp to safely compute untrusted bytecode"
@@ -1230,19 +1089,6 @@ config ARM64_TAGGED_ADDR_ABI
 	  to system calls as pointer arguments. For details, see
 	  Documentation/arm64/tagged-address-abi.rst.
 
-config COMPAT_VDSO
-	bool "Enable vDSO for 32-bit applications"
-	depends on !CPU_BIG_ENDIAN && "$(CROSS_COMPILE_COMPAT)" != ""
-	select GENERIC_COMPAT_VDSO
-	default y
-	help
-	  Place in the process address space of 32-bit applications an
-	  ELF shared object providing fast implementations of gettimeofday
-	  and clock_gettime.
-
-	  You must have a 32-bit build of glibc 2.22 or later for programs
-	  to seamlessly take advantage of this.
-
 config MITIGATE_SPECTRE_BRANCH_HISTORY
 	bool "Mitigate Spectre style attacks against branch history" if EXPERT
 	default y
@@ -1328,6 +1174,132 @@ config ARM64_SW_TTBR0_PAN
 	  zeroed area and reserved ASID. The user access routines
 	  restore the valid TTBR0_EL1 temporarily.
 
+config UH
+	bool "Enable micro hypervisor feature of Samsung"
+	depends on !SEC_FACTORY
+	default n
+	help
+	  It enables a micro hypervisor.
+	  It's samsung's hypervisor and it should be combined with QC hyp.
+	  So you must check a hypX(samsung hypervisor image)
+	  RKP and etc can be loaded on it.
+
+config UH_RKP
+	bool "Enable RKP (Realtime Kernel Protection) UH feature"
+	depends on !SEC_FACTORY
+	select UH
+	default n
+	help
+		it protects a kernel text and etc.
+
+config RKP_TEST
+	bool "Enables rkp test"
+	depends on UH_RKP && !SAMSUNG_PRODUCT_SHIP
+	default n
+	help
+	  it enables rkp test.
+
+config KDP_CRED
+	bool "KDP(Kernel Data Protection) for cred structure"
+	depends on !SEC_FACTORY
+	depends on !SEC_VTS_TEST
+	depends on UH_RKP
+	default n
+	help
+	  Prevents unauthorized cred modification.
+
+config KDP_NS
+	bool "KDP(Kernel Data Protection) for namespace structure"
+	depends on KDP_CRED
+	default n
+	help
+	  Prevents unauthorized namespace modification.
+
+config KDP_DMAP
+	bool "KDP(Kernel Data Protection) to prevent page Double MAPping"
+	depends on KDP_CRED
+	default n
+	help
+	  Prevents unauthorized mapping for page table.
+
+config KDP_TEST
+	bool "Enable KDP test"
+	depends on KDP_CRED && KDP_NS && !SAMSUNG_PRODUCT_SHIP
+	default n
+	help
+	  enable KDP test.
+
+config UH_LKM_BLOCK
+	bool "Block LKM"
+	help
+	  LKM is not allowed by Samsung security policy.
+
+menu "Control Flow Protection"
+
+config CFP
+	bool "JOPP and ROPP"
+	default n
+	help
+	  Control flow protection, including both JOPP and ROPP. Please do NOT
+	  set this CONFIG, JOPP/ROPP will select it.
+
+config CFP_JOPP
+	bool "JOP Prevention"
+	depends on !SEC_FACTORY 
+	select CFP
+	default n
+	help
+	  Restrict function pointer jumps to function entry points only.
+
+config CFP_JOPP_MAGIC
+	hex
+	depends on CFP_JOPP
+	default "0x00be7bad"
+
+config CFP_ROPP
+	bool "ROP Prevention"
+	depends on !SEC_FACTORY 
+	select CFP
+	default n
+	help
+	  Return address protection.
+
+choice
+	prompt "ROPP key"
+	default CFP_ROPP_SYSREGKEY
+	depends on CFP_ROPP
+
+config CFP_ROPP_SYSREGKEY
+	bool "Use system register"
+	help
+	  Master key held by system register.
+
+config CFP_ROPP_RANDKEY
+	bool "random key"
+	help
+	  For test, no master key, per-thread-key is random.
+
+config CFP_ROPP_FIXKEY
+	bool "fixed key"
+	help
+	  For test, no master key, per-thread-key is fixed.
+
+config CFP_ROPP_ZEROKEY
+	bool "zero key"
+	help
+	  For test, no master key, per-thread-key is zero.
+
+endchoice
+
+config CFP_TEST
+	bool "test file, only include in ENG build"
+	depends on CFP
+	default n
+	help
+	  For test only.
+
+endmenu
+
 menu "ARMv8.1 architectural features"
 
 config ARM64_HW_AFDBM
@@ -1363,7 +1335,6 @@ config ARM64_PAN
 
 config ARM64_LSE_ATOMICS
 	bool "Atomic instructions"
-	default y
 	help
 	  As part of the Large System Extensions, ARMv8.1 introduces new
 	  atomic instructions that are designed specifically to scale in
@@ -1704,34 +1675,6 @@ config COMPAT
 	  with page size aligned segments.
 
 	  If you want to execute 32-bit userspace applications, say Y.
-
-config KUSER_HELPERS
-	bool "Enable kuser helpers page for 32 bit applications."
-	depends on COMPAT
-	default y
-	help
-	  Warning: disabling this option may break 32-bit user programs.
-
-	  Provide kuser helpers to compat tasks. The kernel provides
-	  helper code to userspace in read only form at a fixed location
-	  to allow userspace to be independent of the CPU type fitted to
-	  the system. This permits binaries to be run on ARMv4 through
-	  to ARMv8 without modification.
-
-	  See Documentation/arm/kernel_user_helpers.txt for details.
-
-	  However, the fixed address nature of these helpers can be used
-	  by ROP (return orientated programming) authors when creating
-	  exploits.
-
-	  If all of the binaries and libraries which run on your platform
-	  are built specifically for your platform, and make no use of
-	  these helpers, then you can turn this option off to hinder
-	  such exploits. However, in that case, if a binary or library
-	  relying on those helpers is run, it will not function correctly.
-
-	  Say N here only if you are absolutely certain that you do not
-	  need these helpers; otherwise, the safe option is to say Y.
 
 config SYSVIPC_COMPAT
 	def_bool y

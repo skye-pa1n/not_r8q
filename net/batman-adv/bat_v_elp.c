@@ -132,7 +132,20 @@ static u32 batadv_v_elp_get_throughput(struct batadv_hardif_neigh_node *neigh)
 	rtnl_lock();
 	ret = __ethtool_get_link_ksettings(hard_iface->net_dev, &link_settings);
 	rtnl_unlock();
-	if (ret == 0) {
+
+	/* Virtual interface drivers such as tun / tap interfaces, VLAN, etc
+	 * tend to initialize the interface throughput with some value for the
+	 * sake of having a throughput number to export via ethtool. This
+	 * exported throughput leaves batman-adv to conclude the interface
+	 * throughput is genuine (reflecting reality), thus no measurements
+	 * are necessary.
+	 *
+	 * Based on the observation that those interface types also tend to set
+	 * the link auto-negotiation to 'off', batman-adv shall check this
+	 * setting to differentiate between genuine link throughput information
+	 * and placeholders installed by virtual interfaces.
+	 */
+	if (ret == 0 && link_settings.base.autoneg == AUTONEG_ENABLE) {
 		/* link characteristics might change over time */
 		if (link_settings.base.duplex == DUPLEX_FULL)
 			hard_iface->bat_v.flags |= BATADV_FULL_DUPLEX;
@@ -513,7 +526,7 @@ int batadv_v_elp_packet_recv(struct sk_buff *skb,
 	struct batadv_priv *bat_priv = netdev_priv(if_incoming->soft_iface);
 	struct batadv_elp_packet *elp_packet;
 	struct batadv_hard_iface *primary_if;
-	struct ethhdr *ethhdr;
+	struct ethhdr *ethhdr = (struct ethhdr *)skb_mac_header(skb);
 	bool res;
 	int ret = NET_RX_DROP;
 
@@ -521,7 +534,6 @@ int batadv_v_elp_packet_recv(struct sk_buff *skb,
 	if (!res)
 		goto free_skb;
 
-	ethhdr = eth_hdr(skb);
 	if (batadv_is_my_mac(bat_priv, ethhdr->h_source))
 		goto free_skb;
 

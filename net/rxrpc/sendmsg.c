@@ -62,8 +62,8 @@ static int rxrpc_wait_for_tx_window_nonintr(struct rxrpc_sock *rx,
 
 	rtt = READ_ONCE(call->peer->rtt);
 	rtt2 = nsecs_to_jiffies64(rtt) * 2;
-	if (rtt2 < 2)
-		rtt2 = 2;
+	if (rtt2 < 1)
+		rtt2 = 1;
 
 	timeout = rtt2;
 	tx_start = READ_ONCE(call->tx_hard_ack);
@@ -278,7 +278,7 @@ static int rxrpc_send_data(struct rxrpc_sock *rx,
 	/* this should be in poll */
 	sk_clear_bit(SOCKWQ_ASYNC_NOSPACE, sk);
 
-	if (sk->sk_shutdown & SEND_SHUTDOWN)
+	if (sk->sk_err || (sk->sk_shutdown & SEND_SHUTDOWN))
 		return -EPIPE;
 
 	more = msg->msg_flags & MSG_MORE;
@@ -440,12 +440,6 @@ static int rxrpc_send_data(struct rxrpc_sock *rx,
 
 success:
 	ret = copied;
-	if (READ_ONCE(call->state) == RXRPC_CALL_COMPLETE) {
-		read_lock_bh(&call->state_lock);
-		if (call->error < 0)
-			ret = call->error;
-		read_unlock_bh(&call->state_lock);
-	}
 out:
 	call->tx_pending = skb;
 	_leave(" = %d", ret);
@@ -660,9 +654,6 @@ int rxrpc_do_sendmsg(struct rxrpc_sock *rx, struct msghdr *msg, size_t len)
 		if (IS_ERR(call))
 			return PTR_ERR(call);
 		/* ... and we have the call lock. */
-		ret = 0;
-		if (READ_ONCE(call->state) == RXRPC_CALL_COMPLETE)
-			goto out_put_unlock;
 	} else {
 		switch (READ_ONCE(call->state)) {
 		case RXRPC_CALL_UNINITIALISED:
@@ -689,7 +680,7 @@ int rxrpc_do_sendmsg(struct rxrpc_sock *rx, struct msghdr *msg, size_t len)
 			if (call->tx_total_len != -1 ||
 			    call->tx_pending ||
 			    call->tx_top != 0)
-				goto out_put_unlock;
+				goto error_put;
 			call->tx_total_len = p.call.tx_total_len;
 		}
 	}
@@ -709,7 +700,7 @@ int rxrpc_do_sendmsg(struct rxrpc_sock *rx, struct msghdr *msg, size_t len)
 		/* Fall through */
 	case 1:
 		if (p.call.timeouts.hard > 0) {
-			j = p.call.timeouts.hard * HZ;
+			j = msecs_to_jiffies(p.call.timeouts.hard);
 			now = jiffies;
 			j += now;
 			WRITE_ONCE(call->expect_term_by, j);

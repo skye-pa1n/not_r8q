@@ -374,13 +374,6 @@ static void dwc3_free_event_buffers(struct dwc3 *dwc)
 static int dwc3_alloc_event_buffers(struct dwc3 *dwc, unsigned length)
 {
 	struct dwc3_event_buffer *evt;
-	unsigned int hw_mode;
-
-	hw_mode = DWC3_GHWPARAMS0_MODE(dwc->hwparams.hwparams0);
-	if (hw_mode == DWC3_GHWPARAMS0_MODE_HOST) {
-		dwc->ev_buf = NULL;
-		return 0;
-	}
 
 	evt = dwc3_alloc_one_event_buffer(dwc, length);
 	if (IS_ERR(evt)) {
@@ -404,9 +397,6 @@ int dwc3_event_buffers_setup(struct dwc3 *dwc)
 {
 	struct dwc3_event_buffer	*evt;
 
-	if (!dwc->ev_buf)
-		return 0;
-
 	evt = dwc->ev_buf;
 	evt->lpos = 0;
 	dwc3_writel(dwc->regs, DWC3_GEVNTADRLO(0),
@@ -425,17 +415,6 @@ int dwc3_event_buffers_setup(struct dwc3 *dwc)
 void dwc3_event_buffers_cleanup(struct dwc3 *dwc)
 {
 	struct dwc3_event_buffer	*evt;
-	u32				reg;
-
-	if (!dwc->ev_buf)
-		return;
-	/*
-	 * Exynos platforms may not be able to access event buffer if the
-	 * controller failed to halt on dwc3_core_exit().
-	 */
-	reg = dwc3_readl(dwc->regs, DWC3_DSTS);
-	if (!(reg & DWC3_DSTS_DEVCTRLHLT))
-		return;
 
 	evt = dwc->ev_buf;
 
@@ -707,16 +686,15 @@ static void dwc3_core_exit(struct dwc3 *dwc)
 {
 	dwc3_event_buffers_cleanup(dwc);
 
-	usb_phy_set_suspend(dwc->usb2_phy, 1);
-	usb_phy_set_suspend(dwc->usb3_phy, 1);
-	phy_power_off(dwc->usb2_generic_phy);
-	phy_power_off(dwc->usb3_generic_phy);
-
 	usb_phy_shutdown(dwc->usb2_phy);
 	usb_phy_shutdown(dwc->usb3_phy);
 	phy_exit(dwc->usb2_generic_phy);
 	phy_exit(dwc->usb3_generic_phy);
 
+	usb_phy_set_suspend(dwc->usb2_phy, 1);
+	usb_phy_set_suspend(dwc->usb3_phy, 1);
+	phy_power_off(dwc->usb2_generic_phy);
+	phy_power_off(dwc->usb3_generic_phy);
 	clk_bulk_disable(dwc->num_clks, dwc->clks);
 	clk_bulk_unprepare(dwc->num_clks, dwc->clks);
 	reset_control_assert(dwc->reset);
@@ -960,13 +938,8 @@ int dwc3_core_init(struct dwc3 *dwc)
 
 	if (!dwc->ulpi_ready) {
 		ret = dwc3_core_ulpi_init(dwc);
-		if (ret) {
-			if (ret == -ETIMEDOUT) {
-				dwc3_core_soft_reset(dwc);
-				ret = -EPROBE_DEFER;
-			}
+		if (ret)
 			goto err0;
-		}
 		dwc->ulpi_ready = true;
 	}
 
@@ -1036,10 +1009,26 @@ int dwc3_core_init(struct dwc3 *dwc)
 		 */
 		if (!dwc3_is_usb31(dwc)) {
 			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_SS;
+			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_HS;
 			reg |= DWC3_GUCTL1_PARKMODE_DISABLE_FSLS;
 		}
 
 		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
+	}
+
+	if (dwc->dr_mode == USB_DR_MODE_HOST || dwc3_is_otg_or_drd(dwc)) {
+		reg = dwc3_readl(dwc->regs, DWC3_GUCTL);
+
+		/*
+		 * Enable Auto retry Feature to make the controller operating in
+		 * Host mode on seeing transaction errors(CRC errors or internal
+		 * overrun scenerios) on IN transfers to reply to the device
+		 * with a non-terminating retry ACK (i.e, an ACK transcation
+		 * packet with Retry=1 & Nump != 0)
+		 */
+		reg |= DWC3_GUCTL_HSTINAUTORETRY;
+
+		dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
 	}
 
 	/*
@@ -1251,10 +1240,10 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	u8			lpm_nyet_threshold;
 	u8			tx_de_emphasis;
 	u8			hird_threshold;
-	u8			rx_thr_num_pkt_prd = 0;
-	u8			rx_max_burst_prd = 0;
-	u8			tx_thr_num_pkt_prd = 0;
-	u8			tx_max_burst_prd = 0;
+	u8			rx_thr_num_pkt_prd;
+	u8			rx_max_burst_prd;
+	u8			tx_thr_num_pkt_prd;
+	u8			tx_max_burst_prd;
 
 	/* default to highest possible threshold */
 	lpm_nyet_threshold = 0xf;
@@ -1601,7 +1590,7 @@ skip_clk_reset:
 
 	snprintf(dma_ipc_log_ctx_name, sizeof(dma_ipc_log_ctx_name),
 					"%s.ep_events", dev_name(dwc->dev));
-	dwc->dwc_dma_ipc_log_ctxt = ipc_log_context_create(2 * NUM_LOG_PAGES,
+	dwc->dwc_dma_ipc_log_ctxt = ipc_log_context_create(NUM_LOG_PAGES,
 						dma_ipc_log_ctx_name, 0);
 	if (!dwc->dwc_dma_ipc_log_ctxt)
 		dev_err(dwc->dev, "Error getting ipc_log_ctxt for ep_events\n");
@@ -1612,9 +1601,6 @@ skip_clk_reset:
 
 	pm_runtime_allow(dev);
 	dwc3_debugfs_init(dwc);
-
-	dma_set_max_seg_size(dev, UINT_MAX);
-
 	return 0;
 
 err3:
@@ -1652,8 +1638,6 @@ static int dwc3_remove(struct platform_device *pdev)
 
 	ipc_log_context_destroy(dwc->dwc_ipc_log_ctxt);
 	dwc->dwc_ipc_log_ctxt = NULL;
-	ipc_log_context_destroy(dwc->dwc_dma_ipc_log_ctxt);
-	dwc->dwc_dma_ipc_log_ctxt = NULL;
 	count--;
 	dwc3_instance[dwc->index] = NULL;
 
@@ -1793,7 +1777,7 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		if (PMSG_IS_AUTO(msg))
 			break;
 
-		ret = dwc3_core_init_for_resume(dwc);
+		ret = dwc3_core_init(dwc);
 		if (ret)
 			return ret;
 
@@ -1938,7 +1922,7 @@ static int dwc3_resume(struct device *dev)
 		 * which is now out of LPM. This allows runtime_suspend later.
 		 */
 		if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST &&
-		    dwc->ignore_wakeup_src_in_hostmode)
+		    dwc->host_poweroff_in_pm_suspend)
 			goto runtime_set_active;
 
 		return 0;

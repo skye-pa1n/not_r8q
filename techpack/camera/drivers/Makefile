@@ -1,4 +1,3 @@
-
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_req_mgr/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_utils/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_core/
@@ -12,4 +11,4 @@ obj-$(CONFIG_SPECTRA_CAMERA) += cam_icp/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_jpeg/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_fd/
 obj-$(CONFIG_SPECTRA_CAMERA) += cam_lrme/
-obj-$(CONFIG_SPECTRA_CAMERA) += cam_cust/
+obj-$(CONFIG_SPECTRA_CAMERA) += cam_sbi/

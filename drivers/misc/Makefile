@@ -63,7 +63,6 @@ obj-$(CONFIG_OCXL)		+= ocxl/
 obj-$(CONFIG_MISC_RTSX)		+= cardreader/
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-$(CONFIG_MEMORY_STATE_TIME)	+= memory_state_time.o
-obj-$(CONFIG_BATTERY_SAVER)     += battery_saver.o
 obj-$(CONFIG_QPNP_MISC)		+= qpnp-misc.o
 
 obj-$(CONFIG_OKL4_USER_VIRQ)	+= okl4-virq.o
@@ -80,5 +79,3 @@ obj-$(CONFIG_QTI_XR_SMRTVWR_MISC) += qxr-stdalonevwr.o
 obj-$(CONFIG_FPR_FPC)		+= fpr_FingerprintCard/
 
 obj-$(CONFIG_DEV_RIL_BRIDGE) += dev_ril_bridge.o
-obj-y                           += qrc/
-obj-$(CONFIG_KINECTICS_XR_NORDIC) += kxrctrl/

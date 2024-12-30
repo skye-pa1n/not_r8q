@@ -205,12 +205,9 @@ EXPORT_SYMBOL(drm_panel_bridge_remove);
 
 static void devm_drm_panel_bridge_release(struct device *dev, void *res)
 {
-	struct drm_bridge *bridge = *(struct drm_bridge **)res;
+	struct drm_bridge **bridge = res;
 
-	if (!bridge)
-		return;
-
-	drm_bridge_remove(bridge);
+	drm_panel_bridge_remove(*bridge);
 }
 
 struct drm_bridge *devm_drm_panel_bridge_add(struct device *dev,

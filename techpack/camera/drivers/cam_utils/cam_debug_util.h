@@ -1,15 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CAM_DEBUG_UTIL_H_
 #define _CAM_DEBUG_UTIL_H_
 
-#define CAM_IS_NULL_TO_STR(ptr) ((ptr) ? "Non-NULL" : "NULL")
-
-/* Module IDs used for debug logging */
 #define CAM_CDM        (1 << 0)
 #define CAM_CORE       (1 << 1)
 #define CAM_CPAS       (1 << 2)
@@ -43,6 +39,14 @@
 /* CAM_PERF: Used for performance (clock, BW etc) logs */
 #define CAM_PERF       (1 << 25)
 #define CAM_CUSTOM     (1 << 26)
+
+#if defined(CONFIG_SAMSUNG_SBI)
+#define CAM_SBI        (1 << 27)
+#endif
+
+#if defined(CONFIG_USE_CAMERA_HW_BIG_DATA)
+#define CAM_HWB        (1 << 28)
+#endif
 
 #define STR_BUFFER_MAX_LENGTH  1024
 

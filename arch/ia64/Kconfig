@@ -8,7 +8,6 @@ menu "Processor type and features"
 
 config IA64
 	bool
-	select ARCH_HAS_CPU_FINALIZE_INIT
 	select ARCH_MIGHT_HAVE_PC_PARPORT
 	select ARCH_MIGHT_HAVE_PC_SERIO
 	select PCI if (!IA64_HP_SIM)
@@ -446,7 +445,7 @@ config ARCH_PROC_KCORE_TEXT
 	depends on PROC_KCORE
 
 config IA64_MCA_RECOVERY
-	bool "MCA recovery from errors other than TLB."
+	tristate "MCA recovery from errors other than TLB."
 
 config PERFMON
 	bool "Performance monitor support"

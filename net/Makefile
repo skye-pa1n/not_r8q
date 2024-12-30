@@ -5,7 +5,6 @@
 # 2 Sep 2000, Christoph Hellwig <hch@infradead.org>
 # Rewritten to use lists instead of if-statements.
 #
-subdir-ccflags-y += -Os
 
 obj-$(CONFIG_NET)		:= socket.o core/
 
@@ -41,6 +40,7 @@ obj-$(CONFIG_AF_KCM)		+= kcm/
 obj-$(CONFIG_STREAM_PARSER)	+= strparser/
 obj-$(CONFIG_ATM)		+= atm/
 obj-$(CONFIG_L2TP)		+= l2tp/
+obj-$(CONFIG_DECNET)		+= decnet/
 obj-$(CONFIG_PHONET)		+= phonet/
 ifneq ($(CONFIG_VLAN_8021Q),)
 obj-y				+= 8021q/
@@ -87,4 +87,7 @@ obj-y				+= l3mdev/
 endif
 obj-$(CONFIG_QRTR)		+= qrtr/
 obj-$(CONFIG_NET_NCSI)		+= ncsi/
+# SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA {
+obj-$(CONFIG_KNOX_NCM)		+= ncm/
+# SEC_PRODUCT_FEATURE_KNOX_SUPPORT_NPA }
 obj-$(CONFIG_XDP_SOCKETS)	+= xdp/

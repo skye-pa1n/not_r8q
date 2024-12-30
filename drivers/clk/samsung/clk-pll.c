@@ -1253,7 +1253,7 @@ static void __init _samsung_clk_register_pll(struct samsung_clk_provider *ctx,
 				void __iomem *base)
 {
 	struct samsung_clk_pll *pll;
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 	int ret, len;
 
 	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
@@ -1392,7 +1392,6 @@ static void __init _samsung_clk_register_pll(struct samsung_clk_provider *ctx,
 	if (ret) {
 		pr_err("%s: failed to register pll clock %s : %d\n",
 			__func__, pll_clk->name, ret);
-		kfree(pll->rate_table);
 		kfree(pll);
 		return;
 	}

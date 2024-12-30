@@ -62,57 +62,14 @@
 #include <linux/random.h>
 #include <linux/rcuwait.h>
 #include <linux/compat.h>
-#include <linux/sysfs.h>
 
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
 
-/*
- * The default value should be high enough to not crash a system that randomly
- * crashes its kernel from time to time, but low enough to at least not permit
- * overflowing 32-bit refcounts or the ldsem writer count.
- */
-static unsigned int oops_limit = 10000;
-
-#ifdef CONFIG_SYSCTL
-static struct ctl_table kern_exit_table[] = {
-	{
-		.procname       = "oops_limit",
-		.data           = &oops_limit,
-		.maxlen         = sizeof(oops_limit),
-		.mode           = 0644,
-		.proc_handler   = proc_douintvec,
-	},
-	{ }
-};
-
-static __init int kernel_exit_sysctls_init(void)
-{
-	register_sysctl_init("kernel", kern_exit_table);
-	return 0;
-}
-late_initcall(kernel_exit_sysctls_init);
-#endif
-
-static atomic_t oops_count = ATOMIC_INIT(0);
-
-#ifdef CONFIG_SYSFS
-static ssize_t oops_count_show(struct kobject *kobj, struct kobj_attribute *attr,
-			       char *page)
-{
-	return sysfs_emit(page, "%d\n", atomic_read(&oops_count));
-}
-
-static struct kobj_attribute oops_count_attr = __ATTR_RO(oops_count);
-
-static __init int kernel_exit_sysfs_init(void)
-{
-	sysfs_add_file_to_group(kernel_kobj, &oops_count_attr.attr, NULL);
-	return 0;
-}
-late_initcall(kernel_exit_sysfs_init);
+#ifdef CONFIG_SECURITY_DEFEX
+#include <linux/defex.h>
 #endif
 
 static void __unhash_process(struct task_struct *p, bool group_dead)
@@ -140,7 +97,7 @@ static void __exit_signal(struct task_struct *tsk)
 	struct signal_struct *sig = tsk->signal;
 	bool group_dead = thread_group_leader(tsk);
 	struct sighand_struct *sighand;
-	struct tty_struct *tty;
+	struct tty_struct *uninitialized_var(tty);
 	u64 utime, stime;
 
 	sighand = rcu_dereference_check(tsk->sighand,
@@ -228,11 +185,6 @@ static void delayed_put_task_struct(struct rcu_head *rhp)
 	put_task_struct(tsk);
 }
 
-void put_task_struct_rcu_user(struct task_struct *task)
-{
-	if (refcount_dec_and_test(&task->rcu_users))
-		call_rcu(&task->rcu, delayed_put_task_struct);
-}
 
 void release_task(struct task_struct *p)
 {
@@ -273,7 +225,7 @@ repeat:
 
 	write_unlock_irq(&tasklist_lock);
 	release_thread(p);
-	put_task_struct_rcu_user(p);
+	call_rcu(&p->rcu, delayed_put_task_struct);
 
 	p = leader;
 	if (unlikely(zap_leader))
@@ -499,8 +451,6 @@ retry:
 	 * Search through everything else, we should not get here often.
 	 */
 	for_each_process(g) {
-		if (atomic_read(&mm->mm_users) <= 1)
-			break;
 		if (g->flags & PF_KTHREAD)
 			continue;
 		for_each_thread(g, c) {
@@ -552,7 +502,7 @@ static void exit_mm(void)
 	struct mm_struct *mm = current->mm;
 	struct core_state *core_state;
 
-	exit_mm_release(current, mm);
+	mm_release(current, mm);
 	if (!mm)
 		return;
 	sync_mm_rss(mm);
@@ -571,10 +521,7 @@ static void exit_mm(void)
 		up_read(&mm->mmap_sem);
 
 		self.task = current;
-		if (self.task->flags & PF_SIGNALED)
-			self.next = xchg(&core_state->dumper.next, &self);
-		else
-			self.task = NULL;
+		self.next = xchg(&core_state->dumper.next, &self);
 		/*
 		 * Implies mb(), the result of xchg() must be visible
 		 * to core_state->dumper.
@@ -829,12 +776,12 @@ void __noreturn do_exit(long code)
 	struct task_struct *tsk = current;
 	int group_dead;
 
-	/*
-	 * We can get here from a kernel oops, sometimes with preemption off.
-	 * Start by checking for critical errors.
-	 * Then fix up important state like USER_DS and preemption.
-	 * Then do everything else.
-	 */
+#ifdef CONFIG_SECURITY_DEFEX
+	task_defex_zero_creds(current);
+#endif
+
+	profile_task_exit(tsk);
+	kcov_task_exit(tsk);
 
 	WARN_ON(blk_needs_flush_plug(tsk));
 
@@ -852,16 +799,6 @@ void __noreturn do_exit(long code)
 	 */
 	set_fs(USER_DS);
 
-	if (unlikely(in_atomic())) {
-		pr_info("note: %s[%d] exited with preempt_count %d\n",
-			current->comm, task_pid_nr(current),
-			preempt_count());
-		preempt_count_set(PREEMPT_ENABLED);
-	}
-
-	profile_task_exit(tsk);
-	kcov_task_exit(tsk);
-
 	ptrace_event(PTRACE_EVENT_EXIT, code);
 
 	validate_creds_for_do_exit(tsk);
@@ -872,13 +809,40 @@ void __noreturn do_exit(long code)
 	 */
 	if (unlikely(tsk->flags & PF_EXITING)) {
 		pr_alert("Fixing recursive fault but reboot is needed!\n");
-		futex_exit_recursive(tsk);
+		/*
+		 * We can do this unlocked here. The futex code uses
+		 * this flag just to verify whether the pi state
+		 * cleanup has been done or not. In the worst case it
+		 * loops once more. We pretend that the cleanup was
+		 * done as there is no way to return. Either the
+		 * OWNER_DIED bit is set by now or we push the blocked
+		 * task into the wait for ever nirwana as well.
+		 */
+		tsk->flags |= PF_EXITPIDONE;
 		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule();
 	}
 
 	exit_signals(tsk);  /* sets PF_EXITING */
 	sched_exit(tsk);
+	/*
+	 * Ensure that all new tsk->pi_lock acquisitions must observe
+	 * PF_EXITING. Serializes against futex.c:attach_to_pi_owner().
+	 */
+	smp_mb();
+	/*
+	 * Ensure that we must observe the pi_state in exit_mm() ->
+	 * mm_release() -> exit_pi_state_list().
+	 */
+	raw_spin_lock_irq(&tsk->pi_lock);
+	raw_spin_unlock_irq(&tsk->pi_lock);
+
+	if (unlikely(in_atomic())) {
+		pr_info("note: %s[%d] exited with preempt_count %d\n",
+			current->comm, task_pid_nr(current),
+			preempt_count());
+		preempt_count_set(PREEMPT_ENABLED);
+	}
 
 	/* sync mm's RSS info before statistics gathering */
 	if (tsk->mm)
@@ -953,6 +917,12 @@ void __noreturn do_exit(long code)
 	 * Make sure we are holding no locks:
 	 */
 	debug_check_no_locks_held();
+	/*
+	 * We can do this unlocked here. The futex code uses this flag
+	 * just to verify whether the pi state cleanup has been done
+	 * or not. In the worst case it loops once more.
+	 */
+	tsk->flags |= PF_EXITPIDONE;
 
 	if (tsk->io_context)
 		exit_io_context(tsk);
@@ -976,31 +946,6 @@ void __noreturn do_exit(long code)
 	do_task_dead();
 }
 EXPORT_SYMBOL_GPL(do_exit);
-
-void __noreturn make_task_dead(int signr)
-{
-	/*
-	 * Take the task off the cpu after something catastrophic has
-	 * happened.
-	 */
-	unsigned int limit;
-
-	/*
-	 * Every time the system oopses, if the oops happens while a reference
-	 * to an object was held, the reference leaks.
-	 * If the oops doesn't also leak memory, repeated oopsing can cause
-	 * reference counters to wrap around (if they're not using refcount_t).
-	 * This means that repeated oopsing can make unexploitable-looking bugs
-	 * exploitable through repeated oopsing.
-	 * To make sure this can't happen, place an upper bound on how often the
-	 * kernel may oops without panic().
-	 */
-	limit = READ_ONCE(oops_limit);
-	if (atomic_inc_return(&oops_count) >= limit && limit)
-		panic("Oopsed too often (kernel.oops_limit is %d)", limit);
-
-	do_exit(signr);
-}
 
 void complete_and_exit(struct completion *comp, long code)
 {

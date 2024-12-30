@@ -20,8 +20,8 @@
  */
 #define DEFAULT_SCHED_RAVG_WINDOW (3333333 * 6)
 #else
-/* Default window size (in ns) = 1ms */
-#define DEFAULT_SCHED_RAVG_WINDOW 1000000
+/* Default window size (in ns) = 20ms */
+#define DEFAULT_SCHED_RAVG_WINDOW 20000000
 #endif
 
 /* Max window size (in ns) = 1s */
@@ -65,10 +65,6 @@ extern void update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 
 extern unsigned int walt_big_tasks(int cpu);
 
-struct waltgov_callback {
-	void (*func)(struct waltgov_callback *cb, u64 time, unsigned int flags);
-};
-
 static inline void
 inc_nr_big_task(struct walt_sched_stats *stats, struct task_struct *p)
 {
@@ -108,34 +104,14 @@ fixup_cumulative_runnable_avg(struct walt_sched_stats *stats,
 			      s64 demand_scaled_delta,
 			      s64 pred_demand_scaled_delta)
 {
-	s64 cumulative_runnable_avg_scaled;
-	s64 pred_demands_sum_scaled;
-
 	if (sched_disable_window_stats)
 		return;
 
-	cumulative_runnable_avg_scaled =
-		(s64)stats->cumulative_runnable_avg_scaled +
-		demand_scaled_delta;
-	pred_demands_sum_scaled =
-		(s64)stats->pred_demands_sum_scaled + pred_demand_scaled_delta;
+	stats->cumulative_runnable_avg_scaled += demand_scaled_delta;
+	BUG_ON((s64)stats->cumulative_runnable_avg_scaled < 0);
 
-	if (cumulative_runnable_avg_scaled < 0) {
-		printk_deferred("WALT-BUG demand_scaled_delta=%lld cumulative_runnable_avg_scaled=%llu\n",
-				demand_scaled_delta,
-				stats->cumulative_runnable_avg_scaled);
-		cumulative_runnable_avg_scaled = 0;
-	}
-	stats->cumulative_runnable_avg_scaled =
-		(u64)cumulative_runnable_avg_scaled;
-
-	if (pred_demands_sum_scaled < 0) {
-		printk_deferred("WALT-BUG task pred_demand_scaled_delta=%lld pred_demands_sum_scaled=%llu\n",
-				pred_demand_scaled_delta,
-				stats->pred_demands_sum_scaled);
-		pred_demands_sum_scaled = 0;
-	}
-	stats->pred_demands_sum_scaled = (u64)pred_demands_sum_scaled;
+	stats->pred_demands_sum_scaled += pred_demand_scaled_delta;
+	BUG_ON((s64)stats->pred_demands_sum_scaled < 0);
 }
 
 static inline void
@@ -493,7 +469,7 @@ static inline bool prefer_spread_on_idle(int cpu, bool new_ilb)
 
 #else /* CONFIG_SCHED_WALT */
 
-static inline bool prefer_spread_on_idle(int cpu, bool new_ilb)
+static inline bool prefer_spread_on_idle(int cpu)
 {
 	return false;
 }

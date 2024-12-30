@@ -117,7 +117,7 @@ static inline pte_t __rste_to_pte(unsigned long rste)
 					     _PAGE_YOUNG);
 #ifdef CONFIG_MEM_SOFT_DIRTY
 		pte_val(pte) |= move_set_bit(rste, _SEGMENT_ENTRY_SOFT_DIRTY,
-					     _PAGE_SOFT_DIRTY);
+					     _PAGE_DIRTY);
 #endif
 		pte_val(pte) |= move_set_bit(rste, _SEGMENT_ENTRY_NOEXEC,
 					     _PAGE_NOEXEC);
@@ -146,7 +146,7 @@ static void clear_huge_pte_skeys(struct mm_struct *mm, unsigned long rste)
 	}
 
 	if (!test_and_set_bit(PG_arch_1, &page->flags))
-		__storage_key_init_range(paddr, paddr + size);
+		__storage_key_init_range(paddr, paddr + size - 1);
 }
 
 void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
@@ -159,13 +159,10 @@ void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
 		rste &= ~_SEGMENT_ENTRY_NOEXEC;
 
 	/* Set correct table type for 2G hugepages */
-	if ((pte_val(*ptep) & _REGION_ENTRY_TYPE_MASK) == _REGION_ENTRY_TYPE_R3) {
-		if (likely(pte_present(pte)))
-			rste |= _REGION3_ENTRY_LARGE;
-		rste |= _REGION_ENTRY_TYPE_R3;
-	} else if (likely(pte_present(pte)))
+	if ((pte_val(*ptep) & _REGION_ENTRY_TYPE_MASK) == _REGION_ENTRY_TYPE_R3)
+		rste |= _REGION_ENTRY_TYPE_R3 | _REGION3_ENTRY_LARGE;
+	else
 		rste |= _SEGMENT_ENTRY_LARGE;
-
 	clear_huge_pte_skeys(mm, rste);
 	pte_val(*ptep) = rste;
 }

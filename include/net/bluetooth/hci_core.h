@@ -34,9 +34,6 @@
 /* HCI priority */
 #define HCI_PRIO_MAX	7
 
-/* HCI maximum id value */
-#define HCI_MAX_ID 10000
-
 /* HCI Core structures */
 struct inquiry_data {
 	bdaddr_t	bdaddr;
@@ -529,7 +526,6 @@ struct hci_chan {
 	struct sk_buff_head data_q;
 	unsigned int	sent;
 	__u8		state;
-	bool		amp;
 };
 
 struct hci_conn_params {
@@ -659,6 +655,7 @@ void hci_inquiry_cache_flush(struct hci_dev *hdev);
 /* ----- HCI Connections ----- */
 enum {
 	HCI_CONN_AUTH_PEND,
+	HCI_CONN_REAUTH_PEND,
 	HCI_CONN_ENCRYPT_PEND,
 	HCI_CONN_RSWITCH_PEND,
 	HCI_CONN_MODE_CHANGE_PEND,
@@ -1044,7 +1041,6 @@ struct hci_dev *hci_alloc_dev(void);
 void hci_free_dev(struct hci_dev *hdev);
 int hci_register_dev(struct hci_dev *hdev);
 void hci_unregister_dev(struct hci_dev *hdev);
-void hci_cleanup_dev(struct hci_dev *hdev);
 int hci_suspend_dev(struct hci_dev *hdev);
 int hci_resume_dev(struct hci_dev *hdev);
 int hci_reset_dev(struct hci_dev *hdev);
@@ -1291,34 +1287,16 @@ static inline void hci_auth_cfm(struct hci_conn *conn, __u8 status)
 		conn->security_cfm_cb(conn, status);
 }
 
-static inline void hci_encrypt_cfm(struct hci_conn *conn, __u8 status)
+static inline void hci_encrypt_cfm(struct hci_conn *conn, __u8 status,
+								__u8 encrypt)
 {
 	struct hci_cb *cb;
-	__u8 encrypt;
 
-	if (conn->state == BT_CONFIG) {
-		if (!status)
-			conn->state = BT_CONNECTED;
+	if (conn->sec_level == BT_SECURITY_SDP)
+		conn->sec_level = BT_SECURITY_LOW;
 
-		hci_connect_cfm(conn, status);
-		hci_conn_drop(conn);
-		return;
-	}
-
-	if (!test_bit(HCI_CONN_ENCRYPT, &conn->flags))
-		encrypt = 0x00;
-	else if (test_bit(HCI_CONN_AES_CCM, &conn->flags))
-		encrypt = 0x02;
-	else
-		encrypt = 0x01;
-
-	if (!status) {
-		if (conn->sec_level == BT_SECURITY_SDP)
-			conn->sec_level = BT_SECURITY_LOW;
-
-		if (conn->pending_sec_level > conn->sec_level)
-			conn->sec_level = conn->pending_sec_level;
-	}
+	if (conn->pending_sec_level > conn->sec_level)
+		conn->sec_level = conn->pending_sec_level;
 
 	mutex_lock(&hci_cb_list_lock);
 	list_for_each_entry(cb, &hci_cb_list, list) {
@@ -1430,46 +1408,18 @@ static inline int hci_check_conn_params(u16 min, u16 max, u16 latency,
 {
 	u16 max_latency;
 
-	if (min > max) {
-		BT_WARN("min %d > max %d", min, max);
+	if (min > max || min < 6 || max > 3200)
 		return -EINVAL;
-	}
 
-	if (min < 6) {
-		BT_WARN("min %d < 6", min);
+	if (to_multiplier < 10 || to_multiplier > 3200)
 		return -EINVAL;
-	}
 
-	if (max > 3200) {
-		BT_WARN("max %d > 3200", max);
+	if (max >= to_multiplier * 8)
 		return -EINVAL;
-	}
-
-	if (to_multiplier < 10) {
-		BT_WARN("to_multiplier %d < 10", to_multiplier);
-		return -EINVAL;
-	}
-
-	if (to_multiplier > 3200) {
-		BT_WARN("to_multiplier %d > 3200", to_multiplier);
-		return -EINVAL;
-	}
-
-	if (max >= to_multiplier * 8) {
-		BT_WARN("max %d >= to_multiplier %d * 8", max, to_multiplier);
-		return -EINVAL;
-	}
 
 	max_latency = (to_multiplier * 4 / max) - 1;
-	if (latency > 499) {
-		BT_WARN("latency %d > 499", latency);
+	if (latency > 499 || latency > max_latency)
 		return -EINVAL;
-	}
-
-	if (latency > max_latency) {
-		BT_WARN("latency %d > max_latency %d", latency, max_latency);
-		return -EINVAL;
-	}
 
 	return 0;
 }

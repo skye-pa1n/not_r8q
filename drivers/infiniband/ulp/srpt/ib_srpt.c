@@ -82,16 +82,12 @@ module_param(srpt_srq_size, int, 0444);
 MODULE_PARM_DESC(srpt_srq_size,
 		 "Shared receive queue (SRQ) size.");
 
-static int srpt_set_u64_x(const char *buffer, const struct kernel_param *kp)
-{
-	return kstrtou64(buffer, 16, (u64 *)kp->arg);
-}
 static int srpt_get_u64_x(char *buffer, const struct kernel_param *kp)
 {
 	return sprintf(buffer, "0x%016llx", *(u64 *)kp->arg);
 }
-module_param_call(srpt_service_guid, srpt_set_u64_x, srpt_get_u64_x,
-		  &srpt_service_guid, 0444);
+module_param_call(srpt_service_guid, NULL, srpt_get_u64_x, &srpt_service_guid,
+		  0444);
 MODULE_PARM_DESC(srpt_service_guid,
 		 "Using this value for ioc_guid, id_ext, and cm_listen_id"
 		 " instead of using the node_guid of the first HCA.");
@@ -152,7 +148,7 @@ static void srpt_event_handler(struct ib_event_handler *handler,
 		return;
 
 	pr_debug("ASYNC event= %d on device= %s\n", event->event,
-		 dev_name(&sdev->device->dev));
+		 sdev->device->name);
 
 	switch (event->event) {
 	case IB_EVENT_PORT_ERR:
@@ -221,15 +217,12 @@ static const char *get_ch_state_name(enum rdma_ch_state s)
 /**
  * srpt_qp_event - QP event callback function
  * @event: Description of the event that occurred.
- * @ptr: SRPT RDMA channel.
+ * @ch: SRPT RDMA channel.
  */
-static void srpt_qp_event(struct ib_event *event, void *ptr)
+static void srpt_qp_event(struct ib_event *event, struct srpt_rdma_ch *ch)
 {
-	struct srpt_rdma_ch *ch = ptr;
-
-	pr_debug("QP event %d on ch=%p sess_name=%s-%d state=%s\n",
-		 event->event, ch, ch->sess_name, ch->qp->qp_num,
-		 get_ch_state_name(ch->state));
+	pr_debug("QP event %d on ch=%p sess_name=%s state=%d\n",
+		 event->event, ch, ch->sess_name, ch->state);
 
 	switch (event->event) {
 	case IB_EVENT_COMM_EST:
@@ -1768,7 +1761,8 @@ retry:
 	}
 
 	qp_init->qp_context = (void *)ch;
-	qp_init->event_handler = srpt_qp_event;
+	qp_init->event_handler
+		= (void(*)(struct ib_event *, void*))srpt_qp_event;
 	qp_init->send_cq = ch->cq;
 	qp_init->recv_cq = ch->cq;
 	qp_init->sq_sig_type = IB_SIGNAL_REQ_WR;
@@ -1969,10 +1963,9 @@ static void __srpt_close_all_ch(struct srpt_port *sport)
 	list_for_each_entry(nexus, &sport->nexus_list, entry) {
 		list_for_each_entry(ch, &nexus->ch_list, list) {
 			if (srpt_disconnect_ch(ch) >= 0)
-				pr_info("Closing channel %s-%d because target %s_%d has been disabled\n",
-					ch->sess_name, ch->qp->qp_num,
-					dev_name(&sport->sdev->device->dev),
-					sport->port);
+				pr_info("Closing channel %s because target %s_%d has been disabled\n",
+					ch->sess_name,
+					sport->sdev->device->name, sport->port);
 			srpt_close_ch(ch);
 		}
 	}
@@ -2166,7 +2159,7 @@ static int srpt_cm_req_recv(struct srpt_device *const sdev,
 	if (!sport->enabled) {
 		rej->reason = cpu_to_be32(SRP_LOGIN_REJ_INSUFFICIENT_RESOURCES);
 		pr_info("rejected SRP_LOGIN_REQ because target port %s_%d has not yet been enabled\n",
-			dev_name(&sport->sdev->device->dev), port_num);
+			sport->sdev->device->name, port_num);
 		goto reject;
 	}
 
@@ -2306,9 +2299,8 @@ static int srpt_cm_req_recv(struct srpt_device *const sdev,
 		rej->reason = cpu_to_be32(
 				SRP_LOGIN_REJ_INSUFFICIENT_RESOURCES);
 		pr_info("rejected SRP_LOGIN_REQ because target %s_%d is not enabled\n",
-			dev_name(&sdev->device->dev), port_num);
+			sdev->device->name, port_num);
 		mutex_unlock(&sport->mutex);
-		ret = -EINVAL;
 		goto reject;
 	}
 
@@ -2893,7 +2885,7 @@ static int srpt_release_sport(struct srpt_port *sport)
 	while (wait_event_timeout(sport->ch_releaseQ,
 				  srpt_ch_list_empty(sport), 5 * HZ) <= 0) {
 		pr_info("%s_%d: waiting for session unregistration ...\n",
-			dev_name(&sport->sdev->device->dev), sport->port);
+			sport->sdev->device->name, sport->port);
 		rcu_read_lock();
 		list_for_each_entry(nexus, &sport->nexus_list, entry) {
 			list_for_each_entry(ch, &nexus->ch_list, list) {
@@ -2983,7 +2975,7 @@ static int srpt_alloc_srq(struct srpt_device *sdev)
 	}
 
 	pr_debug("create SRQ #wr= %d max_allow=%d dev= %s\n", sdev->srq_size,
-		 sdev->device->attrs.max_srq_wr, dev_name(&device->dev));
+		 sdev->device->attrs.max_srq_wr, device->name);
 
 	sdev->ioctx_ring = (struct srpt_recv_ioctx **)
 		srpt_alloc_ioctx_ring(sdev, sdev->srq_size,
@@ -3016,8 +3008,8 @@ static int srpt_use_srq(struct srpt_device *sdev, bool use_srq)
 	} else if (use_srq && !sdev->srq) {
 		ret = srpt_alloc_srq(sdev);
 	}
-	pr_debug("%s(%s): use_srq = %d; ret = %d\n", __func__,
-		 dev_name(&device->dev), sdev->use_srq, ret);
+	pr_debug("%s(%s): use_srq = %d; ret = %d\n", __func__, device->name,
+		 sdev->use_srq, ret);
 	return ret;
 }
 
@@ -3103,7 +3095,7 @@ static void srpt_add_one(struct ib_device *device)
 
 		if (srpt_refresh_port(sport)) {
 			pr_err("MAD registration failed for %s-%d.\n",
-			       dev_name(&sdev->device->dev), i);
+			       sdev->device->name, i);
 			goto err_event;
 		}
 	}
@@ -3114,7 +3106,7 @@ static void srpt_add_one(struct ib_device *device)
 
 out:
 	ib_set_client_data(device, &srpt_client, sdev);
-	pr_debug("added %s.\n", dev_name(&device->dev));
+	pr_debug("added %s.\n", device->name);
 	return;
 
 err_event:
@@ -3129,7 +3121,7 @@ free_dev:
 	kfree(sdev);
 err:
 	sdev = NULL;
-	pr_info("%s(%s) failed.\n", __func__, dev_name(&device->dev));
+	pr_info("%s(%s) failed.\n", __func__, device->name);
 	goto out;
 }
 
@@ -3144,8 +3136,7 @@ static void srpt_remove_one(struct ib_device *device, void *client_data)
 	int i;
 
 	if (!sdev) {
-		pr_info("%s(%s): nothing to do.\n", __func__,
-			dev_name(&device->dev));
+		pr_info("%s(%s): nothing to do.\n", __func__, device->name);
 		return;
 	}
 

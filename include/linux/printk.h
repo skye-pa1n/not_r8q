@@ -9,7 +9,6 @@
 #include <linux/cache.h>
 
 extern const char linux_banner[];
-extern const char *linux_banner_ptr;
 extern const char linux_proc_banner[];
 
 #define PRINTK_MAX_SINGLE_HEADER_LEN 2
@@ -207,6 +206,7 @@ __printf(1, 2) void dump_stack_set_arch_desc(const char *fmt, ...);
 void dump_stack_print_info(const char *log_lvl);
 void show_regs_print_info(const char *log_lvl);
 extern asmlinkage void dump_stack(void) __cold;
+extern void printk_safe_init(void);
 extern void printk_safe_flush(void);
 extern void printk_safe_flush_on_panic(void);
 #else
@@ -270,6 +270,10 @@ static inline void show_regs_print_info(const char *log_lvl)
 }
 
 static inline asmlinkage void dump_stack(void)
+{
+}
+
+static inline void printk_safe_init(void)
 {
 }
 
@@ -522,25 +526,6 @@ static inline void print_hex_dump_bytes(const char *prefix_str, int prefix_type,
 static inline void print_hex_dump_debug(const char *prefix_str, int prefix_type,
 					int rowsize, int groupsize,
 					const void *buf, size_t len, bool ascii)
-{
-}
-#endif
-
-#ifdef CONFIG_PRINTK
-extern void __printk_safe_enter(void);
-extern void __printk_safe_exit(void);
-/*
- * The printk_deferred_enter/exit macros are available only as a hack for
- * some code paths that need to defer all printk console printing. Interrupts
- * must be disabled for the deferred duration.
- */
-#define printk_deferred_enter __printk_safe_enter
-#define printk_deferred_exit __printk_safe_exit
-#else
-static inline void printk_deferred_enter(void)
-{
-}
-static inline void printk_deferred_exit(void)
 {
 }
 #endif

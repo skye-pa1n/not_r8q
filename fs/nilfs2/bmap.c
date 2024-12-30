@@ -67,28 +67,20 @@ int nilfs_bmap_lookup_at_level(struct nilfs_bmap *bmap, __u64 key, int level,
 
 	down_read(&bmap->b_sem);
 	ret = bmap->b_ops->bop_lookup(bmap, key, level, ptrp);
-	if (ret < 0)
+	if (ret < 0) {
+		ret = nilfs_bmap_convert_error(bmap, __func__, ret);
 		goto out;
-
+	}
 	if (NILFS_BMAP_USE_VBN(bmap)) {
 		ret = nilfs_dat_translate(nilfs_bmap_get_dat(bmap), *ptrp,
 					  &blocknr);
 		if (!ret)
 			*ptrp = blocknr;
-		else if (ret == -ENOENT) {
-			/*
-			 * If there was no valid entry in DAT for the block
-			 * address obtained by b_ops->bop_lookup, then pass
-			 * internal code -EINVAL to nilfs_bmap_convert_error
-			 * to treat it as metadata corruption.
-			 */
-			ret = -EINVAL;
-		}
 	}
 
  out:
 	up_read(&bmap->b_sem);
-	return nilfs_bmap_convert_error(bmap, __func__, ret);
+	return ret;
 }
 
 int nilfs_bmap_lookup_contig(struct nilfs_bmap *bmap, __u64 key, __u64 *ptrp,

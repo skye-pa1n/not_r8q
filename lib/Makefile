@@ -29,9 +29,9 @@ CFLAGS_string.o := $(call cc-option, -fno-stack-protector)
 endif
 
 lib-y := ctype.o string.o vsprintf.o cmdline.o \
-	 rbtree.o radix-tree.o sradix-tree.o timerqueue.o\
+	 rbtree.o radix-tree.o timerqueue.o\
 	 idr.o int_sqrt.o extable.o \
-	 sha1.o irq_regs.o argv_split.o \
+	 sha1.o chacha.o irq_regs.o argv_split.o \
 	 flex_proportions.o ratelimit.o show_mem.o \
 	 is_single_threaded.o plist.o decompress.o kobject_uevent.o \
 	 earlycpio.o seq_buf.o siphash.o dec_and_lock.o \
@@ -97,8 +97,6 @@ endif
 obj-$(CONFIG_DEBUG_INFO_REDUCED) += debug_info.o
 CFLAGS_debug_info.o += $(call cc-option, -femit-struct-debug-detailed=any)
 
-obj-y += crypto/
-
 obj-$(CONFIG_GENERIC_IOMAP) += iomap.o
 obj-$(CONFIG_GENERIC_PCI_IOMAP) += pci_iomap.o
 obj-$(CONFIG_HAS_IOMEM) += iomap_copy.o devres.o
@@ -143,8 +141,6 @@ obj-$(CONFIG_LZO_DECOMPRESS) += lzo/
 obj-$(CONFIG_LZ4_COMPRESS) += lz4/
 obj-$(CONFIG_LZ4HC_COMPRESS) += lz4/
 obj-$(CONFIG_LZ4_DECOMPRESS) += lz4/
-obj-$(CONFIG_LZ4KD_COMPRESS) += lz4kd/
-obj-$(CONFIG_LZ4KD_DECOMPRESS) += lz4kd/
 obj-$(CONFIG_ZSTD_COMPRESS) += zstd/
 obj-$(CONFIG_ZSTD_DECOMPRESS) += zstd/
 obj-$(CONFIG_XZ_DEC) += xz/
@@ -204,7 +200,6 @@ obj-$(CONFIG_MPILIB) += mpi/
 obj-$(CONFIG_SIGNATURE) += digsig.o
 
 lib-$(CONFIG_CLZ_TAB) += clz_tab.o
-lib-$(CONFIG_LIB_MEMNEQ) += memneq.o
 
 obj-$(CONFIG_DDR) += jedec_ddr_data.o
 
@@ -280,10 +275,9 @@ obj-$(CONFIG_UCS2_STRING) += ucs2_string.o
 obj-$(CONFIG_UBSAN) += ubsan.o
 
 UBSAN_SANITIZE_ubsan.o := n
-KASAN_SANITIZE_ubsan.o := n
-CFLAGS_ubsan.o := $(call cc-option, -fno-stack-protector) $(DISABLE_STACKLEAK_PLUGIN)
 
 obj-$(CONFIG_SBITMAP) += sbitmap.o
+obj-$(CONFIG_FFSI) += ffsi.o
 obj-$(CONFIG_PARMAN) += parman.o
 
 # GCC library routines

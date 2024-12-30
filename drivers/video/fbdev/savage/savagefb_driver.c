@@ -869,9 +869,6 @@ static int savagefb_check_var(struct fb_var_screeninfo   *var,
 
 	DBG("savagefb_check_var");
 
-	if (!var->pixclock)
-		return -EINVAL;
-
 	var->transp.offset = 0;
 	var->transp.length = 0;
 	switch (var->bits_per_pixel) {
@@ -2271,10 +2268,7 @@ static int savagefb_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	if (info->var.xres_virtual > 0x1000)
 		info->var.xres_virtual = 0x1000;
 #endif
-	err = savagefb_check_var(&info->var, info);
-	if (err)
-		goto failed;
-
+	savagefb_check_var(&info->var, info);
 	savagefb_set_fix(info);
 
 	/*

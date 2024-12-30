@@ -14,7 +14,7 @@
 #include "walt.h"
 
 int sched_rr_timeslice = RR_TIMESLICE;
-int sysctl_sched_rr_timeslice = (MSEC_PER_SEC * RR_TIMESLICE) / HZ;
+int sysctl_sched_rr_timeslice = (MSEC_PER_SEC / HZ) * RR_TIMESLICE;
 
 static int do_sched_rt_period_timer(struct rt_bandwidth *rt_b, int overrun);
 
@@ -56,8 +56,11 @@ void init_rt_bandwidth(struct rt_bandwidth *rt_b, u64 period, u64 runtime)
 	rt_b->rt_period_timer.function = sched_rt_period_timer;
 }
 
-static inline void do_start_rt_bandwidth(struct rt_bandwidth *rt_b)
+static void start_rt_bandwidth(struct rt_bandwidth *rt_b)
 {
+	if (!rt_bandwidth_enabled() || rt_b->rt_runtime == RUNTIME_INF)
+		return;
+
 	raw_spin_lock(&rt_b->rt_runtime_lock);
 	if (!rt_b->rt_period_active) {
 		rt_b->rt_period_active = 1;
@@ -73,14 +76,6 @@ static inline void do_start_rt_bandwidth(struct rt_bandwidth *rt_b)
 		hrtimer_start_expires(&rt_b->rt_period_timer, HRTIMER_MODE_ABS_PINNED);
 	}
 	raw_spin_unlock(&rt_b->rt_runtime_lock);
-}
-
-static void start_rt_bandwidth(struct rt_bandwidth *rt_b)
-{
-	if (!rt_bandwidth_enabled() || rt_b->rt_runtime == RUNTIME_INF)
-		return;
-
-	do_start_rt_bandwidth(rt_b);
 }
 
 void init_rt_rq(struct rt_rq *rt_rq)
@@ -444,7 +439,7 @@ static inline void rt_queue_push_tasks(struct rq *rq)
 #endif /* CONFIG_SMP */
 
 static void enqueue_top_rt_rq(struct rt_rq *rt_rq);
-static void dequeue_top_rt_rq(struct rt_rq *rt_rq, unsigned int count);
+static void dequeue_top_rt_rq(struct rt_rq *rt_rq);
 
 static inline int on_rt_rq(struct sched_rt_entity *rt_se)
 {
@@ -526,7 +521,7 @@ static void sched_rt_rq_dequeue(struct rt_rq *rt_rq)
 	rt_se = rt_rq->tg->rt_se[cpu];
 
 	if (!rt_se) {
-		dequeue_top_rt_rq(rt_rq, rt_rq->rt_nr_running);
+		dequeue_top_rt_rq(rt_rq);
 		/* Kick cpufreq (see the comment in kernel/sched/sched.h). */
 		cpufreq_update_util(rq_of_rt_rq(rt_rq), 0);
 	}
@@ -612,7 +607,7 @@ static inline void sched_rt_rq_enqueue(struct rt_rq *rt_rq)
 
 static inline void sched_rt_rq_dequeue(struct rt_rq *rt_rq)
 {
-	dequeue_top_rt_rq(rt_rq, rt_rq->rt_nr_running);
+	dequeue_top_rt_rq(rt_rq);
 }
 
 static inline int rt_rq_throttled(struct rt_rq *rt_rq)
@@ -1062,23 +1057,19 @@ static void update_curr_rt(struct rq *rq)
 
 	for_each_sched_rt_entity(rt_se) {
 		struct rt_rq *rt_rq = rt_rq_of_se(rt_se);
-		int exceeded;
 
 		if (sched_rt_runtime(rt_rq) != RUNTIME_INF) {
 			raw_spin_lock(&rt_rq->rt_runtime_lock);
 			rt_rq->rt_time += delta_exec;
-			exceeded = sched_rt_runtime_exceeded(rt_rq);
-			if (exceeded)
+			if (sched_rt_runtime_exceeded(rt_rq))
 				resched_curr(rq);
 			raw_spin_unlock(&rt_rq->rt_runtime_lock);
-			if (exceeded)
-				do_start_rt_bandwidth(sched_rt_bandwidth(rt_rq));
 		}
 	}
 }
 
 static void
-dequeue_top_rt_rq(struct rt_rq *rt_rq, unsigned int count)
+dequeue_top_rt_rq(struct rt_rq *rt_rq)
 {
 	struct rq *rq = rq_of_rt_rq(rt_rq);
 
@@ -1089,7 +1080,7 @@ dequeue_top_rt_rq(struct rt_rq *rt_rq, unsigned int count)
 
 	BUG_ON(!rq->nr_running);
 
-	sub_nr_running(rq, count);
+	sub_nr_running(rq, rt_rq->rt_nr_running);
 	rt_rq->rt_queued = 0;
 
 }
@@ -1368,21 +1359,18 @@ static void __dequeue_rt_entity(struct sched_rt_entity *rt_se, unsigned int flag
 static void dequeue_rt_stack(struct sched_rt_entity *rt_se, unsigned int flags)
 {
 	struct sched_rt_entity *back = NULL;
-	unsigned int rt_nr_running;
 
 	for_each_sched_rt_entity(rt_se) {
 		rt_se->back = back;
 		back = rt_se;
 	}
 
-	rt_nr_running = rt_rq_of_se(back)->rt_nr_running;
+	dequeue_top_rt_rq(rt_rq_of_se(back));
 
 	for (rt_se = back; rt_se; rt_se = rt_se->back) {
 		if (on_rt_rq(rt_se))
 			__dequeue_rt_entity(rt_se, flags);
 	}
-
-	dequeue_top_rt_rq(rt_rq_of_se(back), rt_nr_running);
 }
 
 static void enqueue_rt_entity(struct sched_rt_entity *rt_se, unsigned int flags)
@@ -1640,8 +1628,6 @@ static struct sched_rt_entity *pick_next_rt_entity(struct rq *rq,
 	BUG_ON(idx >= MAX_RT_PRIO);
 
 	queue = array->queue + idx;
-	if (SCHED_WARN_ON(list_empty(queue)))
-		return NULL;
 	next = list_entry(queue->next, struct sched_rt_entity, run_list);
 
 	return next;
@@ -1655,8 +1641,7 @@ static struct task_struct *_pick_next_task_rt(struct rq *rq)
 
 	do {
 		rt_se = pick_next_rt_entity(rq, rt_rq);
-		if (unlikely(!rt_se))
-			return NULL;
+		BUG_ON(!rt_se);
 		rt_rq = group_rt_rq(rt_se);
 	} while (rt_rq);
 
@@ -1777,6 +1762,9 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	struct sched_domain *sd;
 	struct sched_group *sg;
 	struct cpumask *lowest_mask = this_cpu_cpumask_var_ptr(local_cpu_mask);
+#ifdef CONFIG_PERF_MGR
+	struct cpumask tmp_mask;
+#endif
 	int cpu, best_cpu = -1;
 	unsigned long best_capacity = ULONG_MAX;
 	unsigned long util, best_cpu_util = ULONG_MAX;
@@ -1786,6 +1774,9 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	int best_cpu_idle_idx = INT_MAX;
 	int cpu_idle_idx = -1;
 	bool boost_on_big = rt_boost_on_big();
+#ifdef CONFIG_PERF_MGR
+	boost_on_big = boost_on_big || task->drawing_mig_boost;
+#endif
 
 	rcu_read_lock();
 
@@ -1807,6 +1798,12 @@ retry:
 			if (is_min_capacity_cpu(fcpu)){
 				continue;
 			}else{
+#ifdef CONFIG_PERF_MGR
+				if (task->drawing_mig_boost){
+					cpumask_or(&tmp_mask, &tmp_mask, sched_group_span(sg));
+					lowest_mask = &tmp_mask;
+				}
+#endif
 			}
 		} else {
 			if (capacity_orig > best_capacity)
@@ -1824,8 +1821,19 @@ retry:
 				continue;
 
 			util = cpu_util(cpu);
+#ifdef CONFIG_PERF_MGR
+			if (task->drawing_mig_boost){
+				if (capacity_orig_of(cpu) < util + tutil){
+					continue;
+				}
+			}else{
+				if (__cpu_overutilized(cpu, tutil))
+					continue;
+			}
+#else
 			if (__cpu_overutilized(cpu, tutil))
 				continue;
+#endif
 
 			/* Find the least loaded CPU */
 			if (util > best_cpu_util)
@@ -1908,8 +1916,13 @@ static int find_lowest_rq(struct task_struct *task)
 	 * We prioritize the last CPU that the task executed on since
 	 * it is most likely cache-hot in that location.
 	 */
+#ifdef CONFIG_PERF_MGR
+	if ( task->drawing_mig_boost || cpumask_test_cpu(cpu, lowest_mask))
+		return cpu;
+#else
 	if (cpumask_test_cpu(cpu, lowest_mask))
 		return cpu;
+#endif
 	/*
 	 * Otherwise, we consult the sched_domains span maps to figure
 	 * out which CPU is logically closest to our hot cache data.
@@ -1991,6 +2004,10 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
 			 * Also make sure that it wasn't scheduled on its rq.
 			 */
 			cpu_allow_check = cpumask_test_cpu(lowest_rq->cpu, &task->cpus_allowed);
+#ifdef CONFIG_PERF_MGR
+			if(task->drawing_mig_boost)
+				cpu_allow_check = cpu_active(cpu);
+#endif
 			if (unlikely(task_rq(task) != rq ||
 				     !cpu_allow_check ||
 				     task_running(rq, task) ||
@@ -2899,6 +2916,9 @@ static int sched_rt_global_constraints(void)
 
 static int sched_rt_global_validate(void)
 {
+	if (sysctl_sched_rt_period <= 0)
+		return -EINVAL;
+
 	if ((sysctl_sched_rt_runtime != RUNTIME_INF) &&
 		(sysctl_sched_rt_runtime > sysctl_sched_rt_period))
 		return -EINVAL;
@@ -2908,12 +2928,8 @@ static int sched_rt_global_validate(void)
 
 static void sched_rt_do_global(void)
 {
-	unsigned long flags;
-
-	raw_spin_lock_irqsave(&def_rt_bandwidth.rt_runtime_lock, flags);
 	def_rt_bandwidth.rt_runtime = global_rt_runtime();
 	def_rt_bandwidth.rt_period = ns_to_ktime(global_rt_period());
-	raw_spin_unlock_irqrestore(&def_rt_bandwidth.rt_runtime_lock, flags);
 }
 
 int sched_rt_handler(struct ctl_table *table, int write,
@@ -2928,7 +2944,7 @@ int sched_rt_handler(struct ctl_table *table, int write,
 	old_period = sysctl_sched_rt_period;
 	old_runtime = sysctl_sched_rt_runtime;
 
-	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
 
 	if (!ret && write) {
 		ret = sched_rt_global_validate();
@@ -2973,9 +2989,6 @@ int sched_rr_handler(struct ctl_table *table, int write,
 		sched_rr_timeslice =
 			sysctl_sched_rr_timeslice <= 0 ? RR_TIMESLICE :
 			msecs_to_jiffies(sysctl_sched_rr_timeslice);
-
-		if (sysctl_sched_rr_timeslice <= 0)
-			sysctl_sched_rr_timeslice = jiffies_to_msecs(RR_TIMESLICE);
 	}
 	mutex_unlock(&mutex);
 

@@ -537,17 +537,15 @@ static int load_requested_vpu(struct mtk_vpu *vpu,
 int vpu_load_firmware(struct platform_device *pdev)
 {
 	struct mtk_vpu *vpu;
-	struct device *dev;
+	struct device *dev = &pdev->dev;
 	struct vpu_run *run;
 	const struct firmware *vpu_fw = NULL;
 	int ret;
 
 	if (!pdev) {
-		pr_err("VPU platform device is invalid\n");
+		dev_err(dev, "VPU platform device is invalid\n");
 		return -EINVAL;
 	}
-
-	dev = &pdev->dev;
 
 	vpu = platform_get_drvdata(pdev);
 	run = &vpu->run;
@@ -820,8 +818,7 @@ static int mtk_vpu_probe(struct platform_device *pdev)
 	vpu->wdt.wq = create_singlethread_workqueue("vpu_wdt");
 	if (!vpu->wdt.wq) {
 		dev_err(dev, "initialize wdt workqueue failed\n");
-		ret = -ENOMEM;
-		goto clk_unprepare;
+		return -ENOMEM;
 	}
 	INIT_WORK(&vpu->wdt.ws, vpu_wdt_reset_func);
 	mutex_init(&vpu->vpu_mutex);
@@ -920,8 +917,6 @@ disable_vpu_clk:
 	vpu_clock_disable(vpu);
 workqueue_destroy:
 	destroy_workqueue(vpu->wdt.wq);
-clk_unprepare:
-	clk_unprepare(vpu->clk);
 
 	return ret;
 }

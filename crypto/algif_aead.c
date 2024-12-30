@@ -82,7 +82,7 @@ static int crypto_aead_copy_sgl(struct crypto_sync_skcipher *null_tfm,
 	SYNC_SKCIPHER_REQUEST_ON_STACK(skreq, null_tfm);
 
 	skcipher_request_set_sync_tfm(skreq, null_tfm);
-	skcipher_request_set_callback(skreq, CRYPTO_TFM_REQ_MAY_SLEEP,
+	skcipher_request_set_callback(skreq, CRYPTO_TFM_REQ_MAY_BACKLOG,
 				      NULL, NULL);
 	skcipher_request_set_crypt(skreq, src, dst, len, NULL);
 
@@ -110,8 +110,8 @@ static int _aead_recvmsg(struct socket *sock, struct msghdr *msg,
 	size_t usedpages = 0;		/* [in]  RX bufs to be used from user */
 	size_t processed = 0;		/* [in]  TX bufs to be consumed */
 
-	if (!ctx->init || ctx->more) {
-		err = af_alg_wait_for_data(sk, flags, 0);
+	if (!ctx->used) {
+		err = af_alg_wait_for_data(sk, flags);
 		if (err)
 			return err;
 	}
@@ -295,20 +295,19 @@ static int _aead_recvmsg(struct socket *sock, struct msghdr *msg,
 		areq->outlen = outlen;
 
 		aead_request_set_callback(&areq->cra_u.aead_req,
-					  CRYPTO_TFM_REQ_MAY_SLEEP,
+					  CRYPTO_TFM_REQ_MAY_BACKLOG,
 					  af_alg_async_cb, areq);
 		err = ctx->enc ? crypto_aead_encrypt(&areq->cra_u.aead_req) :
 				 crypto_aead_decrypt(&areq->cra_u.aead_req);
 
 		/* AIO operation in progress */
-		if (err == -EINPROGRESS)
+		if (err == -EINPROGRESS || err == -EBUSY)
 			return -EIOCBQUEUED;
 
 		sock_put(sk);
 	} else {
 		/* Synchronous operation */
 		aead_request_set_callback(&areq->cra_u.aead_req,
-					  CRYPTO_TFM_REQ_MAY_SLEEP |
 					  CRYPTO_TFM_REQ_MAY_BACKLOG,
 					  crypto_req_done, &ctx->wait);
 		err = crypto_wait_req(ctx->enc ?
@@ -389,7 +388,7 @@ static int aead_check_key(struct socket *sock)
 	struct alg_sock *ask = alg_sk(sk);
 
 	lock_sock(sk);
-	if (!atomic_read(&ask->nokey_refcnt))
+	if (ask->refcnt)
 		goto unlock_child;
 
 	psk = ask->parent;
@@ -401,8 +400,11 @@ static int aead_check_key(struct socket *sock)
 	if (crypto_aead_get_flags(tfm->aead) & CRYPTO_TFM_NEED_KEY)
 		goto unlock;
 
-	atomic_dec(&pask->nokey_refcnt);
-	atomic_set(&ask->nokey_refcnt, 0);
+	if (!pask->refcnt++)
+		sock_hold(psk);
+
+	ask->refcnt = 1;
+	sock_put(psk);
 
 	err = 0;
 
@@ -563,6 +565,12 @@ static int aead_accept_parent_nokey(void *private, struct sock *sk)
 
 	INIT_LIST_HEAD(&ctx->tsgl_list);
 	ctx->len = len;
+	ctx->used = 0;
+	atomic_set(&ctx->rcvused, 0);
+	ctx->more = 0;
+	ctx->merge = 0;
+	ctx->enc = 0;
+	ctx->aead_assoclen = 0;
 	crypto_init_wait(&ctx->wait);
 
 	ask->private = ctx;

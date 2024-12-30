@@ -138,14 +138,12 @@ static void pcrypt_aead_enc(struct padata_priv *padata)
 {
 	struct pcrypt_request *preq = pcrypt_padata_request(padata);
 	struct aead_request *req = pcrypt_request_ctx(preq);
-	int ret;
 
-	ret = crypto_aead_encrypt(req);
+	padata->info = crypto_aead_encrypt(req);
 
-	if (ret == -EINPROGRESS)
+	if (padata->info == -EINPROGRESS)
 		return;
 
-	padata->info = ret;
 	padata_do_serial(padata);
 }
 
@@ -174,10 +172,6 @@ static int pcrypt_aead_encrypt(struct aead_request *req)
 	err = pcrypt_do_parallel(padata, &ctx->cb_cpu, &pencrypt);
 	if (!err)
 		return -EINPROGRESS;
-	if (err == -EBUSY) {
-		/* try non-parallel mode */
-		return crypto_aead_encrypt(creq);
-	}
 
 	return err;
 }
@@ -186,14 +180,12 @@ static void pcrypt_aead_dec(struct padata_priv *padata)
 {
 	struct pcrypt_request *preq = pcrypt_padata_request(padata);
 	struct aead_request *req = pcrypt_request_ctx(preq);
-	int ret;
 
-	ret = crypto_aead_decrypt(req);
+	padata->info = crypto_aead_decrypt(req);
 
-	if (ret == -EINPROGRESS)
+	if (padata->info == -EINPROGRESS)
 		return;
 
-	padata->info = ret;
 	padata_do_serial(padata);
 }
 
@@ -222,10 +214,6 @@ static int pcrypt_aead_decrypt(struct aead_request *req)
 	err = pcrypt_do_parallel(padata, &ctx->cb_cpu, &pdecrypt);
 	if (!err)
 		return -EINPROGRESS;
-	if (err == -EBUSY) {
-		/* try non-parallel mode */
-		return crypto_aead_decrypt(creq);
-	}
 
 	return err;
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2019, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/io.h>
@@ -269,7 +269,7 @@ err:
 	return rc;
 }
 
-int hfi_cmd_ubwc_config(uint32_t *ubwc_cfg, bool disable_ubwc_comp)
+int hfi_cmd_ubwc_config(uint32_t *ubwc_cfg)
 {
 	uint8_t *prop;
 	struct hfi_cmd_prop *dbg_prop;
@@ -292,11 +292,6 @@ int hfi_cmd_ubwc_config(uint32_t *ubwc_cfg, bool disable_ubwc_comp)
 	dbg_prop->num_prop = 1;
 	dbg_prop->prop_data[0] = HFI_PROP_SYS_UBWC_CFG;
 	dbg_prop->prop_data[1] = ubwc_cfg[0];
-	if (disable_ubwc_comp) {
-		ubwc_cfg[1] &= ~CAM_ICP_UBWC_COMP_EN;
-		CAM_DBG(CAM_ICP, "UBWC comp force disable, val= 0x%x",
-			ubwc_cfg[1]);
-	}
 	dbg_prop->prop_data[2] = ubwc_cfg[1];
 
 	hfi_write_cmd(prop);
@@ -425,7 +420,14 @@ int hfi_set_fw_dump_level(uint32_t lvl)
 	fw_dump_level_switch_prop->pkt_type = HFI_CMD_SYS_SET_PROPERTY;
 	fw_dump_level_switch_prop->num_prop = 1;
 	fw_dump_level_switch_prop->prop_data[0] = HFI_PROP_SYS_FW_DUMP_CFG;
+#if 1	// forcibly set fw_dump_level for smmu icp fault debuging
+	if (lvl == HFI_FW_DUMP_ALWAYS)
+		fw_dump_level_switch_prop->prop_data[1] = lvl;
+	else
+		fw_dump_level_switch_prop->prop_data[1] = HFI_FW_DUMP_ON_FAILURE;
+#else	
 	fw_dump_level_switch_prop->prop_data[1] = lvl;
+#endif
 
 	CAM_DBG(CAM_HFI, "prop->size = %d\n"
 			 "prop->pkt_type = %d\n"
@@ -674,15 +676,6 @@ int cam_hfi_resume(struct hfi_mem_info *hfi_mem,
 	cam_io_w_mb((uint32_t)hfi_mem->io_mem.len,
 		icp_base + HFI_REG_IO_REGION_SIZE);
 
-	cam_io_w_mb((uint32_t)hfi_mem->io_mem2.iova,
-		icp_base + HFI_REG_IO2_REGION_IOVA);
-	cam_io_w_mb((uint32_t)hfi_mem->io_mem2.len,
-		icp_base + HFI_REG_IO2_REGION_SIZE);
-
-	CAM_INFO(CAM_HFI, "Resume IO1 : [0x%x 0x%x] IO2 [0x%x 0x%x]",
-		hfi_mem->io_mem.iova, hfi_mem->io_mem.len,
-		hfi_mem->io_mem2.iova, hfi_mem->io_mem2.len);
-
 	return rc;
 }
 
@@ -873,14 +866,6 @@ int cam_hfi_init(uint8_t event_driven_mode, struct hfi_mem_info *hfi_mem,
 		icp_base + HFI_REG_IO_REGION_IOVA);
 	cam_io_w_mb((uint32_t)hfi_mem->io_mem.len,
 		icp_base + HFI_REG_IO_REGION_SIZE);
-	cam_io_w_mb((uint32_t)hfi_mem->io_mem2.iova,
-		icp_base + HFI_REG_IO2_REGION_IOVA);
-	cam_io_w_mb((uint32_t)hfi_mem->io_mem2.len,
-		icp_base + HFI_REG_IO2_REGION_SIZE);
-
-	CAM_INFO(CAM_HFI, "Init IO1 : [0x%x 0x%x] IO2 [0x%x 0x%x]",
-		hfi_mem->io_mem.iova, hfi_mem->io_mem.len,
-		hfi_mem->io_mem2.iova, hfi_mem->io_mem2.len);
 
 	hw_version = cam_io_r(icp_base + HFI_REG_A5_HW_VERSION);
 

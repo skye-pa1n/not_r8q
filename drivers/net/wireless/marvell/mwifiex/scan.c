@@ -1895,7 +1895,7 @@ mwifiex_parse_single_response_buf(struct mwifiex_private *priv, u8 **bss_info,
 					    chan, CFG80211_BSS_FTYPE_UNKNOWN,
 					    bssid, timestamp,
 					    cap_info_bitmap, beacon_period,
-					    ie_buf, ie_len, rssi, GFP_ATOMIC);
+					    ie_buf, ie_len, rssi, GFP_KERNEL);
 			if (bss) {
 				bss_priv = (struct mwifiex_bss_priv *)bss->priv;
 				bss_priv->band = band;
@@ -2208,9 +2208,9 @@ int mwifiex_ret_802_11_scan(struct mwifiex_private *priv,
 
 	if (nd_config) {
 		adapter->nd_info =
-			kzalloc(struct_size(adapter->nd_info, matches,
-					    scan_rsp->number_of_sets),
-				GFP_ATOMIC);
+			kzalloc(sizeof(struct cfg80211_wowlan_nd_match) +
+				sizeof(struct cfg80211_wowlan_nd_match *) *
+				scan_rsp->number_of_sets, GFP_ATOMIC);
 
 		if (adapter->nd_info)
 			adapter->nd_info->n_matches = scan_rsp->number_of_sets;

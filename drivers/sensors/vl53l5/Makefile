@@ -114,7 +114,6 @@ ccflags-y += -DVL53L5_INTERRUPT
 endif
 
 ifeq "$(OFFSET_CAL_ENABLE)" "TRUE"
-  $(warning OFFSET_CAL_ENABLE=$(OFFSET_CAL_ENABLE))
   ccflags-y += -DVL53L5_OFFSET_CAL
 endif
 
@@ -123,7 +122,6 @@ ccflags-y += -DVL53L5_WORKER
 endif
 
 ifeq "$(BUILD_TYPE)" "DEBUG"
-  $(warning BUILD_TYPE=$(BUILD_TYPE))
   ccflags-y += -DDEBUG
 endif
 
@@ -162,13 +160,11 @@ BARE_DRIVER_OBJS = \
 SIMULATION_OBJS =	simulation/wrapper/vl53l5_api.o
 
 ifeq "$(RANGE_SERVICING)" "INTERRUPT"
-  $(warning RANGE_SERVICING=$(RANGE_SERVICING))
   ccflags-y	+= -DVL53L5_INTERRUPT
   KERNEL_DRIVER_OBJS += src/vl53l5_k_interrupt.o
 endif
 
 ifeq "$(RANGE_SERVICING)" "WORKER"
-  $(warning RANGE_SERVICING=$(RANGE_SERVICING))
   ccflags-y	+= -DVL53L5_WORKER
   KERNEL_DRIVER_OBJS += src/vl53l5_k_work_handler.o
 endif
@@ -178,20 +174,16 @@ ifeq "$(LOG_ENABLE)" "TRUE"
 endif
 
 ifeq "$(TCDM_DUMP_ENABLE)" "TRUE"
-  $(warning TCDM_DUMP_ENABLE=$(TCDM_DUMP_ENABLE))
   ccflags-y += -DVL53L5_TCDM_DUMP
   BARE_DRIVER_OBJS += bare_driver/common/src/vl53l5_tcdm_dump.o
 endif
 
 ifeq "$(LEGACY_CODE)" "TRUE"
-  $(warning LEGACY_CODE=$(LEGACY_CODE))
   ccflags-y += -DSTM_VL53L5_SUPPORT_LEGACY_CODE
 endif
 
 ifeq "$(TEST_ENABLE)" "TRUE"
-  $(warning TEST_ENABLE=$(TEST_ENABLE))
   ccflags-y += -DVL53L5_TEST_ENABLE
-
 endif
 
 MODULE := vl53l5

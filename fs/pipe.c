@@ -29,20 +29,7 @@
 
 #include "internal.h"
 
-/*
- * New pipe buffers will be restricted to this size while the user is exceeding
- * their pipe buffer quota. The general pipe use case needs at least two
- * buffers: one for data yet to be read, and one for new data. If this is less
- * than two, then a write to a non-empty pipe may block even if the pipe is not
- * full. This can occur with GNU make jobserver or similar uses of pipes as
- * semaphores: multiple processes may be waiting to write tokens back to the
- * pipe before reading tokens: https://lore.kernel.org/lkml/1628086770.5rn8p04n6j.none@localhost/.
- *
- * Users can reduce their pipe buffers with F_SETPIPE_SZ below this at their
- * own risk, namely: pipe writes to non-full pipes may block until the pipe is
- * emptied.
- */
-#define PIPE_MIN_DEF_BUFFERS 2
+#include <linux/bug.h>
 
 /*
  * The max size that a non-root user is allowed to grow the pipe. Can
@@ -669,8 +656,8 @@ struct pipe_inode_info *alloc_pipe_info(void)
 	user_bufs = account_pipe_buffers(user, 0, pipe_bufs);
 
 	if (too_many_pipe_buffers_soft(user_bufs) && is_unprivileged_user()) {
-		user_bufs = account_pipe_buffers(user, pipe_bufs, PIPE_MIN_DEF_BUFFERS);
-		pipe_bufs = PIPE_MIN_DEF_BUFFERS;
+		user_bufs = account_pipe_buffers(user, pipe_bufs, 1);
+		pipe_bufs = 1;
 	}
 
 	if (too_many_pipe_buffers_hard(user_bufs) && is_unprivileged_user())
@@ -1075,8 +1062,11 @@ static long pipe_set_size(struct pipe_inode_info *pipe, unsigned long arg)
 	 * if the user is currently over a limit.
 	 */
 	if (nr_pages > pipe->buffers &&
-			size > pipe_max_size && !capable(CAP_SYS_RESOURCE))
+			size > pipe_max_size && !capable(CAP_SYS_RESOURCE)) {
+		pr_err("%s:%d nr_pages: %u, buffers: %u, size: %u, pipe_max_size: %u\n"
+			, __func__, __LINE__, nr_pages, pipe->buffers, size, pipe_max_size);
 		return -EPERM;
+	}
 
 	user_bufs = account_pipe_buffers(pipe->user, pipe->buffers, nr_pages);
 
@@ -1084,6 +1074,8 @@ static long pipe_set_size(struct pipe_inode_info *pipe, unsigned long arg)
 			(too_many_pipe_buffers_hard(user_bufs) ||
 			 too_many_pipe_buffers_soft(user_bufs)) &&
 			is_unprivileged_user()) {
+		pr_err("%s:%d nr_pages: %u, buffers: %u, size: %u, pipe_max_size: %u\n"
+			, __func__, __LINE__, nr_pages, pipe->buffers, size, pipe_max_size);
 		ret = -EPERM;
 		goto out_revert_acct;
 	}

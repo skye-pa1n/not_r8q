@@ -4,8 +4,8 @@
 
 struct nft_masq {
 	u32			flags;
-	u8			sreg_proto_min;
-	u8			sreg_proto_max;
+	enum nft_registers      sreg_proto_min:8;
+	enum nft_registers      sreg_proto_max:8;
 };
 
 extern const struct nla_policy nft_masq_policy[];

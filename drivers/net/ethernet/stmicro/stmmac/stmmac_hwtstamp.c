@@ -36,16 +36,12 @@ static void config_sub_second_increment(void __iomem *ioaddr,
 	unsigned long data;
 	u32 reg_value;
 
-	/* For GMAC3.x, 4.x versions, in "fine adjustement mode" set sub-second
-	 * increment to twice the number of nanoseconds of a clock cycle.
-	 * The calculation of the default_addend value by the caller will set it
-	 * to mid-range = 2^31 when the remainder of this division is zero,
-	 * which will make the accumulator overflow once every 2 ptp_clock
-	 * cycles, adding twice the number of nanoseconds of a clock cycle :
-	 * 2000000000ULL / ptp_clock.
+	/* For GMAC3.x, 4.x versions, convert the ptp_clock to nano second
+	 *	formula = (1/ptp_clock) * 1000000000
+	 * where ptp_clock is 50MHz if fine method is used to update system
 	 */
 	if (value & PTP_TCR_TSCFUPDT)
-		data = (2000000000ULL / ptp_clock);
+		data = (1000000000ULL / 50000000);
 	else
 		data = (1000000000ULL / ptp_clock);
 
@@ -53,8 +49,7 @@ static void config_sub_second_increment(void __iomem *ioaddr,
 	if (!(value & PTP_TCR_TSCTRLSSR))
 		data = (data * 1000) / 465;
 
-	if (data > PTP_SSIR_SSINC_MAX)
-		data = PTP_SSIR_SSINC_MAX;
+	data &= PTP_SSIR_SSINC_MASK;
 
 	reg_value = data;
 	if (gmac4)
@@ -160,20 +155,15 @@ static int adjust_systime(void __iomem *ioaddr, u32 sec, u32 nsec,
 
 static void get_systime(void __iomem *ioaddr, u64 *systime)
 {
-	u64 ns, sec0, sec1;
+	u64 ns;
 
-	/* Get the TSS value */
-	sec1 = readl_relaxed(ioaddr + PTP_STSR);
-	do {
-		sec0 = sec1;
-		/* Get the TSSS value */
-		ns = readl_relaxed(ioaddr + PTP_STNSR);
-		/* Get the TSS value */
-		sec1 = readl_relaxed(ioaddr + PTP_STSR);
-	} while (sec0 != sec1);
+	/* Get the TSSS value */
+	ns = readl(ioaddr + PTP_STNSR);
+	/* Get the TSS and convert sec time value to nanosecond */
+	ns += readl(ioaddr + PTP_STSR) * 1000000000ULL;
 
 	if (systime)
-		*systime = ns + (sec1 * 1000000000ULL);
+		*systime = ns;
 }
 
 const struct stmmac_hwtimestamp stmmac_ptp = {

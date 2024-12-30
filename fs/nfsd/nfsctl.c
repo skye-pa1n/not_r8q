@@ -347,7 +347,7 @@ static ssize_t write_unlock_fs(struct file *file, char *buf, size_t size)
 static ssize_t write_filehandle(struct file *file, char *buf, size_t size)
 {
 	char *dname, *path;
-	int maxsize;
+	int uninitialized_var(maxsize);
 	char *mesg = buf;
 	int len;
 	struct auth_domain *dom;
@@ -788,10 +788,7 @@ out_close:
 		svc_xprt_put(xprt);
 	}
 out_err:
-	if (!list_empty(&nn->nfsd_serv->sv_permsocks))
-		nn->nfsd_serv->sv_nrthreads--;
-	 else
-		nfsd_destroy(net);
+	nfsd_destroy(net);
 	return err;
 }
 

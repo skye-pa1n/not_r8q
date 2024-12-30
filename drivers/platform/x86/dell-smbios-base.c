@@ -597,7 +597,6 @@ static int __init dell_smbios_init(void)
 	if (wmi && smm) {
 		pr_err("No SMBIOS backends available (wmi: %d, smm: %d)\n",
 			wmi, smm);
-		ret = -ENODEV;
 		goto fail_create_group;
 	}
 
@@ -613,10 +612,7 @@ static int __init dell_smbios_init(void)
 	return 0;
 
 fail_sysfs:
-	if (!wmi)
-		exit_dell_smbios_wmi();
-	if (!smm)
-		exit_dell_smbios_smm();
+	free_group(platform_device);
 
 fail_create_group:
 	platform_device_del(platform_device);

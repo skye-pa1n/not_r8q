@@ -172,11 +172,13 @@ struct owl_dma_txd {
  * @id: physical index to this channel
  * @base: virtual memory base for the dma channel
  * @vchan: the virtual channel currently being served by this physical channel
+ * @lock: a lock to use when altering an instance of this struct
  */
 struct owl_dma_pchan {
 	u32			id;
 	void __iomem		*base;
 	struct owl_dma_vchan	*vchan;
+	spinlock_t		lock;
 };
 
 /**
@@ -230,7 +232,7 @@ static void pchan_update(struct owl_dma_pchan *pchan, u32 reg,
 	else
 		regval &= ~val;
 
-	writel(regval, pchan->base + reg);
+	writel(val, pchan->base + reg);
 }
 
 static void pchan_writel(struct owl_dma_pchan *pchan, u32 reg, u32 data)
@@ -254,7 +256,7 @@ static void dma_update(struct owl_dma *od, u32 reg, u32 val, bool state)
 	else
 		regval &= ~val;
 
-	writel(regval, od->base + reg);
+	writel(val, od->base + reg);
 }
 
 static void dma_writel(struct owl_dma *od, u32 reg, u32 data)
@@ -394,14 +396,14 @@ static struct owl_dma_pchan *owl_dma_get_pchan(struct owl_dma *od,
 	for (i = 0; i < od->nr_pchans; i++) {
 		pchan = &od->pchans[i];
 
-		spin_lock_irqsave(&od->lock, flags);
+		spin_lock_irqsave(&pchan->lock, flags);
 		if (!pchan->vchan) {
 			pchan->vchan = vchan;
-			spin_unlock_irqrestore(&od->lock, flags);
+			spin_unlock_irqrestore(&pchan->lock, flags);
 			break;
 		}
 
-		spin_unlock_irqrestore(&od->lock, flags);
+		spin_unlock_irqrestore(&pchan->lock, flags);
 	}
 
 	return pchan;
@@ -932,7 +934,6 @@ static int owl_dma_remove(struct platform_device *pdev)
 	owl_dma_free(od);
 
 	clk_disable_unprepare(od->clk);
-	dma_pool_destroy(od->lli_pool);
 
 	return 0;
 }

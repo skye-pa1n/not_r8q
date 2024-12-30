@@ -1348,7 +1348,7 @@ static struct fb_ops imsttfb_ops = {
 	.fb_ioctl 	= imsttfb_ioctl,
 };
 
-static int init_imstt(struct fb_info *info)
+static void init_imstt(struct fb_info *info)
 {
 	struct imstt_par *par = info->par;
 	__u32 i, tmp, *ip, *end;
@@ -1420,7 +1420,7 @@ static int init_imstt(struct fb_info *info)
 	    || !(compute_imstt_regvals(par, info->var.xres, info->var.yres))) {
 		printk("imsttfb: %ux%ux%u not supported\n", info->var.xres, info->var.yres, info->var.bits_per_pixel);
 		framebuffer_release(info);
-		return -ENODEV;
+		return;
 	}
 
 	sprintf(info->fix.id, "IMS TT (%s)", par->ramdac == IBM ? "IBM" : "TVP");
@@ -1456,13 +1456,12 @@ static int init_imstt(struct fb_info *info)
 
 	if (register_framebuffer(info) < 0) {
 		framebuffer_release(info);
-		return -ENODEV;
+		return;
 	}
 
 	tmp = (read_reg_le32(par->dc_regs, SSTATUS) & 0x0f00) >> 8;
 	fb_info(info, "%s frame buffer; %uMB vram; chip version %u\n",
 		info->fix.id, info->fix.smem_len >> 20, tmp);
-	return 0;
 }
 
 static int imsttfb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
@@ -1471,7 +1470,6 @@ static int imsttfb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct imstt_par *par;
 	struct fb_info *info;
 	struct device_node *dp;
-	int ret = -ENOMEM;
 	
 	dp = pci_device_to_OF_node(pdev);
 	if(dp)
@@ -1493,8 +1491,8 @@ static int imsttfb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	if (!request_mem_region(addr, size, "imsttfb")) {
 		printk(KERN_ERR "imsttfb: Can't reserve memory region\n");
-		ret = -ENODEV;
-		goto release_info;
+		framebuffer_release(info);
+		return -ENODEV;
 	}
 
 	switch (pdev->device) {
@@ -1510,42 +1508,28 @@ static int imsttfb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		default:
 			printk(KERN_INFO "imsttfb: Device 0x%x unknown, "
 					 "contact maintainer.\n", pdev->device);
-			ret = -ENODEV;
-			goto release_mem_region;
+			release_mem_region(addr, size);
+			framebuffer_release(info);
+			return -ENODEV;
 	}
 
 	info->fix.smem_start = addr;
 	info->screen_base = (__u8 *)ioremap(addr, par->ramdac == IBM ?
 					    0x400000 : 0x800000);
-	if (!info->screen_base)
-		goto release_mem_region;
+	if (!info->screen_base) {
+		release_mem_region(addr, size);
+		framebuffer_release(info);
+		return -ENOMEM;
+	}
 	info->fix.mmio_start = addr + 0x800000;
 	par->dc_regs = ioremap(addr + 0x800000, 0x1000);
-	if (!par->dc_regs)
-		goto unmap_screen_base;
 	par->cmap_regs_phys = addr + 0x840000;
 	par->cmap_regs = (__u8 *)ioremap(addr + 0x840000, 0x1000);
-	if (!par->cmap_regs)
-		goto unmap_dc_regs;
 	info->pseudo_palette = par->palette;
-	ret = init_imstt(info);
-	if (ret)
-		goto unmap_cmap_regs;
+	init_imstt(info);
 
 	pci_set_drvdata(pdev, info);
 	return 0;
-
-unmap_cmap_regs:
-	iounmap(par->cmap_regs);
-unmap_dc_regs:
-	iounmap(par->dc_regs);
-unmap_screen_base:
-	iounmap(info->screen_base);
-release_mem_region:
-	release_mem_region(addr, size);
-release_info:
-	framebuffer_release(info);
-	return ret;
 }
 
 static void imsttfb_remove(struct pci_dev *pdev)

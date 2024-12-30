@@ -560,9 +560,7 @@ void elv_bio_merged(struct request_queue *q, struct request *rq,
 #ifdef CONFIG_PM
 static void blk_pm_requeue_request(struct request *rq)
 {
-	if (rq->q->dev && !(rq->rq_flags & RQF_PM) &&
-	    (rq->rq_flags & (RQF_PM_ADDED | RQF_FLUSH_SEQ))) {
-		rq->rq_flags &= ~RQF_PM_ADDED;
+	if (rq->q->dev && !(rq->rq_flags & RQF_PM)) {
 		rq->q->nr_pending--;
 		if (!rq->q->nr_pending)
 			pm_runtime_mark_last_busy(rq->q->dev);
@@ -571,13 +569,9 @@ static void blk_pm_requeue_request(struct request *rq)
 
 static void blk_pm_add_request(struct request_queue *q, struct request *rq)
 {
-	if (q->dev && !(rq->rq_flags & RQF_PM)) {
-		rq->rq_flags |= RQF_PM_ADDED;
-		if (q->nr_pending++ == 0 &&
-		    (q->rpm_status == RPM_SUSPENDED ||
-		     q->rpm_status == RPM_SUSPENDING))
-			pm_request_resume(q->dev);
-	}
+	if (q->dev && !(rq->rq_flags & RQF_PM) && q->nr_pending++ == 0 &&
+	    (q->rpm_status == RPM_SUSPENDED || q->rpm_status == RPM_SUSPENDING))
+		pm_request_resume(q->dev);
 }
 #else
 static inline void blk_pm_requeue_request(struct request *rq) {}
@@ -883,6 +877,8 @@ void elv_unregister_queue(struct request_queue *q)
 		kobject_uevent(&e->kobj, KOBJ_REMOVE);
 		kobject_del(&e->kobj);
 		e->registered = 0;
+		/* Re-enable throttling in case elevator disabled it */
+		wbt_enable_default(q);
 	}
 }
 
@@ -990,29 +986,33 @@ int elevator_init_mq(struct request_queue *q)
 	struct elevator_type *e;
 	int err = 0;
 
-	if (q->tag_set && q->tag_set->flags & BLK_MQ_F_NO_SCHED)
+	if (q->tag_set && q->tag_set->flags & BLK_MQ_F_NO_SCHED_BY_DEFAULT)
 		return 0;
 
 	if (q->nr_hw_queues != 1)
 		return 0;
 
-	WARN_ON_ONCE(test_bit(QUEUE_FLAG_REGISTERED, &q->queue_flags));
-
+	/*
+	 * q->sysfs_lock must be held to provide mutual exclusion between
+	 * elevator_switch() and here.
+	 */
+	mutex_lock(&q->sysfs_lock);
 	if (unlikely(q->elevator))
-		goto out;
+		goto out_unlock;
 	if (IS_ENABLED(CONFIG_IOSCHED_BFQ)) {
 		e = elevator_get(q, "bfq", false);
 		if (!e)
-			goto out;
+			goto out_unlock;
 	} else {
 		e = elevator_get(q, "mq-deadline", false);
 		if (!e)
-			goto out;
+			goto out_unlock;
 	}
 	err = blk_mq_init_sched(q, e);
 	if (err)
 		elevator_put(e);
-out:
+out_unlock:
+	mutex_unlock(&q->sysfs_lock);
 	return err;
 }
 
@@ -1103,7 +1103,7 @@ static int __elevator_change(struct request_queue *q, const char *name)
 	struct elevator_type *e;
 
 	/* Make sure queue is not in the middle of being removed */
-	if (!blk_queue_registered(q))
+	if (!test_bit(QUEUE_FLAG_REGISTERED, &q->queue_flags))
 		return -ENOENT;
 
 	/*

@@ -114,8 +114,7 @@ MODULE_PARM_DESC(chain_mode, "To use chain instead of ring mode");
 static irqreturn_t stmmac_interrupt(int irq, void *dev_id);
 
 #ifdef CONFIG_DEBUG_FS
-static const struct net_device_ops stmmac_netdev_ops;
-static void stmmac_init_fs(struct net_device *dev);
+static int stmmac_init_fs(struct net_device *dev);
 static void stmmac_exit_fs(struct net_device *dev);
 #endif
 
@@ -178,6 +177,32 @@ static void stmmac_enable_all_queues(struct stmmac_priv *priv)
 	}
 }
 
+/**
+ * stmmac_stop_all_queues - Stop all queues
+ * @priv: driver private structure
+ */
+static void stmmac_stop_all_queues(struct stmmac_priv *priv)
+{
+	u32 tx_queues_cnt = priv->plat->tx_queues_to_use;
+	u32 queue;
+
+	for (queue = 0; queue < tx_queues_cnt; queue++)
+		netif_tx_stop_queue(netdev_get_tx_queue(priv->dev, queue));
+}
+
+/**
+ * stmmac_start_all_queues - Start all queues
+ * @priv: driver private structure
+ */
+static void stmmac_start_all_queues(struct stmmac_priv *priv)
+{
+	u32 tx_queues_cnt = priv->plat->tx_queues_to_use;
+	u32 queue;
+
+	for (queue = 0; queue < tx_queues_cnt; queue++)
+		netif_tx_start_queue(netdev_get_tx_queue(priv->dev, queue));
+}
+
 static void stmmac_service_event_schedule(struct stmmac_priv *priv)
 {
 	if (!test_bit(STMMAC_DOWN, &priv->state) &&
@@ -228,7 +253,7 @@ static void stmmac_clk_csr_set(struct stmmac_priv *priv)
 			priv->clk_csr = STMMAC_CSR_100_150M;
 		else if ((clk_rate >= CSR_F_150M) && (clk_rate < CSR_F_250M))
 			priv->clk_csr = STMMAC_CSR_150_250M;
-		else if ((clk_rate >= CSR_F_250M) && (clk_rate <= CSR_F_300M))
+		else if ((clk_rate >= CSR_F_250M) && (clk_rate < CSR_F_300M))
 			priv->clk_csr = STMMAC_CSR_250_300M;
 	}
 
@@ -1427,19 +1452,6 @@ static void dma_free_tx_skbufs(struct stmmac_priv *priv, u32 queue)
 
 	for (i = 0; i < DMA_TX_SIZE; i++)
 		stmmac_free_tx_buffer(priv, queue, i);
-}
-
-/**
- * stmmac_free_tx_skbufs - free TX skb buffers
- * @priv: private structure
- */
-static void stmmac_free_tx_skbufs(struct stmmac_priv *priv)
-{
-	u32 tx_queue_cnt = priv->plat->tx_queues_to_use;
-	u32 queue;
-
-	for (queue = 0; queue < tx_queue_cnt; queue++)
-		dma_free_tx_skbufs(priv, queue);
 }
 
 /**
@@ -2666,7 +2678,7 @@ static int stmmac_open(struct net_device *dev)
 	}
 
 	stmmac_enable_all_queues(priv);
-	netif_tx_start_all_queues(priv->dev);
+	stmmac_start_all_queues(priv);
 
 	return 0;
 
@@ -2703,11 +2715,16 @@ static int stmmac_release(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 chan;
 
+	if (priv->eee_enabled)
+		del_timer_sync(&priv->eee_ctrl_timer);
+
 	/* Stop and disconnect the PHY */
 	if (dev->phydev) {
 		phy_stop(dev->phydev);
 		phy_disconnect(dev->phydev);
 	}
+
+	stmmac_stop_all_queues(priv);
 
 	stmmac_disable_all_queues(priv);
 
@@ -2720,11 +2737,6 @@ static int stmmac_release(struct net_device *dev)
 		free_irq(priv->wol_irq, dev);
 	if (priv->lpi_irq > 0)
 		free_irq(priv->lpi_irq, dev);
-
-	if (priv->eee_enabled) {
-		priv->tx_path_in_lpi_mode = false;
-		del_timer_sync(&priv->eee_ctrl_timer);
-	}
 
 	/* Stop TX/RX DMA and clear the descriptors */
 	stmmac_stop_all_dma(priv);
@@ -3597,7 +3609,6 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int txfifosz = priv->plat->tx_fifo_size;
-	const int mtu = new_mtu;
 
 	if (txfifosz == 0)
 		txfifosz = priv->dma_cap.tx_fifo_size;
@@ -3615,7 +3626,7 @@ static int stmmac_change_mtu(struct net_device *dev, int new_mtu)
 	if ((txfifosz < new_mtu) || (new_mtu > BUF_SIZE_16KiB))
 		return -EINVAL;
 
-	dev->mtu = mtu;
+	dev->mtu = new_mtu;
 
 	netdev_update_features(dev);
 
@@ -3673,7 +3684,7 @@ static int stmmac_set_features(struct net_device *netdev,
 /**
  *  stmmac_interrupt - main ISR
  *  @irq: interrupt number.
- *  @dev_id: to pass the net device pointer (must be valid).
+ *  @dev_id: to pass the net device pointer.
  *  Description: this is the main driver interrupt service routine.
  *  It can call:
  *  o DMA service routine (to manage incoming frame reception and transmission
@@ -3697,6 +3708,11 @@ static irqreturn_t stmmac_interrupt(int irq, void *dev_id)
 	if (priv->irq_wake)
 		pm_wakeup_event(priv->device, 0);
 
+	if (unlikely(!dev)) {
+		netdev_err(priv->dev, "%s: invalid dev pointer\n", __func__);
+		return IRQ_NONE;
+	}
+
 	/* Check if adapter is up */
 	if (test_bit(STMMAC_DOWN, &priv->state))
 		return IRQ_HANDLED;
@@ -3707,6 +3723,7 @@ static irqreturn_t stmmac_interrupt(int irq, void *dev_id)
 	/* To handle GMAC own interrupts */
 	if ((priv->plat->has_gmac) || xmac) {
 		int status = stmmac_host_irq_status(priv, priv->hw, &priv->xstats);
+		int mtl_status;
 
 		if (unlikely(status)) {
 			/* For LPI we need to save the tx status */
@@ -3717,8 +3734,17 @@ static irqreturn_t stmmac_interrupt(int irq, void *dev_id)
 		}
 
 		for (queue = 0; queue < queues_count; queue++) {
-			status = stmmac_host_mtl_irq_status(priv, priv->hw,
-							    queue);
+			struct stmmac_rx_queue *rx_q = &priv->rx_queue[queue];
+
+			mtl_status = stmmac_host_mtl_irq_status(priv, priv->hw,
+								queue);
+			if (mtl_status != -EINVAL)
+				status |= mtl_status;
+
+			if (status & CORE_IRQ_MTL_RX_OVERFLOW)
+				stmmac_set_rx_tail_ptr(priv, priv->ioaddr,
+						       rx_q->rx_tail_addr,
+						       queue);
 		}
 
 		/* PCS link status */
@@ -4035,52 +4061,45 @@ static const struct file_operations stmmac_dma_cap_fops = {
 	.release = single_release,
 };
 
-/* Use network device events to rename debugfs file entries.
- */
-static int stmmac_device_event(struct notifier_block *unused,
-			       unsigned long event, void *ptr)
-{
-	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
-	struct stmmac_priv *priv = netdev_priv(dev);
-
-	if (dev->netdev_ops != &stmmac_netdev_ops)
-		goto done;
-
-	switch (event) {
-	case NETDEV_CHANGENAME:
-		if (priv->dbgfs_dir)
-			priv->dbgfs_dir = debugfs_rename(stmmac_fs_dir,
-							 priv->dbgfs_dir,
-							 stmmac_fs_dir,
-							 dev->name);
-		break;
-	}
-done:
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block stmmac_notifier = {
-	.notifier_call = stmmac_device_event,
-};
-
-static void stmmac_init_fs(struct net_device *dev)
+static int stmmac_init_fs(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
-
-	rtnl_lock();
 
 	/* Create per netdev entries */
 	priv->dbgfs_dir = debugfs_create_dir(dev->name, stmmac_fs_dir);
 
+	if (!priv->dbgfs_dir || IS_ERR(priv->dbgfs_dir)) {
+		netdev_err(priv->dev, "ERROR failed to create debugfs directory\n");
+
+		return -ENOMEM;
+	}
+
 	/* Entry to report DMA RX/TX rings */
-	debugfs_create_file("descriptors_status", 0444, priv->dbgfs_dir, dev,
-			    &stmmac_rings_status_fops);
+	priv->dbgfs_rings_status =
+		debugfs_create_file("descriptors_status", 0444,
+				    priv->dbgfs_dir, dev,
+				    &stmmac_rings_status_fops);
+
+	if (!priv->dbgfs_rings_status || IS_ERR(priv->dbgfs_rings_status)) {
+		netdev_err(priv->dev, "ERROR creating stmmac ring debugfs file\n");
+		debugfs_remove_recursive(priv->dbgfs_dir);
+
+		return -ENOMEM;
+	}
 
 	/* Entry to report the DMA HW features */
-	debugfs_create_file("dma_cap", 0444, priv->dbgfs_dir, dev,
-			    &stmmac_dma_cap_fops);
+	priv->dbgfs_dma_cap = debugfs_create_file("dma_cap", 0444,
+						  priv->dbgfs_dir,
+						  dev, &stmmac_dma_cap_fops);
 
-	rtnl_unlock();
+	if (!priv->dbgfs_dma_cap || IS_ERR(priv->dbgfs_dma_cap)) {
+		netdev_err(priv->dev, "ERROR creating stmmac MMC debugfs file\n");
+		debugfs_remove_recursive(priv->dbgfs_dir);
+
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 static void stmmac_exit_fs(struct net_device *dev)
@@ -4418,7 +4437,10 @@ int stmmac_dvr_probe(struct device *device,
 	}
 
 #ifdef CONFIG_DEBUG_FS
-	stmmac_init_fs(ndev);
+	ret = stmmac_init_fs(ndev);
+	if (ret < 0)
+		netdev_warn(priv->dev, "%s: failed debugFS registration\n",
+			    __func__);
 #endif
 
 	return ret;
@@ -4456,14 +4478,14 @@ int stmmac_dvr_remove(struct device *dev)
 
 	netdev_info(priv->dev, "%s: removing driver", __func__);
 
+#ifdef CONFIG_DEBUG_FS
+	stmmac_exit_fs(ndev);
+#endif
 	stmmac_stop_all_dma(priv);
 
 	stmmac_mac_set(priv, priv->ioaddr, false);
 	netif_carrier_off(ndev);
 	unregister_netdev(ndev);
-#ifdef CONFIG_DEBUG_FS
-	stmmac_exit_fs(ndev);
-#endif
 	if (priv->plat->stmmac_rst)
 		reset_control_assert(priv->plat->stmmac_rst);
 	clk_disable_unprepare(priv->plat->pclk);
@@ -4502,16 +4524,12 @@ int stmmac_suspend(struct device *dev)
 	mutex_lock(&priv->lock);
 
 	netif_device_detach(ndev);
+	stmmac_stop_all_queues(priv);
 
 	stmmac_disable_all_queues(priv);
 
 	for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
 		del_timer_sync(&priv->tx_queue[chan].txtimer);
-
-	if (priv->eee_enabled) {
-		priv->tx_path_in_lpi_mode = false;
-		del_timer_sync(&priv->eee_ctrl_timer);
-	}
 
 	/* Stop TX/RX DMA */
 	stmmac_stop_all_dma(priv);
@@ -4561,8 +4579,6 @@ static void stmmac_reset_queues_param(struct stmmac_priv *priv)
 		tx_q->cur_tx = 0;
 		tx_q->dirty_tx = 0;
 		tx_q->mss = 0;
-
-		netdev_tx_reset_queue(netdev_get_tx_queue(priv->dev, queue));
 	}
 }
 
@@ -4609,7 +4625,6 @@ int stmmac_resume(struct device *dev)
 
 	stmmac_reset_queues_param(priv);
 
-	stmmac_free_tx_skbufs(priv);
 	stmmac_clear_descriptors(priv);
 
 	stmmac_hw_setup(ndev, false);
@@ -4617,6 +4632,8 @@ int stmmac_resume(struct device *dev)
 	stmmac_set_rx_mode(ndev);
 
 	stmmac_enable_all_queues(priv);
+
+	stmmac_start_all_queues(priv);
 
 	mutex_unlock(&priv->lock);
 
@@ -4633,7 +4650,7 @@ static int __init stmmac_cmdline_opt(char *str)
 	char *opt;
 
 	if (!str || !*str)
-		return 1;
+		return -EINVAL;
 	while ((opt = strsep(&str, ",")) != NULL) {
 		if (!strncmp(opt, "debug:", 6)) {
 			if (kstrtoint(opt + 6, 0, &debug))
@@ -4664,11 +4681,11 @@ static int __init stmmac_cmdline_opt(char *str)
 				goto err;
 		}
 	}
-	return 1;
+	return 0;
 
 err:
 	pr_err("%s: ERROR broken module parameter conversion", __func__);
-	return 1;
+	return -EINVAL;
 }
 
 __setup("stmmaceth=", stmmac_cmdline_opt);
@@ -4678,9 +4695,16 @@ static int __init stmmac_init(void)
 {
 #ifdef CONFIG_DEBUG_FS
 	/* Create debugfs main directory if it doesn't exist yet */
-	if (!stmmac_fs_dir)
+	if (!stmmac_fs_dir) {
 		stmmac_fs_dir = debugfs_create_dir(STMMAC_RESOURCE_NAME, NULL);
-	register_netdevice_notifier(&stmmac_notifier);
+
+		if (!stmmac_fs_dir || IS_ERR(stmmac_fs_dir)) {
+			pr_err("ERROR %s, debugfs create directory failed\n",
+			       STMMAC_RESOURCE_NAME);
+
+			return -ENOMEM;
+		}
+	}
 #endif
 
 	return 0;
@@ -4689,7 +4713,6 @@ static int __init stmmac_init(void)
 static void __exit stmmac_exit(void)
 {
 #ifdef CONFIG_DEBUG_FS
-	unregister_netdevice_notifier(&stmmac_notifier);
 	debugfs_remove_recursive(stmmac_fs_dir);
 #endif
 }

@@ -149,11 +149,7 @@ struct sata_dwc_device {
 #endif
 };
 
-/*
- * Allow one extra special slot for commands and DMA management
- * to account for libata internal commands.
- */
-#define SATA_DWC_QCMD_MAX	(ATA_MAX_QUEUE + 1)
+#define SATA_DWC_QCMD_MAX	32
 
 struct sata_dwc_device_port {
 	struct sata_dwc_device	*hsdev;
@@ -1257,20 +1253,24 @@ static int sata_dwc_probe(struct platform_device *ofdev)
 	irq = irq_of_parse_and_map(np, 0);
 	if (irq == NO_IRQ) {
 		dev_err(&ofdev->dev, "no SATA DMA irq\n");
-		return -ENODEV;
+		err = -ENODEV;
+		goto error_out;
 	}
 
 #ifdef CONFIG_SATA_DWC_OLD_DMA
 	if (!of_find_property(np, "dmas", NULL)) {
 		err = sata_dwc_dma_init_old(ofdev, hsdev);
 		if (err)
-			return err;
+			goto error_out;
 	}
 #endif
 
 	hsdev->phy = devm_phy_optional_get(hsdev->dev, "sata-phy");
-	if (IS_ERR(hsdev->phy))
-		return PTR_ERR(hsdev->phy);
+	if (IS_ERR(hsdev->phy)) {
+		err = PTR_ERR(hsdev->phy);
+		hsdev->phy = NULL;
+		goto error_out;
+	}
 
 	err = phy_init(hsdev->phy);
 	if (err)

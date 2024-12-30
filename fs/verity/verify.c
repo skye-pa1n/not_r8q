@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Data verification functions, i.e. hooks for ->readpages()
+ * fs/verity/verify.c: data verification functions, i.e. hooks for ->readpages()
  *
  * Copyright 2019 Google LLC
  */
@@ -179,7 +179,6 @@ out:
 
 /**
  * fsverity_verify_page() - verify a data page
- * @page: the page to verity
  *
  * Verify a page that has just been read from a verity file.  The page must be a
  * pagecache page that is still locked and not yet uptodate.
@@ -207,7 +206,6 @@ EXPORT_SYMBOL_GPL(fsverity_verify_page);
 #ifdef CONFIG_BLOCK
 /**
  * fsverity_verify_bio() - verify a 'read' bio that has just completed
- * @bio: the bio to verify
  *
  * Verify a set of pages that have just been read from a verity file.  The pages
  * must be pagecache pages that are still locked and not yet uptodate.  Pages
@@ -266,7 +264,6 @@ EXPORT_SYMBOL_GPL(fsverity_verify_bio);
 
 /**
  * fsverity_enqueue_verify_work() - enqueue work on the fs-verity workqueue
- * @work: the work to enqueue
  *
  * Enqueue verification work for asynchronous processing.
  */
@@ -279,15 +276,15 @@ EXPORT_SYMBOL_GPL(fsverity_enqueue_verify_work);
 int __init fsverity_init_workqueue(void)
 {
 	/*
-	 * Use a high-priority workqueue to prioritize verification work, which
-	 * blocks reads from completing, over regular application tasks.
+	 * Use an unbound workqueue to allow bios to be verified in parallel
+	 * even when they happen to complete on the same CPU.  This sacrifices
+	 * locality, but it's worthwhile since hashing is CPU-intensive.
 	 *
-	 * For performance reasons, don't use an unbound workqueue.  Using an
-	 * unbound workqueue for crypto operations causes excessive scheduler
-	 * latency on ARM64.
+	 * Also use a high-priority workqueue to prioritize verification work,
+	 * which blocks reads from completing, over regular application tasks.
 	 */
 	fsverity_read_workqueue = alloc_workqueue("fsverity_read_queue",
-						  WQ_HIGHPRI,
+						  WQ_UNBOUND | WQ_HIGHPRI,
 						  num_online_cpus());
 	if (!fsverity_read_workqueue)
 		return -ENOMEM;

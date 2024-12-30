@@ -33,6 +33,9 @@
 #include <linux/list_lru.h>
 #include "internal.h"
 #include "mount.h"
+#ifdef CONFIG_KDP_NS
+u8 ns_prot = 0;
+#endif
 
 /*
  * Usage:
@@ -70,7 +73,7 @@
  * If no ancestor relationship:
  * arbitrary, since it's serialized on rename_lock
  */
-int sysctl_vfs_cache_pressure __read_mostly = 50;
+int sysctl_vfs_cache_pressure __read_mostly = 100;
 EXPORT_SYMBOL_GPL(sysctl_vfs_cache_pressure);
 
 __cacheline_aligned_in_smp DEFINE_SEQLOCK(rename_lock);
@@ -714,12 +717,12 @@ static inline bool fast_dput(struct dentry *dentry)
 	 */
 	if (unlikely(ret < 0)) {
 		spin_lock(&dentry->d_lock);
-		if (WARN_ON_ONCE(dentry->d_lockref.count <= 0)) {
+		if (dentry->d_lockref.count > 1) {
+			dentry->d_lockref.count--;
 			spin_unlock(&dentry->d_lock);
 			return true;
 		}
-		dentry->d_lockref.count--;
-		goto locked;
+		return false;
 	}
 
 	/*
@@ -770,7 +773,6 @@ static inline bool fast_dput(struct dentry *dentry)
 	 * else could have killed it and marked it dead. Either way, we
 	 * don't need to do anything else.
 	 */
-locked:
 	if (dentry->d_lockref.count) {
 		spin_unlock(&dentry->d_lock);
 		return true;
@@ -852,19 +854,17 @@ struct dentry *dget_parent(struct dentry *dentry)
 {
 	int gotref;
 	struct dentry *ret;
-	unsigned seq;
 
 	/*
 	 * Do optimistic parent lookup without any
 	 * locking.
 	 */
 	rcu_read_lock();
-	seq = raw_seqcount_begin(&dentry->d_seq);
 	ret = READ_ONCE(dentry->d_parent);
 	gotref = lockref_get_not_zero(&ret->d_lockref);
 	rcu_read_unlock();
 	if (likely(gotref)) {
-		if (!read_seqcount_retry(&dentry->d_seq, seq))
+		if (likely(ret == READ_ONCE(dentry->d_parent)))
 			return ret;
 		dput(ret);
 	}
@@ -2190,11 +2190,6 @@ seqretry:
 				continue;
 			if (dentry_cmp(dentry, str, hashlen_len(hashlen)) != 0)
 				continue;
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-			if (dentry->d_inode && unlikely(dentry->d_inode->i_state & 16777216) && likely(current_cred()->user->android_kabi_reserved2 & 16777216)) {
-				continue;
-			}
-#endif
 		}
 		*seqp = seq;
 		return dentry;
@@ -2277,12 +2272,6 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 
 		if (dentry->d_name.hash != hash)
 			continue;
-
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		if (dentry->d_inode && unlikely(dentry->d_inode->i_state & 16777216) && likely(current_cred()->user->android_kabi_reserved2 & 16777216)) {
-			continue;
-		}
-#endif
 
 		spin_lock(&dentry->d_lock);
 		if (dentry->d_parent != parent)
@@ -2981,25 +2970,28 @@ EXPORT_SYMBOL(d_splice_alias);
   
 bool is_subdir(struct dentry *new_dentry, struct dentry *old_dentry)
 {
-	bool subdir;
+	bool result;
 	unsigned seq;
 
 	if (new_dentry == old_dentry)
 		return true;
 
-	/* Access d_parent under rcu as d_move() may change it. */
-	rcu_read_lock();
-	seq = read_seqbegin(&rename_lock);
-	subdir = d_ancestor(old_dentry, new_dentry);
-	 /* Try lockless once... */
-	if (read_seqretry(&rename_lock, seq)) {
-		/* ...else acquire lock for progress even on deep chains. */
-		read_seqlock_excl(&rename_lock);
-		subdir = d_ancestor(old_dentry, new_dentry);
-		read_sequnlock_excl(&rename_lock);
-	}
-	rcu_read_unlock();
-	return subdir;
+	do {
+		/* for restarting inner loop in case of seq retry */
+		seq = read_seqbegin(&rename_lock);
+		/*
+		 * Need rcu_readlock to protect against the d_parent trashing
+		 * due to d_move
+		 */
+		rcu_read_lock();
+		if (d_ancestor(old_dentry, new_dentry))
+			result = true;
+		else
+			result = false;
+		rcu_read_unlock();
+	} while (read_seqretry(&rename_lock, seq));
+
+	return result;
 }
 EXPORT_SYMBOL(is_subdir);
 
@@ -3129,4 +3121,7 @@ void __init vfs_caches_init(void)
 	mnt_init();
 	bdev_cache_init();
 	chrdev_init();
+#ifdef CONFIG_KDP_NS
+	ns_prot = 1;
+#endif
 }

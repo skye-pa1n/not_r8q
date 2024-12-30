@@ -2641,13 +2641,8 @@ megasas_build_ldio_fusion(struct megasas_instance *instance,
 			fp_possible = (io_info.fpOkForIo > 0) ? true : false;
 	}
 
-	if (instance->msix_load_balance)
-		cmd->request_desc->SCSIIO.MSIxIndex =
-			(mega_mod64(atomic64_add_return(1, &instance->total_io_count),
-				    instance->msix_vectors));
-	else
-		cmd->request_desc->SCSIIO.MSIxIndex =
-			instance->reply_map[raw_smp_processor_id()];
+	cmd->request_desc->SCSIIO.MSIxIndex =
+		instance->reply_map[raw_smp_processor_id()];
 
 	praid_context = &io_request->RaidContext;
 
@@ -2974,13 +2969,8 @@ megasas_build_syspd_fusion(struct megasas_instance *instance,
 
 	cmd->request_desc->SCSIIO.DevHandle = io_request->DevHandle;
 
-	if (instance->msix_load_balance)
-		cmd->request_desc->SCSIIO.MSIxIndex =
-			(mega_mod64(atomic64_add_return(1, &instance->total_io_count),
-				    instance->msix_vectors));
-	else
-		cmd->request_desc->SCSIIO.MSIxIndex =
-			instance->reply_map[raw_smp_processor_id()];
+	cmd->request_desc->SCSIIO.MSIxIndex =
+		instance->reply_map[raw_smp_processor_id()];
 
 	if (!fp_possible) {
 		/* system pd firmware path */
@@ -3950,7 +3940,6 @@ void megasas_refire_mgmt_cmd(struct megasas_instance *instance)
 	struct fusion_context *fusion;
 	struct megasas_cmd *cmd_mfi;
 	union MEGASAS_REQUEST_DESCRIPTOR_UNION *req_desc;
-	struct MPI2_RAID_SCSI_IO_REQUEST *scsi_io_req;
 	u16 smid;
 	bool refire_cmd = 0;
 	u8 result;
@@ -4000,11 +3989,6 @@ void megasas_refire_mgmt_cmd(struct megasas_instance *instance)
 		default:
 			break;
 		}
-
-		scsi_io_req = (struct MPI2_RAID_SCSI_IO_REQUEST *)
-				cmd_fusion->io_request;
-		if (scsi_io_req->Function == MPI2_FUNCTION_SCSI_TASK_MGMT)
-			result = RETURN_CMD;
 
 		switch (result) {
 		case REFIRE_CMD:
@@ -4203,6 +4187,7 @@ megasas_issue_tm(struct megasas_instance *instance, u16 device_handle,
 	if (!timeleft) {
 		dev_err(&instance->pdev->dev,
 			"task mgmt type 0x%x timed out\n", type);
+		cmd_mfi->flags |= DRV_DCMD_SKIP_REFIRE;
 		mutex_unlock(&instance->reset_mutex);
 		rc = megasas_reset_fusion(instance->host, MFI_IO_TIMEOUT_OCR);
 		mutex_lock(&instance->reset_mutex);
@@ -4377,7 +4362,7 @@ int megasas_task_abort_fusion(struct scsi_cmnd *scmd)
 	devhandle = megasas_get_tm_devhandle(scmd->device);
 
 	if (devhandle == (u16)ULONG_MAX) {
-		ret = FAILED;
+		ret = SUCCESS;
 		sdev_printk(KERN_INFO, scmd->device,
 			"task abort issued for invalid devhandle\n");
 		mutex_unlock(&instance->reset_mutex);
@@ -4450,7 +4435,7 @@ int megasas_reset_target_fusion(struct scsi_cmnd *scmd)
 	devhandle = megasas_get_tm_devhandle(scmd->device);
 
 	if (devhandle == (u16)ULONG_MAX) {
-		ret = FAILED;
+		ret = SUCCESS;
 		sdev_printk(KERN_INFO, scmd->device,
 			"target reset issued for invalid devhandle\n");
 		mutex_unlock(&instance->reset_mutex);

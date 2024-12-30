@@ -247,7 +247,7 @@ struct mmc_queue_req;
  * MMC Physical partitions
  */
 struct mmc_part {
-	u64		size;	/* partition size (in bytes) */
+	unsigned int	size;	/* partition size (in bytes) */
 	unsigned int	part_cfg;	/* partition type */
 	char	name[MAX_MMC_PART_NAME_LEN];
 	bool	force_ro;	/* to make boot parts RO by default */
@@ -380,7 +380,6 @@ struct mmc_card {
 
 /* Make sure CMDQ is empty before queuing DCMD */
 #define MMC_QUIRK_CMDQ_EMPTY_BEFORE_DCMD (1 << 18)
-#define MMC_QUIRK_QCA9379_SETTINGS (1 << 19)    /* QCA9379 card settings*/
 
 	bool			reenable_cmdq;	/* Re-enable Command Queue */
 
@@ -476,11 +475,6 @@ static inline bool mmc_enable_qca6574_settings(const struct mmc_card *c)
 static inline bool mmc_enable_qca9377_settings(const struct mmc_card *c)
 {
 	return c->quirks & MMC_QUIRK_QCA9377_SETTINGS;
-}
-
-static inline bool mmc_enable_qca9379_settings(const struct mmc_card *c)
-{
-	return c->quirks & MMC_QUIRK_QCA9379_SETTINGS;
 }
 
 #define mmc_dev_to_card(d)	container_of(d, struct mmc_card, dev)

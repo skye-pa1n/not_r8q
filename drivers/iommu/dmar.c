@@ -374,7 +374,7 @@ static int dmar_pci_bus_notifier(struct notifier_block *nb,
 
 static struct notifier_block dmar_pci_bus_nb = {
 	.notifier_call = dmar_pci_bus_notifier,
-	.priority = 1,
+	.priority = INT_MIN,
 };
 
 static struct dmar_drhd_unit *
@@ -804,7 +804,6 @@ int __init dmar_dev_scope_init(void)
 			info = dmar_alloc_pci_notify_info(dev,
 					BUS_NOTIFY_ADD_DEVICE);
 			if (!info) {
-				pci_dev_put(dev);
 				return dmar_dev_scope_status;
 			} else {
 				dmar_pci_bus_add_dev(info);
@@ -1030,8 +1029,8 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 {
 	struct intel_iommu *iommu;
 	u32 ver, sts;
-	int agaw = -1;
-	int msagaw = -1;
+	int agaw = 0;
+	int msagaw = 0;
 	int err;
 
 	if (!drhd->reg_base_addr) {
@@ -1056,28 +1055,17 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 	}
 
 	err = -EINVAL;
-	if (cap_sagaw(iommu->cap) == 0) {
-		pr_info("%s: No supported address widths. Not attempting DMA translation.\n",
-			iommu->name);
-		drhd->ignored = 1;
+	agaw = iommu_calculate_agaw(iommu);
+	if (agaw < 0) {
+		pr_err("Cannot get a valid agaw for iommu (seq_id = %d)\n",
+			iommu->seq_id);
+		goto err_unmap;
 	}
-
-	if (!drhd->ignored) {
-		agaw = iommu_calculate_agaw(iommu);
-		if (agaw < 0) {
-			pr_err("Cannot get a valid agaw for iommu (seq_id = %d)\n",
-			       iommu->seq_id);
-			drhd->ignored = 1;
-		}
-	}
-	if (!drhd->ignored) {
-		msagaw = iommu_calculate_max_sagaw(iommu);
-		if (msagaw < 0) {
-			pr_err("Cannot get a valid max agaw for iommu (seq_id = %d)\n",
-			       iommu->seq_id);
-			drhd->ignored = 1;
-			agaw = -1;
-		}
+	msagaw = iommu_calculate_max_sagaw(iommu);
+	if (msagaw < 0) {
+		pr_err("Cannot get a valid max agaw for iommu (seq_id = %d)\n",
+			iommu->seq_id);
+		goto err_unmap;
 	}
 	iommu->agaw = agaw;
 	iommu->msagaw = msagaw;
@@ -1104,12 +1092,7 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 
 	raw_spin_lock_init(&iommu->register_lock);
 
-	/*
-	 * This is only for hotplug; at boot time intel_iommu_enabled won't
-	 * be set yet. When intel_iommu_init() runs, it registers the units
-	 * present at boot time, then sets intel_iommu_enabled.
-	 */
-	if (intel_iommu_enabled && !drhd->ignored) {
+	if (intel_iommu_enabled) {
 		err = iommu_device_sysfs_add(&iommu->iommu, NULL,
 					     intel_iommu_groups,
 					     "%s", iommu->name);
@@ -1120,16 +1103,13 @@ static int alloc_iommu(struct dmar_drhd_unit *drhd)
 
 		err = iommu_device_register(&iommu->iommu);
 		if (err)
-			goto err_sysfs;
+			goto err_unmap;
 	}
 
 	drhd->iommu = iommu;
-	iommu->drhd = drhd;
 
 	return 0;
 
-err_sysfs:
-	iommu_device_sysfs_remove(&iommu->iommu);
 err_unmap:
 	unmap_iommu(iommu);
 error_free_seq_id:
@@ -1141,7 +1121,7 @@ error:
 
 static void free_iommu(struct intel_iommu *iommu)
 {
-	if (intel_iommu_enabled && !iommu->drhd->ignored) {
+	if (intel_iommu_enabled) {
 		iommu_device_unregister(&iommu->iommu);
 		iommu_device_sysfs_remove(&iommu->iommu);
 	}
@@ -1292,7 +1272,7 @@ restart:
 	 */
 	writel(qi->free_head << DMAR_IQ_SHIFT, iommu->reg + DMAR_IQT_REG);
 
-	while (READ_ONCE(qi->desc_status[wait_index]) != QI_DONE) {
+	while (qi->desc_status[wait_index] != QI_DONE) {
 		/*
 		 * We will leave the interrupts disabled, to prevent interrupt
 		 * context to queue another cmd while a cmd is already submitted

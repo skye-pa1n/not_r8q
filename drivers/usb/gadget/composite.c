@@ -103,43 +103,40 @@ function_descriptors(struct usb_function *f,
 }
 
 /**
- * next_desc() - advance to the next desc_type descriptor
+ * next_ep_desc() - advance to the next EP descriptor
  * @t: currect pointer within descriptor array
- * @desc_type: descriptor type
  *
- * Return: next desc_type descriptor or NULL
+ * Return: next EP descriptor or NULL
  *
- * Iterate over @t until either desc_type descriptor found or
+ * Iterate over @t until either EP descriptor found or
  * NULL (that indicates end of list) encountered
  */
 static struct usb_descriptor_header**
-next_desc(struct usb_descriptor_header **t, u8 desc_type)
+next_ep_desc(struct usb_descriptor_header **t)
 {
 	for (; *t; t++) {
-		if ((*t)->bDescriptorType == desc_type)
+		if ((*t)->bDescriptorType == USB_DT_ENDPOINT)
 			return t;
 	}
 	return NULL;
 }
 
 /*
- * for_each_desc() - iterate over desc_type descriptors in the
- * descriptors list
- * @start: pointer within descriptor array.
- * @iter_desc: desc_type descriptor to use as the loop cursor
- * @desc_type: wanted descriptr type
+ * for_each_ep_desc()- iterate over endpoint descriptors in the
+ *		descriptors list
+ * @start:	pointer within descriptor array.
+ * @ep_desc:	endpoint descriptor to use as the loop cursor
  */
-#define for_each_desc(start, iter_desc, desc_type) \
-	for (iter_desc = next_desc(start, desc_type); \
-	     iter_desc; iter_desc = next_desc(iter_desc + 1, desc_type))
+#define for_each_ep_desc(start, ep_desc) \
+	for (ep_desc = next_ep_desc(start); \
+	      ep_desc; ep_desc = next_ep_desc(ep_desc+1))
 
 /**
- * config_ep_by_speed_and_alt() - configures the given endpoint
+ * config_ep_by_speed() - configures the given endpoint
  * according to gadget speed.
  * @g: pointer to the gadget
  * @f: usb function
  * @_ep: the endpoint to configure
- * @alt: alternate setting number
  *
  * Return: error code, 0 on success
  *
@@ -152,14 +149,12 @@ next_desc(struct usb_descriptor_header **t, u8 desc_type)
  * Note: the supplied function should hold all the descriptors
  * for supported speeds
  */
-int config_ep_by_speed_and_alt(struct usb_gadget *g,
-				struct usb_function *f,
-				struct usb_ep *_ep,
-				u8 alt)
+int config_ep_by_speed(struct usb_gadget *g,
+			struct usb_function *f,
+			struct usb_ep *_ep)
 {
 	struct usb_composite_dev *cdev;
 	struct usb_endpoint_descriptor *chosen_desc = NULL;
-	struct usb_interface_descriptor *int_desc = NULL;
 	struct usb_descriptor_header **speed_desc = NULL;
 
 	struct usb_ss_ep_comp_descriptor *comp_desc = NULL;
@@ -204,20 +199,8 @@ int config_ep_by_speed_and_alt(struct usb_gadget *g,
 		return -EIO;
 	}
 
-	/* find correct alternate setting descriptor */
-	for_each_desc(speed_desc, d_spd, USB_DT_INTERFACE) {
-		int_desc = (struct usb_interface_descriptor *)*d_spd;
-
-		if (int_desc->bAlternateSetting == alt) {
-			speed_desc = d_spd;
-			goto intf_found;
-		}
-	}
-	return -EIO;
-
-intf_found:
 	/* find descriptors */
-	for_each_desc(speed_desc, d_spd, USB_DT_ENDPOINT) {
+	for_each_ep_desc(speed_desc, d_spd) {
 		chosen_desc = (struct usb_endpoint_descriptor *)*d_spd;
 		if (chosen_desc->bEndpointAddress == _ep->address)
 			goto ep_found;
@@ -267,32 +250,6 @@ ep_found:
 		}
 	}
 	return 0;
-}
-EXPORT_SYMBOL_GPL(config_ep_by_speed_and_alt);
-
-/**
- * config_ep_by_speed() - configures the given endpoint
- * according to gadget speed.
- * @g: pointer to the gadget
- * @f: usb function
- * @_ep: the endpoint to configure
- *
- * Return: error code, 0 on success
- *
- * This function chooses the right descriptors for a given
- * endpoint according to gadget speed and saves it in the
- * endpoint desc field. If the endpoint already has a descriptor
- * assigned to it - overwrites it with currently corresponding
- * descriptor. The endpoint maxpacket field is updated according
- * to the chosen descriptor.
- * Note: the supplied function should hold all the descriptors
- * for supported speeds
- */
-int config_ep_by_speed(struct usb_gadget *g,
-			struct usb_function *f,
-			struct usb_ep *_ep)
-{
-	return config_ep_by_speed_and_alt(g, f, _ep, 0);
 }
 EXPORT_SYMBOL_GPL(config_ep_by_speed);
 
@@ -592,7 +549,7 @@ static u8 encode_bMaxPower(enum usb_device_speed speed,
 {
 	unsigned val;
 
-	if (c->MaxPower || (c->bmAttributes & USB_CONFIG_ATT_SELFPOWER))
+	if (c->MaxPower)
 		val = c->MaxPower;
 	else
 		val = CONFIG_USB_GADGET_VBUS_DRAW;
@@ -1054,21 +1011,12 @@ static int set_config(struct usb_composite_dev *cdev,
 	}
 
 	/* when we return, be sure our power usage is valid */
-	if (c->MaxPower || (c->bmAttributes & USB_CONFIG_ATT_SELFPOWER))
-		power = c->MaxPower;
-	else
-		power = CONFIG_USB_GADGET_VBUS_DRAW;
-
+	power = c->MaxPower ? c->MaxPower : CONFIG_USB_GADGET_VBUS_DRAW;
 	if (gadget->speed < USB_SPEED_SUPER)
 		power = min(power, 500U);
 	else
 		power = min(power, 900U);
 done:
-	if (power <= USB_SELF_POWER_VBUS_MAX_DRAW)
-		usb_gadget_set_selfpowered(gadget);
-	else
-		usb_gadget_clear_selfpowered(gadget);
-
 	usb_gadget_vbus_draw(gadget, power);
 	if (result >= 0 && cdev->delayed_status)
 		result = USB_GADGET_DELAYED_STATUS;
@@ -1244,7 +1192,7 @@ static void collect_langs(struct usb_gadget_strings **sp, __le16 *buf)
 	while (*sp) {
 		s = *sp;
 		language = cpu_to_le16(s->language);
-		for (tmp = buf; *tmp && tmp < &buf[USB_MAX_STRING_LEN]; tmp++) {
+		for (tmp = buf; *tmp && tmp < &buf[126]; tmp++) {
 			if (*tmp == language)
 				goto repeat;
 		}
@@ -1327,7 +1275,7 @@ static int get_string(struct usb_composite_dev *cdev,
 			collect_langs(sp, s->wData);
 		}
 
-		for (len = 0; len <= USB_MAX_STRING_LEN && s->wData[len]; len++)
+		for (len = 0; len <= 126 && s->wData[len]; len++)
 			continue;
 		if (!len)
 			return -EINVAL;
@@ -1903,10 +1851,8 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 			set_string_mode(w_length);
 #endif
-			spin_lock(&cdev->lock);
 			value = get_string(cdev, req->buf,
 					w_index, w_value & 0xff);
-			spin_unlock(&cdev->lock);
 			if (value >= 0)
 				value = min(w_length, (u16) value);
 			break;
@@ -2123,18 +2069,6 @@ unknown:
 			memset(buf, 0, w_length);
 			buf[5] = 0x01;
 			switch (ctrl->bRequestType & USB_RECIP_MASK) {
-			/*
-			 * The Microsoft CompatID OS Descriptor Spec(w_index = 0x4) and
-			 * Extended Prop OS Desc Spec(w_index = 0x5) state that the
-			 * HighByte of wValue is the InterfaceNumber and the LowByte is
-			 * the PageNumber. This high/low byte ordering is incorrectly
-			 * documented in the Spec. USB analyzer output on the below
-			 * request packets show the high/low byte inverted i.e LowByte
-			 * is the InterfaceNumber and the HighByte is the PageNumber.
-			 * Since we dont support >64KB CompatID/ExtendedProp descriptors,
-			 * PageNumber is set to 0. Hence verify that the HighByte is 0
-			 * for below two cases.
-			 */
 			case USB_RECIP_DEVICE:
 				if (w_index != 0x4 || (w_value >> 8))
 					break;
@@ -2432,11 +2366,6 @@ int composite_dev_prepare(struct usb_composite_driver *composite,
 	 * drivers will zero ep->driver_data.
 	 */
 	usb_ep_autoconfig_reset(gadget);
-	/*
-	 * Reset deactivations as it is not possible to synchronize
-	 * between bind/unbind and open/close by user space application.
-	 */
-	cdev->deactivations = 0;
 	return 0;
 fail_dev:
 	kfree(cdev->req->buf);
@@ -2590,7 +2519,6 @@ void composite_suspend(struct usb_gadget *gadget)
 	cdev->suspended = 1;
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
-	usb_gadget_set_selfpowered(gadget);
 	usb_gadget_vbus_draw(gadget, 2);
 }
 
@@ -2637,9 +2565,6 @@ void composite_resume(struct usb_gadget *gadget)
 			maxpower = min(maxpower, 500U);
 		else
 			maxpower = min(maxpower, 900U);
-
-		if (maxpower > USB_SELF_POWER_VBUS_MAX_DRAW)
-			usb_gadget_clear_selfpowered(gadget);
 
 		usb_gadget_vbus_draw(gadget, maxpower);
 	}

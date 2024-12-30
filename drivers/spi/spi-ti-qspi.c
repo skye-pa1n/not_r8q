@@ -183,7 +183,6 @@ static int ti_qspi_setup(struct spi_device *spi)
 
 	ret = pm_runtime_get_sync(qspi->dev);
 	if (ret < 0) {
-		pm_runtime_put_noidle(qspi->dev);
 		dev_err(qspi->dev, "pm_runtime_get_sync() failed\n");
 		return ret;
 	}
@@ -408,7 +407,6 @@ static int ti_qspi_dma_xfer(struct ti_qspi *qspi, dma_addr_t dma_dst,
 	enum dma_ctrl_flags flags = DMA_CTRL_ACK | DMA_PREP_INTERRUPT;
 	struct dma_async_tx_descriptor *tx;
 	int ret;
-	unsigned long time_left;
 
 	tx = dmaengine_prep_dma_memcpy(chan, dma_dst, dma_src, len, flags);
 	if (!tx) {
@@ -428,9 +426,9 @@ static int ti_qspi_dma_xfer(struct ti_qspi *qspi, dma_addr_t dma_dst,
 	}
 
 	dma_async_issue_pending(chan);
-	time_left = wait_for_completion_timeout(&qspi->transfer_complete,
+	ret = wait_for_completion_timeout(&qspi->transfer_complete,
 					  msecs_to_jiffies(len));
-	if (time_left == 0) {
+	if (ret <= 0) {
 		dmaengine_terminate_sync(chan);
 		dev_err(qspi->dev, "DMA wait_for_completion_timeout\n");
 		return -ETIMEDOUT;
@@ -664,17 +662,6 @@ static int ti_qspi_runtime_resume(struct device *dev)
 	return 0;
 }
 
-static void ti_qspi_dma_cleanup(struct ti_qspi *qspi)
-{
-	if (qspi->rx_bb_addr)
-		dma_free_coherent(qspi->dev, QSPI_DMA_BUFFER_SIZE,
-				  qspi->rx_bb_addr,
-				  qspi->rx_bb_dma_addr);
-
-	if (qspi->rx_chan)
-		dma_release_channel(qspi->rx_chan);
-}
-
 static const struct of_device_id ti_qspi_match[] = {
 	{.compatible = "ti,dra7xxx-qspi" },
 	{.compatible = "ti,am4372-qspi" },
@@ -829,8 +816,6 @@ no_dma:
 	if (!ret)
 		return 0;
 
-	ti_qspi_dma_cleanup(qspi);
-
 	pm_runtime_disable(&pdev->dev);
 free_master:
 	spi_master_put(master);
@@ -849,7 +834,12 @@ static int ti_qspi_remove(struct platform_device *pdev)
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
-	ti_qspi_dma_cleanup(qspi);
+	if (qspi->rx_bb_addr)
+		dma_free_coherent(qspi->dev, QSPI_DMA_BUFFER_SIZE,
+				  qspi->rx_bb_addr,
+				  qspi->rx_bb_dma_addr);
+	if (qspi->rx_chan)
+		dma_release_channel(qspi->rx_chan);
 
 	return 0;
 }

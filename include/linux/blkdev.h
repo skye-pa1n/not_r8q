@@ -49,7 +49,7 @@ struct keyslot_manager;
 #ifdef CONFIG_LARGE_DIRTY_BUFFER
 #define BLKDEV_MAX_RQ	256
 #else
-#define BLKDEV_MAX_RQ  512     /* Tuned maximum */
+#define BLKDEV_MAX_RQ  128     /* Default maximum */
 #endif
 
 /* Must be consistent with blk_mq_poll_stats_bkt() */
@@ -60,14 +60,6 @@ struct keyslot_manager;
  * Defined here to simplify include dependency.
  */
 #define BLKCG_MAX_POLS		5
-
-static inline int blk_validate_block_size(unsigned long bsize)
-{
-	if (bsize < 512 || bsize > PAGE_SIZE || !is_power_of_2(bsize))
-		return -EINVAL;
-
-	return 0;
-}
 
 typedef void (rq_end_io_fn)(struct request *, blk_status_t);
 
@@ -140,8 +132,6 @@ typedef __u32 __bitwise req_flags_t;
 #define RQF_MQ_POLL_SLEPT	((__force req_flags_t)(1 << 20))
 /* ->timeout has been called, don't expire again */
 #define RQF_TIMED_OUT		((__force req_flags_t)(1 << 21))
-/* increased nr_pending for this request */
-#define RQF_PM_ADDED		((__force req_flags_t)(1 << 22))
 
 /* flags that prevent us from merging requests: */
 #define RQF_NOMERGE_FLAGS \
@@ -725,7 +715,7 @@ struct request_queue {
 	unsigned int		sg_reserved_size;
 	int			node;
 #ifdef CONFIG_BLK_DEV_IO_TRACE
-	struct blk_trace __rcu	*blk_trace;
+	struct blk_trace	*blk_trace;
 	struct mutex		blk_trace_mutex;
 #endif
 	/*
@@ -851,7 +841,6 @@ bool blk_queue_flag_test_and_clear(unsigned int flag, struct request_queue *q);
 #define blk_queue_quiesced(q)	test_bit(QUEUE_FLAG_QUIESCED, &(q)->queue_flags)
 #define blk_queue_pm_only(q)	atomic_read(&(q)->pm_only)
 #define blk_queue_fua(q)	test_bit(QUEUE_FLAG_FUA, &(q)->queue_flags)
-#define blk_queue_registered(q)	test_bit(QUEUE_FLAG_REGISTERED, &(q)->queue_flags)
 
 extern void blk_set_pm_only(struct request_queue *q);
 extern void blk_clear_pm_only(struct request_queue *q);
@@ -1613,7 +1602,7 @@ static inline unsigned int queue_io_min(struct request_queue *q)
 	return q->limits.io_min;
 }
 
-static inline unsigned int bdev_io_min(struct block_device *bdev)
+static inline int bdev_io_min(struct block_device *bdev)
 {
 	return queue_io_min(bdev_get_queue(bdev));
 }
@@ -2094,10 +2083,11 @@ struct block_device_operations {
 	int (*compat_ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);
 	unsigned int (*check_events) (struct gendisk *disk,
 				      unsigned int clearing);
+	/* ->media_changed() is DEPRECATED, use ->check_events() instead */
+	int (*media_changed) (struct gendisk *);
 	void (*unlock_native_capacity) (struct gendisk *);
 	int (*revalidate_disk) (struct gendisk *);
 	int (*getgeo)(struct block_device *, struct hd_geometry *);
-	int (*set_read_only)(struct block_device *bdev, bool ro);
 	/* this callback is with swap_lock and sometimes page table lock held */
 	void (*swap_slot_free_notify) (struct block_device *, unsigned long);
 	struct module *owner;

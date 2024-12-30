@@ -75,7 +75,7 @@ shadow_image(struct nvkm_bios *bios, int idx, u32 offset, struct shadow *mthd)
 	nvkm_debug(subdev, "%08x: type %02x, %d bytes\n",
 		   image.base, image.type, image.size);
 
-	if (!shadow_fetch(bios, mthd, image.base + image.size)) {
+	if (!shadow_fetch(bios, mthd, image.size)) {
 		nvkm_debug(subdev, "%08x: fetch failed\n", image.base);
 		return 0;
 	}
@@ -154,17 +154,11 @@ shadow_fw_init(struct nvkm_bios *bios, const char *name)
 	return (void *)fw;
 }
 
-static void
-shadow_fw_release(void *fw)
-{
-	release_firmware(fw);
-}
-
 static const struct nvbios_source
 shadow_fw = {
 	.name = "firmware",
 	.init = shadow_fw_init,
-	.fini = shadow_fw_release,
+	.fini = (void(*)(void *))release_firmware,
 	.read = shadow_fw_read,
 	.rw = false,
 };

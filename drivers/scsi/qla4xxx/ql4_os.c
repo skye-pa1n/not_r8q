@@ -940,11 +940,6 @@ static int qla4xxx_set_chap_entry(struct Scsi_Host *shost, void *data, int len)
 	memset(&chap_rec, 0, sizeof(chap_rec));
 
 	nla_for_each_attr(attr, data, len, rem) {
-		if (nla_len(attr) < sizeof(*param_info)) {
-			rc = -EINVAL;
-			goto exit_set_chap;
-		}
-
 		param_info = nla_data(attr);
 
 		switch (param_info->param) {
@@ -1226,7 +1221,7 @@ static int qla4xxx_get_host_stats(struct Scsi_Host *shost, char *buf, int len)
 			le64_to_cpu(ql_iscsi_stats->iscsi_sequence_error);
 exit_host_stats:
 	if (ql_iscsi_stats)
-		dma_free_coherent(&ha->pdev->dev, stats_size,
+		dma_free_coherent(&ha->pdev->dev, host_stats_size,
 				  ql_iscsi_stats, iscsi_stats_dma);
 
 	ql4_printk(KERN_INFO, ha, "%s: Get host stats done\n",
@@ -2729,11 +2724,6 @@ qla4xxx_iface_set_param(struct Scsi_Host *shost, void *data, uint32_t len)
 	}
 
 	nla_for_each_attr(attr, data, len, rem) {
-		if (nla_len(attr) < sizeof(*iface_param)) {
-			rval = -EINVAL;
-			goto exit_init_fw_cb;
-		}
-
 		iface_param = nla_data(attr);
 
 		if (iface_param->param_type == ISCSI_NET_PARAM) {
@@ -8108,11 +8098,6 @@ qla4xxx_sysfs_ddb_set_param(struct iscsi_bus_flash_session *fnode_sess,
 
 	memset((void *)&chap_tbl, 0, sizeof(chap_tbl));
 	nla_for_each_attr(attr, data, len, rem) {
-		if (nla_len(attr) < sizeof(*fnode_param)) {
-			rc = -EINVAL;
-			goto exit_set_param;
-		}
-
 		fnode_param = nla_data(attr);
 
 		switch (fnode_param->param) {

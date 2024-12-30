@@ -971,7 +971,6 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 	if ((var->activate & FB_ACTIVATE_FORCE) ||
 	    memcmp(&info->var, var, sizeof(struct fb_var_screeninfo))) {
 		u32 activate = var->activate;
-		u32 unused;
 
 		/* When using FOURCC mode, make sure the red, green, blue and
 		 * transp fields are set to 0.
@@ -992,30 +991,10 @@ fb_set_var(struct fb_info *info, struct fb_var_screeninfo *var)
 			goto done;
 		}
 
-		/* bitfill_aligned() assumes that it's at least 8x8 */
-		if (var->xres < 8 || var->yres < 8)
-			return -EINVAL;
-
-		/* Too huge resolution causes multiplication overflow. */
-		if (check_mul_overflow(var->xres, var->yres, &unused) ||
-		    check_mul_overflow(var->xres_virtual, var->yres_virtual, &unused))
-			return -EINVAL;
-
 		ret = info->fbops->fb_check_var(var, info);
 
 		if (ret)
 			goto done;
-
-		/* verify that virtual resolution >= physical resolution */
-		if (var->xres_virtual < var->xres ||
-		    var->yres_virtual < var->yres) {
-			pr_warn("WARNING: fbcon: Driver '%s' missed to adjust virtual screen size (%ux%u vs. %ux%u)\n",
-				info->fix.id,
-				var->xres_virtual, var->yres_virtual,
-				var->xres, var->yres);
-			ret = -EINVAL;
-			goto done;
-		}
 
 		if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
 			struct fb_var_screeninfo old_var;
@@ -1139,12 +1118,9 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			console_unlock();
 			return -ENODEV;
 		}
-		ret = fbcon_modechange_possible(info, &var);
-		if (!ret) {
-			info->flags |= FBINFO_MISC_USEREVENT;
-			ret = fb_set_var(info, &var);
-			info->flags &= ~FBINFO_MISC_USEREVENT;
-		}
+		info->flags |= FBINFO_MISC_USEREVENT;
+		ret = fb_set_var(info, &var);
+		info->flags &= ~FBINFO_MISC_USEREVENT;
 		unlock_fb_info(info);
 		console_unlock();
 		if (!ret && copy_to_user(argp, &var, sizeof(var)))
@@ -1153,7 +1129,7 @@ static long do_fb_ioctl(struct fb_info *info, unsigned int cmd,
 	case FBIOGET_FSCREENINFO:
 		if (!lock_fb_info(info))
 			return -ENODEV;
-		memcpy(&fix, &info->fix, sizeof(fix));
+		fix = info->fix;
 		unlock_fb_info(info);
 
 		ret = copy_to_user(argp, &fix, sizeof(fix)) ? -EFAULT : 0;

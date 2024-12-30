@@ -16,6 +16,7 @@ config BITREVERSE
 config HAVE_ARCH_BITREVERSE
 	bool
 	default n
+	depends on BITREVERSE
 	help
 	  This option enables the use of hardware bit-reversal instructions on
 	  architectures which support such operations.
@@ -69,11 +70,6 @@ config INDIRECT_PIO
 	  sure your devices really need this configure item enabled.
 
 	  When in doubt, say N.
-
-source "lib/crypto/Kconfig"
-
-config LIB_MEMNEQ
-	bool
 
 config CRC_CCITT
 	tristate "CRC-CCITT functions"
@@ -263,13 +259,7 @@ config LZO_COMPRESS
 config LZO_DECOMPRESS
 	tristate
 
-config LZ4KD_COMPRESS
-	tristate
-	
-config LZ4_DECOMPRESS
-	tristate
-	
-config LZ4KD_DECOMPRESS
+config LZ4_COMPRESS
 	tristate
 
 config LZ4HC_COMPRESS
@@ -564,11 +554,6 @@ config OID_REGISTRY
 config UCS2_STRING
         tristate
 
-#
-# generic vdso
-#
-source "lib/vdso/Kconfig"
-
 source "lib/fonts/Kconfig"
 
 config SG_SPLIT
@@ -625,6 +610,21 @@ config PRIME_NUMBERS
 
 config STRING_SELFTEST
 	tristate "Test string functions"
+
+config FFSI
+	bool
+	default y
+	help
+	  Library to support FFSI class as the realization of Elastic Capacity
+	  Vessel abstract theory.
+
+config SCHED_FFSI_GLUE
+	bool
+	depends on FFSI
+	default y
+	help
+	  Glue interface sticking edge of CFS scheduler and smoother governor
+	  working based on FFSI concept strategy.
 
 endmenu
 

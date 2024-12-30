@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved. */
 
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -407,8 +407,7 @@ int mhi_pm_m0_transition(struct mhi_controller *mhi_cntrl)
 
 		read_lock_irq(&mhi_chan->lock);
 		/* only ring DB if ring is not empty */
-		if (tre_ring->base && tre_ring->wp  != tre_ring->rp &&
-		    mhi_chan->ch_state == MHI_CH_STATE_ENABLED)
+		if (tre_ring->base && tre_ring->wp  != tre_ring->rp)
 			mhi_ring_chan_db(mhi_cntrl, mhi_chan);
 		read_unlock_irq(&mhi_chan->lock);
 	}
@@ -1710,8 +1709,7 @@ int mhi_device_get_sync(struct mhi_device *mhi_dev, int vote)
 }
 EXPORT_SYMBOL(mhi_device_get_sync);
 
-int mhi_device_get_sync_atomic(struct mhi_device *mhi_dev, int timeout_us,
-			       bool in_panic)
+int mhi_device_get_sync_atomic(struct mhi_device *mhi_dev, int timeout_us)
 {
 	struct mhi_controller *mhi_cntrl = mhi_dev->mhi_cntrl;
 
@@ -1737,20 +1735,11 @@ int mhi_device_get_sync_atomic(struct mhi_device *mhi_dev, int timeout_us,
 		return 0;
 	}
 
-	if (in_panic) {
-		while (mhi_get_mhi_state(mhi_cntrl) != MHI_STATE_M0 &&
-		       !MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state) &&
-		       timeout_us > 0) {
-			udelay(MHI_FORCE_WAKE_DELAY_US);
-			timeout_us -= MHI_FORCE_WAKE_DELAY_US;
-		}
-	} else {
-		while (mhi_cntrl->pm_state != MHI_PM_M0 &&
-		       !MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state) &&
-		       timeout_us > 0) {
-			udelay(MHI_FORCE_WAKE_DELAY_US);
-			timeout_us -= MHI_FORCE_WAKE_DELAY_US;
-		}
+	while (mhi_cntrl->pm_state != MHI_PM_M0 &&
+			!MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state) &&
+			timeout_us > 0) {
+		udelay(MHI_FORCE_WAKE_DELAY_US);
+		timeout_us -= MHI_FORCE_WAKE_DELAY_US;
 	}
 
 	if (MHI_PM_IN_ERROR_STATE(mhi_cntrl->pm_state) || timeout_us <= 0) {

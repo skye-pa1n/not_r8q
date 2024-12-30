@@ -42,7 +42,6 @@
 #include <linux/psci.h>
 #include <linux/sched/task.h>
 #include <linux/mm.h>
-#include <linux/libfdt.h>
 
 #include <asm/acpi.h>
 #include <asm/fixmap.h>
@@ -70,13 +69,11 @@ static struct resource *standard_resources;
 
 phys_addr_t __fdt_pointer __initdata;
 
-/* Vendor stub */
 unsigned int boot_reason;
-EXPORT_SYMBOL_GPL(boot_reason);
+EXPORT_SYMBOL(boot_reason);
 
-/* Vendor stub */
 unsigned int cold_boot;
-EXPORT_SYMBOL_GPL(cold_boot);
+EXPORT_SYMBOL(cold_boot);
 
 /*
  * Standard memory resources

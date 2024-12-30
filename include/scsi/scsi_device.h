@@ -8,7 +8,6 @@
 #include <linux/blkdev.h>
 #include <scsi/scsi.h>
 #include <linux/atomic.h>
-#include <linux/android_kabi.h>
 
 struct device;
 struct request_queue;
@@ -204,8 +203,6 @@ struct scsi_device {
 
 #define SCSI_DEFAULT_AUTOSUSPEND_DELAY  -1
 	int autosuspend_delay;
-	unsigned rpm_autosuspend:1;	/* Enable runtime autosuspend at device
-					 * creation time */
 	/* If non-zero, use timeout (in jiffies) for all commands */
 	unsigned int timeout_override;
 
@@ -239,11 +236,6 @@ struct scsi_device {
 	unsigned long		sdev_data[0];
 	u8 bootlunID;
 	bool support_tw_lu;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 } __attribute__((aligned(sizeof(unsigned long))));
 
 #define	to_scsi_device(d)	\
@@ -260,14 +252,15 @@ struct scsi_device {
  * like scmd_printk, but the device name is passed in
  * as a string pointer
  */
-static inline void sdev_prefix_printk(const char *level, const struct scsi_device *sdev,
-			const char *name, const char *fmt, ...) {}
+__printf(4, 5) void
+sdev_prefix_printk(const char *, const struct scsi_device *, const char *,
+		const char *, ...);
 
 #define sdev_printk(l, sdev, fmt, a...)				\
 	sdev_prefix_printk(l, sdev, NULL, fmt, ##a)
 
-static inline void scmd_printk(const char *level, const struct scsi_cmnd *scmd,
-		const char *fmt, ...) {}
+__printf(3, 4) void
+scmd_printk(const char *, const struct scsi_cmnd *, const char *, ...);
 
 #define scmd_dbg(scmd, fmt, a...)					   \
 	do {								   \

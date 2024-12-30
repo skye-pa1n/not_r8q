@@ -99,13 +99,13 @@ static inline u64 get_u64(const struct canfd_frame *cp, int offset)
 
 struct bcm_op {
 	struct list_head list;
-	struct rcu_head rcu;
 	int ifindex;
 	canid_t can_id;
 	u32 flags;
 	unsigned long frames_abs, frames_filtered;
 	struct bcm_timeval ival1, ival2;
 	struct hrtimer timer, thrtimer;
+	struct tasklet_struct tsklet, thrtsklet;
 	ktime_t rx_stamp, kt_ival1, kt_ival2, kt_lastmsg;
 	int rx_ifindex;
 	int cfsiz;
@@ -125,17 +125,13 @@ struct bcm_sock {
 	struct sock sk;
 	int bound;
 	int ifindex;
-	struct list_head notifier;
+	struct notifier_block notifier;
 	struct list_head rx_ops;
 	struct list_head tx_ops;
 	unsigned long dropped_usr_msgs;
 	struct proc_dir_entry *bcm_proc_read;
 	char procname [32]; /* inode number in decimal with \0 */
 };
-
-static LIST_HEAD(bcm_notifier_list);
-static DEFINE_SPINLOCK(bcm_notifier_lock);
-static struct bcm_sock *bcm_busy_notifier;
 
 static inline struct bcm_sock *bcm_sk(const struct sock *sk)
 {
@@ -273,7 +269,6 @@ static void bcm_can_tx(struct bcm_op *op)
 	struct sk_buff *skb;
 	struct net_device *dev;
 	struct canfd_frame *cf = op->frames + op->cfsiz * op->currframe;
-	int err;
 
 	/* no target device? => exit */
 	if (!op->ifindex)
@@ -298,11 +293,11 @@ static void bcm_can_tx(struct bcm_op *op)
 	/* send with loopback */
 	skb->dev = dev;
 	can_skb_set_owner(skb, op->sk);
-	err = can_send(skb, 1);
-	if (!err)
-		op->frames_abs++;
+	can_send(skb, 1);
 
+	/* update statistics */
 	op->currframe++;
+	op->frames_abs++;
 
 	/* reached last frame? */
 	if (op->currframe >= op->nframes)
@@ -375,39 +370,29 @@ static void bcm_send_to_user(struct bcm_op *op, struct bcm_msg_head *head,
 	}
 }
 
-static bool bcm_tx_set_expiry(struct bcm_op *op, struct hrtimer *hrt)
-{
-	ktime_t ival;
-
-	if (op->kt_ival1 && op->count)
-		ival = op->kt_ival1;
-	else if (op->kt_ival2)
-		ival = op->kt_ival2;
-	else
-		return false;
-
-	hrtimer_set_expires(hrt, ktime_add(ktime_get(), ival));
-	return true;
-}
-
 static void bcm_tx_start_timer(struct bcm_op *op)
 {
-	if (bcm_tx_set_expiry(op, &op->timer))
-		hrtimer_start_expires(&op->timer, HRTIMER_MODE_ABS_SOFT);
+	if (op->kt_ival1 && op->count)
+		hrtimer_start(&op->timer,
+			      ktime_add(ktime_get(), op->kt_ival1),
+			      HRTIMER_MODE_ABS);
+	else if (op->kt_ival2)
+		hrtimer_start(&op->timer,
+			      ktime_add(ktime_get(), op->kt_ival2),
+			      HRTIMER_MODE_ABS);
 }
 
-/* bcm_tx_timeout_handler - performs cyclic CAN frame transmissions */
-static enum hrtimer_restart bcm_tx_timeout_handler(struct hrtimer *hrtimer)
+static void bcm_tx_timeout_tsklet(unsigned long data)
 {
-	struct bcm_op *op = container_of(hrtimer, struct bcm_op, timer);
+	struct bcm_op *op = (struct bcm_op *)data;
 	struct bcm_msg_head msg_head;
 
 	if (op->kt_ival1 && (op->count > 0)) {
+
 		op->count--;
 		if (!op->count && (op->flags & TX_COUNTEVT)) {
 
 			/* create notification to user */
-			memset(&msg_head, 0, sizeof(msg_head));
 			msg_head.opcode  = TX_EXPIRED;
 			msg_head.flags   = op->flags;
 			msg_head.count   = op->count;
@@ -420,12 +405,22 @@ static enum hrtimer_restart bcm_tx_timeout_handler(struct hrtimer *hrtimer)
 		}
 		bcm_can_tx(op);
 
-	} else if (op->kt_ival2) {
+	} else if (op->kt_ival2)
 		bcm_can_tx(op);
-	}
 
-	return bcm_tx_set_expiry(op, &op->timer) ?
-		HRTIMER_RESTART : HRTIMER_NORESTART;
+	bcm_tx_start_timer(op);
+}
+
+/*
+ * bcm_tx_timeout_handler - performs cyclic CAN frame transmissions
+ */
+static enum hrtimer_restart bcm_tx_timeout_handler(struct hrtimer *hrtimer)
+{
+	struct bcm_op *op = container_of(hrtimer, struct bcm_op, timer);
+
+	tasklet_schedule(&op->tsklet);
+
+	return HRTIMER_NORESTART;
 }
 
 /*
@@ -445,7 +440,6 @@ static void bcm_rx_changed(struct bcm_op *op, struct canfd_frame *data)
 	/* this element is not throttled anymore */
 	data->flags &= (BCM_CAN_FLAGS_MASK|RX_RECV);
 
-	memset(&head, 0, sizeof(head));
 	head.opcode  = RX_CHANGED;
 	head.flags   = op->flags;
 	head.count   = op->count;
@@ -492,7 +486,7 @@ static void bcm_rx_update_and_send(struct bcm_op *op,
 		/* do not send the saved data - only start throttle timer */
 		hrtimer_start(&op->thrtimer,
 			      ktime_add(op->kt_lastmsg, op->kt_ival2),
-			      HRTIMER_MODE_ABS_SOFT);
+			      HRTIMER_MODE_ABS);
 		return;
 	}
 
@@ -551,23 +545,15 @@ static void bcm_rx_starttimer(struct bcm_op *op)
 		return;
 
 	if (op->kt_ival1)
-		hrtimer_start(&op->timer, op->kt_ival1, HRTIMER_MODE_REL_SOFT);
+		hrtimer_start(&op->timer, op->kt_ival1, HRTIMER_MODE_REL);
 }
 
-/* bcm_rx_timeout_handler - when the (cyclic) CAN frame reception timed out */
-static enum hrtimer_restart bcm_rx_timeout_handler(struct hrtimer *hrtimer)
+static void bcm_rx_timeout_tsklet(unsigned long data)
 {
-	struct bcm_op *op = container_of(hrtimer, struct bcm_op, timer);
+	struct bcm_op *op = (struct bcm_op *)data;
 	struct bcm_msg_head msg_head;
 
-	/* if user wants to be informed, when cyclic CAN-Messages come back */
-	if ((op->flags & RX_ANNOUNCE_RESUME) && op->last_frames) {
-		/* clear received CAN frames to indicate 'nothing received' */
-		memset(op->last_frames, 0, op->nframes * op->cfsiz);
-	}
-
 	/* create notification to user */
-	memset(&msg_head, 0, sizeof(msg_head));
 	msg_head.opcode  = RX_TIMEOUT;
 	msg_head.flags   = op->flags;
 	msg_head.count   = op->count;
@@ -577,6 +563,25 @@ static enum hrtimer_restart bcm_rx_timeout_handler(struct hrtimer *hrtimer)
 	msg_head.nframes = 0;
 
 	bcm_send_to_user(op, &msg_head, NULL, 0);
+}
+
+/*
+ * bcm_rx_timeout_handler - when the (cyclic) CAN frame reception timed out
+ */
+static enum hrtimer_restart bcm_rx_timeout_handler(struct hrtimer *hrtimer)
+{
+	struct bcm_op *op = container_of(hrtimer, struct bcm_op, timer);
+
+	/* schedule before NET_RX_SOFTIRQ */
+	tasklet_hi_schedule(&op->tsklet);
+
+	/* no restart of the timer is done here! */
+
+	/* if user wants to be informed, when cyclic CAN-Messages come back */
+	if ((op->flags & RX_ANNOUNCE_RESUME) && op->last_frames) {
+		/* clear received CAN frames to indicate 'nothing received' */
+		memset(op->last_frames, 0, op->nframes * op->cfsiz);
+	}
 
 	return HRTIMER_NORESTART;
 }
@@ -584,12 +589,14 @@ static enum hrtimer_restart bcm_rx_timeout_handler(struct hrtimer *hrtimer)
 /*
  * bcm_rx_do_flush - helper for bcm_rx_thr_flush
  */
-static inline int bcm_rx_do_flush(struct bcm_op *op, unsigned int index)
+static inline int bcm_rx_do_flush(struct bcm_op *op, int update,
+				  unsigned int index)
 {
 	struct canfd_frame *lcf = op->last_frames + op->cfsiz * index;
 
 	if ((op->last_frames) && (lcf->flags & RX_THR)) {
-		bcm_rx_changed(op, lcf);
+		if (update)
+			bcm_rx_changed(op, lcf);
 		return 1;
 	}
 	return 0;
@@ -597,8 +604,11 @@ static inline int bcm_rx_do_flush(struct bcm_op *op, unsigned int index)
 
 /*
  * bcm_rx_thr_flush - Check for throttled data and send it to the userspace
+ *
+ * update == 0 : just check if throttled data is available  (any irq context)
+ * update == 1 : check and send throttled data to userspace (soft_irq context)
  */
-static int bcm_rx_thr_flush(struct bcm_op *op)
+static int bcm_rx_thr_flush(struct bcm_op *op, int update)
 {
 	int updated = 0;
 
@@ -607,14 +617,22 @@ static int bcm_rx_thr_flush(struct bcm_op *op)
 
 		/* for MUX filter we start at index 1 */
 		for (i = 1; i < op->nframes; i++)
-			updated += bcm_rx_do_flush(op, i);
+			updated += bcm_rx_do_flush(op, update, i);
 
 	} else {
 		/* for RX_FILTER_ID and simple filter */
-		updated += bcm_rx_do_flush(op, 0);
+		updated += bcm_rx_do_flush(op, update, 0);
 	}
 
 	return updated;
+}
+
+static void bcm_rx_thr_tsklet(unsigned long data)
+{
+	struct bcm_op *op = (struct bcm_op *)data;
+
+	/* push the changed data to the userspace */
+	bcm_rx_thr_flush(op, 1);
 }
 
 /*
@@ -625,7 +643,9 @@ static enum hrtimer_restart bcm_rx_thr_handler(struct hrtimer *hrtimer)
 {
 	struct bcm_op *op = container_of(hrtimer, struct bcm_op, thrtimer);
 
-	if (bcm_rx_thr_flush(op)) {
+	tasklet_schedule(&op->thrtsklet);
+
+	if (bcm_rx_thr_flush(op, 0)) {
 		hrtimer_forward(hrtimer, ktime_get(), op->kt_ival2);
 		return HRTIMER_RESTART;
 	} else {
@@ -719,9 +739,25 @@ static struct bcm_op *bcm_find_op(struct list_head *ops,
 	return NULL;
 }
 
-static void bcm_free_op_rcu(struct rcu_head *rcu_head)
+static void bcm_remove_op(struct bcm_op *op)
 {
-	struct bcm_op *op = container_of(rcu_head, struct bcm_op, rcu);
+	if (op->tsklet.func) {
+		while (test_bit(TASKLET_STATE_SCHED, &op->tsklet.state) ||
+		       test_bit(TASKLET_STATE_RUN, &op->tsklet.state) ||
+		       hrtimer_active(&op->timer)) {
+			hrtimer_cancel(&op->timer);
+			tasklet_kill(&op->tsklet);
+		}
+	}
+
+	if (op->thrtsklet.func) {
+		while (test_bit(TASKLET_STATE_SCHED, &op->thrtsklet.state) ||
+		       test_bit(TASKLET_STATE_RUN, &op->thrtsklet.state) ||
+		       hrtimer_active(&op->thrtimer)) {
+			hrtimer_cancel(&op->thrtimer);
+			tasklet_kill(&op->thrtsklet);
+		}
+	}
 
 	if ((op->frames) && (op->frames != &op->sframe))
 		kfree(op->frames);
@@ -730,14 +766,6 @@ static void bcm_free_op_rcu(struct rcu_head *rcu_head)
 		kfree(op->last_frames);
 
 	kfree(op);
-}
-
-static void bcm_remove_op(struct bcm_op *op)
-{
-	hrtimer_cancel(&op->timer);
-	hrtimer_cancel(&op->thrtimer);
-
-	call_rcu(&op->rcu, bcm_free_op_rcu);
 }
 
 static void bcm_rx_unreg(struct net_device *dev, struct bcm_op *op)
@@ -764,9 +792,6 @@ static int bcm_delete_rx_op(struct list_head *ops, struct bcm_msg_head *mh,
 	list_for_each_entry_safe(op, n, ops, list) {
 		if ((op->can_id == mh->can_id) && (op->ifindex == ifindex) &&
 		    (op->flags & CAN_FD_FRAME) == (mh->flags & CAN_FD_FRAME)) {
-
-			/* disable automatic timer on frame reception */
-			op->flags |= RX_NO_AUTOTIMER;
 
 			/*
 			 * Don't care if we're bound or not (due to netdev
@@ -935,8 +960,6 @@ static int bcm_tx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 
 			cf = op->frames + op->cfsiz * i;
 			err = memcpy_from_msg((u8 *)cf, msg, op->cfsiz);
-			if (err < 0)
-				goto free_op;
 
 			if (op->flags & CAN_FD_FRAME) {
 				if (cf->len > 64)
@@ -946,8 +969,12 @@ static int bcm_tx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 					err = -EINVAL;
 			}
 
-			if (err < 0)
-				goto free_op;
+			if (err < 0) {
+				if (op->frames != &op->sframe)
+					kfree(op->frames);
+				kfree(op);
+				return err;
+			}
 
 			if (msg_head->flags & TX_CP_CAN_ID) {
 				/* copy can_id into frame */
@@ -963,13 +990,15 @@ static int bcm_tx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 		op->ifindex = ifindex;
 
 		/* initialize uninitialized (kzalloc) structure */
-		hrtimer_init(&op->timer, CLOCK_MONOTONIC,
-			     HRTIMER_MODE_REL_SOFT);
+		hrtimer_init(&op->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		op->timer.function = bcm_tx_timeout_handler;
 
+		/* initialize tasklet for tx countevent notification */
+		tasklet_init(&op->tsklet, bcm_tx_timeout_tsklet,
+			     (unsigned long) op);
+
 		/* currently unused in tx_ops */
-		hrtimer_init(&op->thrtimer, CLOCK_MONOTONIC,
-			     HRTIMER_MODE_REL_SOFT);
+		hrtimer_init(&op->thrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 
 		/* add this bcm_op to the list of the tx_ops */
 		list_add(&op->list, &bo->tx_ops);
@@ -1018,12 +1047,6 @@ static int bcm_tx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 		bcm_tx_start_timer(op);
 
 	return msg_head->nframes * op->cfsiz + MHSIZ;
-
-free_op:
-	if (op->frames != &op->sframe)
-		kfree(op->frames);
-	kfree(op);
-	return err;
 }
 
 /*
@@ -1144,13 +1167,19 @@ static int bcm_rx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 		op->rx_ifindex = ifindex;
 
 		/* initialize uninitialized (kzalloc) structure */
-		hrtimer_init(&op->timer, CLOCK_MONOTONIC,
-			     HRTIMER_MODE_REL_SOFT);
+		hrtimer_init(&op->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		op->timer.function = bcm_rx_timeout_handler;
 
-		hrtimer_init(&op->thrtimer, CLOCK_MONOTONIC,
-			     HRTIMER_MODE_REL_SOFT);
+		/* initialize tasklet for rx timeout notification */
+		tasklet_init(&op->tsklet, bcm_rx_timeout_tsklet,
+			     (unsigned long) op);
+
+		hrtimer_init(&op->thrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		op->thrtimer.function = bcm_rx_thr_handler;
+
+		/* initialize tasklet for rx throttle handling */
+		tasklet_init(&op->thrtsklet, bcm_rx_thr_tsklet,
+			     (unsigned long) op);
 
 		/* add this bcm_op to the list of the rx_ops */
 		list_add(&op->list, &bo->rx_ops);
@@ -1197,12 +1226,12 @@ static int bcm_rx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 			 */
 			op->kt_lastmsg = 0;
 			hrtimer_cancel(&op->thrtimer);
-			bcm_rx_thr_flush(op);
+			bcm_rx_thr_flush(op, 1);
 		}
 
 		if ((op->flags & STARTTIMER) && op->kt_ival1)
 			hrtimer_start(&op->timer, op->kt_ival1,
-				      HRTIMER_MODE_REL_SOFT);
+				      HRTIMER_MODE_REL);
 	}
 
 	/* now we can register for can_ids, if we added a new bcm_op */
@@ -1400,15 +1429,20 @@ static int bcm_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 /*
  * notification handler for netdevice status changes
  */
-static void bcm_notify(struct bcm_sock *bo, unsigned long msg,
-		       struct net_device *dev)
+static int bcm_notifier(struct notifier_block *nb, unsigned long msg,
+			void *ptr)
 {
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	struct bcm_sock *bo = container_of(nb, struct bcm_sock, notifier);
 	struct sock *sk = &bo->sk;
 	struct bcm_op *op;
 	int notify_enodev = 0;
 
 	if (!net_eq(dev_net(dev), sock_net(sk)))
-		return;
+		return NOTIFY_DONE;
+
+	if (dev->type != ARPHRD_CAN)
+		return NOTIFY_DONE;
 
 	switch (msg) {
 
@@ -1422,10 +1456,6 @@ static void bcm_notify(struct bcm_sock *bo, unsigned long msg,
 
 		/* remove device reference, if this is our bound device */
 		if (bo->bound && bo->ifindex == dev->ifindex) {
-#if IS_ENABLED(CONFIG_PROC_FS)
-			if (sock_net(sk)->can.bcmproc_dir && bo->bcm_proc_read)
-				remove_proc_entry(bo->procname, sock_net(sk)->can.bcmproc_dir);
-#endif
 			bo->bound   = 0;
 			bo->ifindex = 0;
 			notify_enodev = 1;
@@ -1447,28 +1477,7 @@ static void bcm_notify(struct bcm_sock *bo, unsigned long msg,
 				sk->sk_error_report(sk);
 		}
 	}
-}
 
-static int bcm_notifier(struct notifier_block *nb, unsigned long msg,
-			void *ptr)
-{
-	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
-
-	if (dev->type != ARPHRD_CAN)
-		return NOTIFY_DONE;
-	if (msg != NETDEV_UNREGISTER && msg != NETDEV_DOWN)
-		return NOTIFY_DONE;
-	if (unlikely(bcm_busy_notifier)) /* Check for reentrant bug. */
-		return NOTIFY_DONE;
-
-	spin_lock(&bcm_notifier_lock);
-	list_for_each_entry(bcm_busy_notifier, &bcm_notifier_list, notifier) {
-		spin_unlock(&bcm_notifier_lock);
-		bcm_notify(bcm_busy_notifier, msg, dev);
-		spin_lock(&bcm_notifier_lock);
-	}
-	bcm_busy_notifier = NULL;
-	spin_unlock(&bcm_notifier_lock);
 	return NOTIFY_DONE;
 }
 
@@ -1488,9 +1497,9 @@ static int bcm_init(struct sock *sk)
 	INIT_LIST_HEAD(&bo->rx_ops);
 
 	/* set notifier */
-	spin_lock(&bcm_notifier_lock);
-	list_add_tail(&bo->notifier, &bcm_notifier_list);
-	spin_unlock(&bcm_notifier_lock);
+	bo->notifier.notifier_call = bcm_notifier;
+
+	register_netdevice_notifier(&bo->notifier);
 
 	return 0;
 }
@@ -1513,22 +1522,9 @@ static int bcm_release(struct socket *sock)
 
 	/* remove bcm_ops, timer, rx_unregister(), etc. */
 
-	spin_lock(&bcm_notifier_lock);
-	while (bcm_busy_notifier == bo) {
-		spin_unlock(&bcm_notifier_lock);
-		schedule_timeout_uninterruptible(1);
-		spin_lock(&bcm_notifier_lock);
-	}
-	list_del(&bo->notifier);
-	spin_unlock(&bcm_notifier_lock);
+	unregister_netdevice_notifier(&bo->notifier);
 
 	lock_sock(sk);
-
-#if IS_ENABLED(CONFIG_PROC_FS)
-	/* remove procfs entry */
-	if (net->can.bcmproc_dir && bo->bcm_proc_read)
-		remove_proc_entry(bo->procname, net->can.bcmproc_dir);
-#endif /* CONFIG_PROC_FS */
 
 	list_for_each_entry_safe(op, next, &bo->tx_ops, list)
 		bcm_remove_op(op);
@@ -1558,12 +1554,14 @@ static int bcm_release(struct socket *sock)
 					  REGMASK(op->can_id),
 					  bcm_rx_handler, op);
 
+		bcm_remove_op(op);
 	}
 
-	synchronize_rcu();
-
-	list_for_each_entry_safe(op, next, &bo->rx_ops, list)
-		bcm_remove_op(op);
+#if IS_ENABLED(CONFIG_PROC_FS)
+	/* remove procfs entry */
+	if (net->can.bcmproc_dir && bo->bcm_proc_read)
+		remove_proc_entry(bo->procname, net->can.bcmproc_dir);
+#endif /* CONFIG_PROC_FS */
 
 	/* remove device reference */
 	if (bo->bound) {
@@ -1739,10 +1737,6 @@ static struct pernet_operations canbcm_pernet_ops __read_mostly = {
 	.exit = canbcm_pernet_exit,
 };
 
-static struct notifier_block canbcm_notifier = {
-	.notifier_call = bcm_notifier
-};
-
 static int __init bcm_module_init(void)
 {
 	int err;
@@ -1756,14 +1750,12 @@ static int __init bcm_module_init(void)
 	}
 
 	register_pernet_subsys(&canbcm_pernet_ops);
-	register_netdevice_notifier(&canbcm_notifier);
 	return 0;
 }
 
 static void __exit bcm_module_exit(void)
 {
 	can_proto_unregister(&bcm_can_proto);
-	unregister_netdevice_notifier(&canbcm_notifier);
 	unregister_pernet_subsys(&canbcm_pernet_ops);
 }
 

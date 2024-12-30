@@ -291,12 +291,10 @@ static int __team_options_register(struct team *team,
 	return 0;
 
 inst_rollback:
-	for (i--; i >= 0; i--) {
+	for (i--; i >= 0; i--)
 		__team_option_inst_del_option(team, dst_opts[i]);
-		list_del(&dst_opts[i]->list);
-	}
 
-	i = option_count;
+	i = option_count - 1;
 alloc_rollback:
 	for (i--; i >= 0; i--)
 		kfree(dst_opts[i]);
@@ -477,9 +475,6 @@ static const struct team_mode *team_mode_get(const char *kind)
 	struct team_mode_item *mitem;
 	const struct team_mode *mode = NULL;
 
-	if (!try_module_get(THIS_MODULE))
-		return NULL;
-
 	spin_lock(&mode_list_lock);
 	mitem = __find_mode(kind);
 	if (!mitem) {
@@ -495,7 +490,6 @@ static const struct team_mode *team_mode_get(const char *kind)
 	}
 
 	spin_unlock(&mode_list_lock);
-	module_put(THIS_MODULE);
 	return mode;
 }
 
@@ -1000,8 +994,7 @@ static void __team_compute_features(struct team *team)
 	unsigned int dst_release_flag = IFF_XMIT_DST_RELEASE |
 					IFF_XMIT_DST_RELEASE_PERM;
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(port, &team->port_list, list) {
+	list_for_each_entry(port, &team->port_list, list) {
 		vlan_features = netdev_increment_features(vlan_features,
 					port->dev->vlan_features,
 					TEAM_VLAN_FEATURES);
@@ -1015,7 +1008,6 @@ static void __team_compute_features(struct team *team)
 		if (port->dev->hard_header_len > max_hard_header_len)
 			max_hard_header_len = port->dev->hard_header_len;
 	}
-	rcu_read_unlock();
 
 	team->dev->vlan_features = vlan_features;
 	team->dev->hw_enc_features = enc_features | NETIF_F_GSO_ENCAP_ALL |
@@ -1031,7 +1023,9 @@ static void __team_compute_features(struct team *team)
 
 static void team_compute_features(struct team *team)
 {
+	mutex_lock(&team->lock);
 	__team_compute_features(team);
+	mutex_unlock(&team->lock);
 	netdev_change_features(team->dev);
 }
 
@@ -1282,12 +1276,10 @@ static int team_port_add(struct team *team, struct net_device *port_dev,
 		}
 	}
 
-	if (dev->flags & IFF_UP) {
-		netif_addr_lock_bh(dev);
-		dev_uc_sync_multiple(port_dev, dev);
-		dev_mc_sync_multiple(port_dev, dev);
-		netif_addr_unlock_bh(dev);
-	}
+	netif_addr_lock_bh(dev);
+	dev_uc_sync_multiple(port_dev, dev);
+	dev_mc_sync_multiple(port_dev, dev);
+	netif_addr_unlock_bh(dev);
 
 	port->index = -1;
 	list_add_tail_rcu(&port->list, &team->port_list);
@@ -1358,10 +1350,8 @@ static int team_port_del(struct team *team, struct net_device *port_dev)
 	netdev_rx_handler_unregister(port_dev);
 	team_port_disable_netpoll(port);
 	vlan_vids_del_by_dev(port_dev, dev);
-	if (dev->flags & IFF_UP) {
-		dev_uc_unsync(port_dev, dev);
-		dev_mc_unsync(port_dev, dev);
-	}
+	dev_uc_unsync(port_dev, dev);
+	dev_mc_unsync(port_dev, dev);
 	dev_close(port_dev);
 	team_port_leave(team, port);
 
@@ -1709,14 +1699,6 @@ static int team_open(struct net_device *dev)
 
 static int team_close(struct net_device *dev)
 {
-	struct team *team = netdev_priv(dev);
-	struct team_port *port;
-
-	list_for_each_entry(port, &team->port_list, list) {
-		dev_uc_unsync(port->dev, dev);
-		dev_mc_unsync(port->dev, dev);
-	}
-
 	return 0;
 }
 
@@ -2097,28 +2079,13 @@ static const struct ethtool_ops team_ethtool_ops = {
 static void team_setup_by_port(struct net_device *dev,
 			       struct net_device *port_dev)
 {
-	struct team *team = netdev_priv(dev);
-
-	if (port_dev->type == ARPHRD_ETHER)
-		dev->header_ops	= team->header_ops_cache;
-	else
-		dev->header_ops	= port_dev->header_ops;
+	dev->header_ops	= port_dev->header_ops;
 	dev->type = port_dev->type;
 	dev->hard_header_len = port_dev->hard_header_len;
-	dev->needed_headroom = port_dev->needed_headroom;
 	dev->addr_len = port_dev->addr_len;
 	dev->mtu = port_dev->mtu;
 	memcpy(dev->broadcast, port_dev->broadcast, port_dev->addr_len);
 	eth_hw_addr_inherit(dev, port_dev);
-
-	if (port_dev->flags & IFF_POINTOPOINT) {
-		dev->flags &= ~(IFF_BROADCAST | IFF_MULTICAST);
-		dev->flags |= (IFF_POINTOPOINT | IFF_NOARP);
-	} else if ((port_dev->flags & (IFF_BROADCAST | IFF_MULTICAST)) ==
-		    (IFF_BROADCAST | IFF_MULTICAST)) {
-		dev->flags |= (IFF_BROADCAST | IFF_MULTICAST);
-		dev->flags &= ~(IFF_POINTOPOINT | IFF_NOARP);
-	}
 }
 
 static int team_dev_type_check_change(struct net_device *dev,
@@ -2149,11 +2116,8 @@ static int team_dev_type_check_change(struct net_device *dev,
 
 static void team_setup(struct net_device *dev)
 {
-	struct team *team = netdev_priv(dev);
-
 	ether_setup(dev);
 	dev->max_mtu = ETH_MAX_MTU;
-	team->header_ops_cache = dev->header_ops;
 
 	dev->netdev_ops = &team_netdev_ops;
 	dev->ethtool_ops = &team_ethtool_ops;
@@ -2178,9 +2142,7 @@ static void team_setup(struct net_device *dev)
 
 	dev->hw_features = TEAM_VLAN_FEATURES |
 			   NETIF_F_HW_VLAN_CTAG_RX |
-			   NETIF_F_HW_VLAN_CTAG_FILTER |
-			   NETIF_F_HW_VLAN_STAG_RX |
-			   NETIF_F_HW_VLAN_STAG_FILTER;
+			   NETIF_F_HW_VLAN_CTAG_FILTER;
 
 	dev->hw_features |= NETIF_F_GSO_ENCAP_ALL | NETIF_F_GSO_UDP_L4;
 	dev->features |= dev->hw_features;

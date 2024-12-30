@@ -70,7 +70,7 @@ npcm7xx_clk_register_pll(void __iomem *pllcon, const char *name,
 			 const char *parent_name, unsigned long flags)
 {
 	struct npcm7xx_clk_pll *pll;
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 	struct clk_hw *hw;
 	int ret;
 
@@ -647,7 +647,7 @@ static void __init npcm7xx_clk_init(struct device_node *clk_np)
 	return;
 
 npcm7xx_init_fail:
-	kfree(npcm7xx_clk_data);
+	kfree(npcm7xx_clk_data->hws);
 npcm7xx_init_np_err:
 	iounmap(clk_base);
 npcm7xx_init_error:

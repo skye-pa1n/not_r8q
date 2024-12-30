@@ -94,7 +94,9 @@
 #include <linux/sched/stat.h>
 #include <linux/flex_array.h>
 #include <linux/posix-timers.h>
+#include <linux/task_integrity.h>
 #include <linux/cpufreq_times.h>
+#include <linux/proca.h>
 #include <linux/cn_proc.h>
 #include <trace/events/oom.h>
 #include "internal.h"
@@ -105,20 +107,11 @@
 #ifdef CONFIG_PAGE_BOOST
 #include <linux/delayacct.h>
 #endif
-
-struct task_kill_info {
-	struct task_struct *task;
-	struct work_struct work;
-};
-
-static void proc_kill_task(struct work_struct *work)
-{
-	struct task_kill_info *kinfo = container_of(work, typeof(*kinfo), work);
-	struct task_struct *task = kinfo->task;
-	send_sig(SIGKILL, task, 0);
-	put_task_struct(task);
-	kfree(kinfo);
-}
+#if defined(CONFIG_FAST_TRACK)
+#include <cpu/ftt/ftt.h>
+#define GLOBAL_SYSTEM_UID KUIDT_INIT(1000)
+#define GLOBAL_SYSTEM_GID KGIDT_INIT(1000)
+#endif
 
 /* NOTE:
  *	Implementing inode permission operations in /proc is almost
@@ -906,7 +899,7 @@ static ssize_t mem_rw(struct file *file, char __user *buf,
 	flags = FOLL_FORCE | (write ? FOLL_WRITE : 0);
 
 	while (count > 0) {
-		size_t this_len = min_t(size_t, count, PAGE_SIZE);
+		int this_len = min_t(int, count, PAGE_SIZE);
 
 		if (write && copy_from_user(page, buf, this_len)) {
 			copied = -EFAULT;
@@ -981,6 +974,125 @@ static const struct file_operations proc_mem_operations = {
 	.open		= mem_open,
 	.release	= mem_release,
 };
+
+#ifdef CONFIG_FAST_TRACK
+static int proc_static_ftt_show(struct seq_file *m, void *v)
+{
+	struct inode *inode = m->private;
+	struct task_struct *p;
+	p = get_proc_task(inode);
+	if (!p) {
+		return -ESRCH;
+	}
+	task_lock(p);
+	seq_printf(m, "%d\n", p->se.ftt_mark);
+	task_unlock(p);
+	put_task_struct(p);
+	return 0;
+}
+
+static ssize_t proc_static_ftt_read(struct file* file, char __user *buf,
+					    size_t count, loff_t *ppos)
+{
+	char buffer[PROC_NUMBUF];
+	struct task_struct *task = NULL;
+	int static_ftt = -1;
+	size_t len = 0;
+
+	task = get_proc_task(file_inode(file));
+	if (!task) {
+		return -ESRCH;
+	}
+	static_ftt = task->se.ftt_mark;
+	put_task_struct(task);
+	len = snprintf(buffer, sizeof(buffer), "%d\n", static_ftt);
+	return simple_read_from_buffer(buf, count, ppos, buffer, len);
+}
+
+static ssize_t proc_static_ftt_write(struct file *file, const char __user *buf,
+			     size_t count, loff_t *ppos)
+{
+	struct task_struct *task;
+	char buffer[PROC_NUMBUF] = {0};
+	const size_t max_len = sizeof(buffer) - 1;
+	int err, static_ftt;
+	u64 prev_vrt, prev_vdelta;
+
+	memset(buffer, 0, sizeof(buffer));
+	if (copy_from_user(buffer, buf, count > max_len ? max_len : count)) {
+		return -EFAULT;
+	}
+	err = kstrtoint(strstrip(buffer), 0, &static_ftt);
+	if(err) {
+		return err;
+	}
+
+	task = get_proc_task(file_inode(file));
+	if (!task) {
+		return -ESRCH;
+	}
+
+	prev_vrt = task->se.vruntime;
+	prev_vdelta = task->se.ftt_vrt_delta;
+	if(task->se.ftt_mark && static_ftt == 0) {
+		fttstat.ftt_cnt--;
+		ftt_unmark(task);
+		printk_deferred("FTT unset pid %d comm %.20s vrt %llu %llu %llu %llu"
+			"fttcount %d pftt %d w %d\n",
+			task->pid, task->comm,
+			prev_vrt, prev_vdelta, task->se.vruntime, task->se.ftt_vrt_delta,
+			fttstat.ftt_cnt, fttstat.pick_ftt, fttstat.wrong);
+	} else if(task->se.ftt_mark == 0 && static_ftt) {
+		fttstat.ftt_cnt++;
+		ftt_mark(task);
+		printk_deferred("FTT set pid %d comm %.20s vrt %llu %llu %llu %llu\n",
+			task->pid, task->comm,
+			prev_vrt, prev_vdelta, task->se.vruntime, task->se.ftt_vrt_delta);
+	}
+
+	put_task_struct(task);
+	return count;
+}
+
+static int proc_static_ftt_open(struct inode* inode, struct file *filp)
+{
+	return single_open(filp, proc_static_ftt_show, inode);
+}
+
+static const struct file_operations proc_static_ftt_operations = {
+	.open       = proc_static_ftt_open,
+	.read       = proc_static_ftt_read,
+	.write      = proc_static_ftt_write,
+	.llseek     = seq_lseek,
+	.release    = single_release,
+};
+
+static int seq_file_ftt_show(struct seq_file *seq, void *v)
+{
+	seq_printf(seq, "static ftt count: %d pickftt %d wrong %d\n",
+		fttstat.ftt_cnt, fttstat.pick_ftt, fttstat.wrong);
+	return 0;
+}
+
+static int fttinfo_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, &seq_file_ftt_show, NULL);
+}
+
+static const struct file_operations proc_fttinfo_operations = {
+        .open           = fttinfo_open,
+        .read           = seq_read,
+        .llseek         = seq_lseek,
+        .release        = seq_release,
+};
+
+static int __init proc_fttinfo_init(void)
+{
+        proc_create("fttinfo", S_IRWXUGO, NULL, &proc_fttinfo_operations);
+        return 0;
+}
+fs_initcall(proc_fttinfo_init);
+#endif
 
 static int environ_open(struct inode *inode, struct file *file)
 {
@@ -1106,9 +1218,9 @@ static ssize_t oom_adj_read(struct file *file, char __user *buf, size_t count,
 
 static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 {
+	static DEFINE_MUTEX(oom_adj_mutex);
 	struct mm_struct *mm = NULL;
 	struct task_struct *task;
-	char task_comm[TASK_COMM_LEN];
 	int err = 0;
 
 	task = get_proc_task(file_inode(file));
@@ -1146,7 +1258,7 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 		struct task_struct *p = find_lock_task_mm(task);
 
 		if (p) {
-			if (test_bit(MMF_MULTIPROCESS, &p->mm->flags)) {
+			if (atomic_read(&p->mm->mm_users) > 1) {
 				mm = p->mm;
 				mmgrab(mm);
 			}
@@ -1158,8 +1270,6 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 	if (!legacy && has_capability_noaudit(current, CAP_SYS_RESOURCE))
 		task->signal->oom_score_adj_min = (short)oom_adj;
 	trace_oom_score_adj_update(task);
-	if (oom_adj >= 700)
-		strncpy(task_comm, task->comm, TASK_COMM_LEN);
 
 	if (mm) {
 		struct task_struct *p;
@@ -1187,19 +1297,6 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 err_unlock:
 	mutex_unlock(&oom_adj_mutex);
 	put_task_struct(task);
-	/* These apps burn through CPU in the background. Don't let them. */
-	if (!err && oom_adj >= 700) {
-		if (!strcmp(task_comm, "vending:download_ser")) {
-			struct task_kill_info *kinfo;
-			kinfo = kmalloc(sizeof(*kinfo), GFP_KERNEL);
-			if (kinfo) {
-				get_task_struct(task);
-				kinfo->task = task;
-				INIT_WORK(&kinfo->work, proc_kill_task);
-				schedule_work(&kinfo->work);
-			}
-		}
-	}	
 	return err;
 }
 
@@ -1986,7 +2083,6 @@ static int do_proc_readlink(struct path *path, char __user *buffer, int buflen)
 
 	if (len > buflen)
 		len = buflen;
-		
 	if (copy_to_user(buffer, pathname, len))
 		len = -EFAULT;
  out:
@@ -2146,6 +2242,21 @@ int pid_getattr(const struct path *path, struct kstat *stat,
 	return 0;
 }
 
+#if defined(CONFIG_FAST_TRACK)
+bool is_special_entry(struct dentry *dentry, const char* special_proc)
+{
+	const unsigned char *name;
+	if (NULL == dentry || NULL == special_proc)
+		return false;
+
+	name = dentry->d_name.name;
+	if (NULL != name && !strncmp(special_proc, name, 32))
+		return true;
+	else
+		return false;
+}
+#endif
+
 /* dentry stuff */
 
 /*
@@ -2177,6 +2288,13 @@ static int pid_revalidate(struct dentry *dentry, unsigned int flags)
 
 	if (task) {
 		pid_update_inode(task, inode);
+#ifdef CONFIG_FAST_TRACK
+		if (is_special_entry(dentry, "static_ftt"))
+		{
+			inode->i_uid = GLOBAL_SYSTEM_UID;
+			inode->i_gid = GLOBAL_SYSTEM_GID;
+		}
+#endif
 		put_task_struct(task);
 		return 1;
 	}
@@ -2374,25 +2492,11 @@ static int map_files_get_link(struct dentry *dentry, struct path *path)
 
 	rc = -ENOENT;
 	vma = find_exact_vma(mm, vm_start, vm_end);
-	if (vma) {
-        	if (vma->vm_file) {
-        	        const char *target_path = "/dev/ashmem (deleted)";
-            		if (strstr(path, "lineage") || strstr(path, "boot.oat")) {
-            		rc = kern_path("/dev/ashmem (deleted)", LOOKUP_FOLLOW, path);
-            		if (rc) {
-                            pr_err("Failed to resolve path: %s (rc: %d)\n", target_path, rc);
-                            return rc;
-                    }
-        	} else {
-			*path = vma->vm_file->f_path;
-			path_get(path);
-                	rc = 0;
-            		}
-            	} else {
-             	   pr_err("Invalid VMA or VM file\n");
-              	   rc = -EINVAL;
-            	}
-    	}
+	if (vma && vma->vm_file) {
+		*path = vma->vm_file->f_path;
+		path_get(path);
+		rc = 0;
+	}
 	up_read(&mm->mmap_sem);
 
 out_mmput:
@@ -2464,7 +2568,7 @@ static struct dentry *proc_map_files_lookup(struct inode *dir,
 	struct task_struct *task;
 	struct dentry *result;
 	struct mm_struct *mm;
-	
+
 	result = ERR_PTR(-ENOENT);
 	task = get_proc_task(dir);
 	if (!task)
@@ -2490,7 +2594,7 @@ static struct dentry *proc_map_files_lookup(struct inode *dir,
 	vma = find_exact_vma(mm, vm_start, vm_end);
 	if (!vma)
 		goto out_no_vma;
-		
+
 	if (vma->vm_file)
 		result = proc_map_files_instantiate(dentry, task,
 				(void *)(unsigned long)vma->vm_file->f_mode);
@@ -2585,7 +2689,6 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 			info.start = vma->vm_start;
 			info.end = vma->vm_end;
 			info.mode = vma->vm_file->f_mode;
-			
 			if (flex_array_put(fa, i++, &info, GFP_KERNEL))
 				BUG();
 		}
@@ -2599,14 +2702,12 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 
 		p = flex_array_get(fa, i);
 		len = snprintf(buf, sizeof(buf), "%lx-%lx", p->start, p->end);
-
 		if (!proc_fill_cache(file, ctx,
 				      buf, len,
 				      proc_map_files_instantiate,
 				      task,
 				      (void *)(unsigned long)p->mode))
 			break;
-			
 		ctx->pos++;
 	}
 	if (fa)
@@ -2831,6 +2932,13 @@ static struct dentry *proc_pident_instantiate(struct dentry *dentry,
 		inode->i_fop = p->fop;
 	ei->op = p->op;
 	pid_update_inode(task, inode);
+#ifdef CONFIG_FAST_TRACK
+	if (p->fop == &proc_static_ftt_operations)
+	{
+		inode->i_uid = GLOBAL_SYSTEM_UID;
+		inode->i_gid = GLOBAL_SYSTEM_GID;
+	}
+#endif
 	d_set_d_op(dentry, &pid_dentry_operations);
 	return d_splice_alias(inode, dentry);
 }
@@ -2892,13 +3000,6 @@ out:
 }
 
 #ifdef CONFIG_SECURITY
-static int proc_pid_attr_open(struct inode *inode, struct file *file)
-{
-	file->private_data = NULL;
-	__mem_open(inode, file, PTRACE_MODE_READ_FSCREDS);
-	return 0;
-}
-
 static ssize_t proc_pid_attr_read(struct file * file, char __user * buf,
 				  size_t count, loff_t *ppos)
 {
@@ -2927,10 +3028,6 @@ static ssize_t proc_pid_attr_write(struct file * file, const char __user * buf,
 	struct task_struct *task;
 	void *page;
 	int rv;
-
-	/* A task may only write when it was the opener. */
-	if (file->private_data != current->mm)
-		return -EPERM;
 
 	rcu_read_lock();
 	task = pid_task(proc_pid(inode), PIDTYPE_PID);
@@ -2977,11 +3074,9 @@ out:
 }
 
 static const struct file_operations proc_pid_attr_operations = {
-	.open		= proc_pid_attr_open,
 	.read		= proc_pid_attr_read,
 	.write		= proc_pid_attr_write,
 	.llseek		= generic_file_llseek,
-	.release	= mem_release,
 };
 
 static const struct pid_entry attr_dir_stuff[] = {
@@ -3448,6 +3543,231 @@ static const struct file_operations proc_setgroups_operations = {
 };
 #endif /* CONFIG_USER_NS */
 
+#ifdef CONFIG_FIVE
+static int proc_integrity_value_read(struct seq_file *m,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *task)
+{
+	seq_printf(m, "%x\n", task_integrity_user_read(task->integrity));
+	return 0;
+}
+
+static int proc_integrity_label_read(struct seq_file *m,
+				struct pid_namespace *ns,
+				struct pid *pid, struct task_struct *task)
+{
+	struct integrity_label *l;
+
+	spin_lock(&task->integrity->value_lock);
+	l = task->integrity->label;
+	spin_unlock(&task->integrity->value_lock);
+
+	if (l) {
+		size_t remaining_len;
+		char *buffer = NULL;
+		size_t data_len = l->len * 2;
+
+		seq_printf(m, "%zu\n", data_len);
+		remaining_len = seq_get_buf(m, &buffer);
+
+		if (data_len && remaining_len > 1) {
+			size_t size = min(data_len, remaining_len);
+
+			bin2hex(buffer, l->data, size / 2);
+			seq_commit(m, size);
+		}
+	} else {
+		seq_printf(m, "%d\n", -1);
+	}
+
+	return 0;
+}
+
+static int proc_integrity_reset_cause(struct seq_file *m,
+				struct pid_namespace *ns,
+				struct pid *pid, struct task_struct *task)
+{
+	if (task->integrity->reset_cause != CAUSE_UNSET)
+		seq_printf(m, "%s\n", tint_reset_cause_to_string(
+			task->integrity->reset_cause));
+	else
+		seq_printf(m, "%s", "");
+	return 0;
+}
+
+static int proc_integrity_reset_file(struct seq_file *m,
+				struct pid_namespace *ns,
+				struct pid *pid, struct task_struct *task)
+{
+	char *tmp = NULL;
+	char *pathname;
+
+	if (!task->integrity->reset_file) {
+		seq_printf(m, "%s", "");
+		return 0;
+	}
+
+	tmp = (char *)__get_free_page(GFP_KERNEL);
+	if (!tmp)
+		return -ENOMEM;
+
+	pathname = d_path(&task->integrity->reset_file->f_path, tmp, PAGE_SIZE);
+	if (IS_ERR(pathname))
+		goto out;
+
+	seq_printf(m, "%s\n", pathname);
+
+ out:
+	free_page((unsigned long)tmp);
+
+	return 0;
+}
+
+#ifdef CONFIG_PROCA_DEBUG
+static int proc_get_proca_cert(struct seq_file *m,
+		struct pid_namespace *ns, struct pid *pid,
+		struct task_struct *task)
+{
+	const char *cert;
+	size_t cert_size;
+
+	if (!proca_get_task_cert(task, &cert, &cert_size)) {
+		size_t remaining_len;
+		char *buffer = NULL;
+		size_t data_len = cert_size * 2;
+
+		seq_printf(m, "%zu\n", data_len);
+		remaining_len = seq_get_buf(m, &buffer);
+
+		if (data_len && remaining_len > 1) {
+			size_t size = min(data_len, remaining_len);
+
+			bin2hex(buffer, cert, size / 2);
+			seq_commit(m, size);
+			seq_putc(m, '\n');
+		}
+	} else {
+		seq_printf(m, "%d\n", -1);
+	}
+
+	return 0;
+}
+#endif
+
+static const struct pid_entry integrity_dir_stuff[] = {
+	ONE("value", S_IRUGO, proc_integrity_value_read),
+	ONE("label", S_IRUGO, proc_integrity_label_read),
+	ONE("reset_cause", S_IRUGO, proc_integrity_reset_cause),
+	ONE("reset_file", S_IRUGO, proc_integrity_reset_file),
+#ifdef CONFIG_PROCA_DEBUG
+	ONE("proca_certificate", S_IRUGO, proc_get_proca_cert),
+#endif
+};
+
+static struct dentry *proc_integrity_instantiate(struct dentry *dentry,
+		struct task_struct *task, const void *ptr)
+{
+	const struct pid_entry *p = ptr;
+	struct inode *inode;
+	struct proc_inode *ei;
+
+	inode = proc_pid_make_inode(dentry->d_sb, task, p->mode);
+	if (!inode)
+		goto out;
+
+	ei = PROC_I(inode);
+	if (S_ISDIR(inode->i_mode))
+		set_nlink(inode, 2);	/* Use getattr to fix if necessary */
+	if (p->iop)
+		inode->i_op = p->iop;
+	if (p->fop)
+		inode->i_fop = p->fop;
+	ei->op = p->op;
+	d_set_d_op(dentry, &pid_dentry_operations);
+	return d_splice_alias(inode, dentry);
+out:
+	return ERR_PTR(-ENOENT);
+}
+
+static struct dentry *proc_integrity_lookup_common(struct inode *dir,
+		struct dentry *dentry, const struct pid_entry *ents,
+		unsigned int nents)
+{
+	struct dentry *error = ERR_PTR(-ENOENT);
+	struct task_struct *task = get_proc_task(dir);
+	const struct pid_entry *p, *last;
+
+	if (!task)
+		goto out_no_task;
+
+	last = &ents[nents - 1];
+	for (p = ents; p <= last; ++p) {
+		if (p->len != dentry->d_name.len)
+			continue;
+		if (!memcmp(dentry->d_name.name, p->name, p->len))
+			break;
+	}
+	if (p > last)
+		goto out;
+
+	error = proc_integrity_instantiate(dentry, task, p);
+out:
+	put_task_struct(task);
+out_no_task:
+	return error;
+}
+
+static struct dentry *proc_integrity_lookup(struct inode *dir,
+		struct dentry *dentry, unsigned int flags)
+{
+	return proc_integrity_lookup_common(dir, dentry,
+			integrity_dir_stuff, ARRAY_SIZE(integrity_dir_stuff));
+}
+
+static int proc_integrity_readdir_common(struct file *file,
+		struct dir_context *ctx, const struct pid_entry *ents,
+		unsigned int nents)
+{
+	struct task_struct *task = get_proc_task(file_inode(file));
+	const struct pid_entry *p;
+
+	if (!task)
+		return -ENOENT;
+
+	if (!dir_emit_dots(file, ctx))
+		goto out;
+
+	if (ctx->pos >= nents + 2)
+		goto out;
+
+	for (p = ents + (ctx->pos - 2); p <= ents + nents - 1; ++p) {
+		if (!proc_fill_cache(file, ctx, p->name, p->len,
+				proc_integrity_instantiate, task, p))
+			break;
+		++(ctx->pos);
+	}
+out:
+	put_task_struct(task);
+	return 0;
+}
+
+static int proc_integrity_readdir(struct file *file, struct dir_context *ctx)
+{
+	return proc_integrity_readdir_common(file, ctx, integrity_dir_stuff,
+			ARRAY_SIZE(integrity_dir_stuff));
+}
+
+static const struct inode_operations proc_integrity_inode_operations = {
+	.lookup = proc_integrity_lookup,
+};
+
+static const struct file_operations proc_integrity_operations = {
+	.read = generic_read_dir,
+	.iterate = proc_integrity_readdir,
+	.llseek = default_llseek,
+};
+#endif
+
 static int proc_pid_personality(struct seq_file *m, struct pid_namespace *ns,
 				struct pid *pid, struct task_struct *task)
 {
@@ -3628,6 +3948,10 @@ static const struct pid_entry tgid_base_stuff[] = {
 #endif
 #ifdef CONFIG_CPU_FREQ_TIMES
 	ONE("time_in_state", 0444, proc_time_in_state_show),
+#endif
+#ifdef CONFIG_FIVE
+	DIR("integrity", S_IRUGO|S_IXUGO, proc_integrity_inode_operations,
+			proc_integrity_operations),
 #endif
 };
 
@@ -3923,8 +4247,7 @@ static int proc_tid_comm_permission(struct inode *inode, int mask)
 }
 
 static const struct inode_operations proc_tid_comm_inode_operations = {
-		.setattr	= proc_setattr,
-		.permission	= proc_tid_comm_permission,
+		.permission = proc_tid_comm_permission,
 };
 
 /*
@@ -4024,6 +4347,9 @@ static const struct pid_entry tid_base_stuff[] = {
 #endif
 #ifdef CONFIG_CPU_FREQ_TIMES
 	ONE("time_in_state", 0444, proc_time_in_state_show),
+#endif
+#ifdef CONFIG_FAST_TRACK
+	REG("static_ftt", S_IRUGO | S_IWUSR | S_IWGRP, proc_static_ftt_operations),
 #endif
 };
 

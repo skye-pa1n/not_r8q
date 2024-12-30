@@ -14,6 +14,3 @@ are configurable at compile, boot or run time.
    mds
    tsx_async_abort
    multihit.rst
-   special-register-buffer-data-sampling.rst
-   processor_mmio_stale_data.rst
-   gather_data_sampling.rst

@@ -100,10 +100,8 @@ static void ext4_finish_bio(struct bio *bio)
 				continue;
 			}
 			clear_buffer_async_write(bh);
-			if (bio->bi_status) {
-				set_buffer_write_io_error(bh);
+			if (bio->bi_status)
 				buffer_io_error(bh);
-			}
 		} while ((bh = bh->b_this_page) != head);
 		bit_spin_unlock(BH_Uptodate_Lock, &head->b_state);
 		local_irq_restore(flags);
@@ -356,6 +354,25 @@ void ext4_io_submit(struct ext4_io_submit *io)
 	io->io_bio = NULL;
 }
 
+#ifdef CONFIG_DDAR
+int ext4_io_submit_to_dd(struct inode *inode, struct ext4_io_submit *io)
+{
+	struct bio *bio = io->io_bio;
+
+	if (!fscrypt_dd_encrypted_inode(inode))
+		return -EOPNOTSUPP;
+
+	if (bio) {
+		int io_op_flags = io->io_wbc->sync_mode == WB_SYNC_ALL ?
+				  REQ_SYNC : 0;
+		bio_set_op_attrs(io->io_bio, REQ_OP_WRITE, io_op_flags);
+		fscrypt_dd_submit_bio(inode, io->io_bio);
+	}
+	io->io_bio = NULL;
+	return 0;
+}
+#endif
+
 void ext4_io_submit_init(struct ext4_io_submit *io,
 			 struct writeback_control *wbc)
 {
@@ -385,8 +402,7 @@ static int io_submit_init_bio(struct ext4_io_submit *io,
 
 static int io_submit_add_bh(struct ext4_io_submit *io,
 			    struct inode *inode,
-			    struct page *pagecache_page,
-			    struct page *bounce_page,
+			    struct page *page,
 			    struct buffer_head *bh)
 {
 	int ret;
@@ -394,7 +410,8 @@ static int io_submit_add_bh(struct ext4_io_submit *io,
 	if (io->io_bio && (bh->b_blocknr != io->io_next_block ||
 			   !fscrypt_mergeable_bio_bh(io->io_bio, bh))) {
 submit_and_retry:
-		ext4_io_submit(io);
+		if (ext4_io_submit_to_dd(inode, io) == -EOPNOTSUPP)
+			ext4_io_submit(io);
 	}
 	if (io->io_bio == NULL) {
 		ret = io_submit_init_bio(io, bh);
@@ -402,11 +419,10 @@ submit_and_retry:
 			return ret;
 		io->io_bio->bi_write_hint = inode->i_write_hint;
 	}
-	ret = bio_add_page(io->io_bio, bounce_page ?: pagecache_page,
-			   bh->b_size, bh_offset(bh));
+	ret = bio_add_page(io->io_bio, page, bh->b_size, bh_offset(bh));
 	if (ret != bh->b_size)
 		goto submit_and_retry;
-	wbc_account_io(io->io_wbc, pagecache_page, bh->b_size);
+	wbc_account_io(io->io_wbc, page, bh->b_size);
 	io->io_next_block++;
 	return 0;
 }
@@ -466,7 +482,8 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 			if (!buffer_mapped(bh))
 				clear_buffer_dirty(bh);
 			if (io->io_bio)
-				ext4_io_submit(io);
+				if (ext4_io_submit_to_dd(inode, io) == -EOPNOTSUPP)
+					ext4_io_submit(io);
 			continue;
 		}
 		if (buffer_new(bh)) {
@@ -497,10 +514,12 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 			if (ret == -ENOMEM &&
 			    (io->io_bio || wbc->sync_mode == WB_SYNC_ALL)) {
 				gfp_flags = GFP_NOFS;
-				if (io->io_bio)
-					ext4_io_submit(io);
-				else
+				if (io->io_bio) {
+					if (ext4_io_submit_to_dd(inode, io) == -EOPNOTSUPP)
+						ext4_io_submit(io);
+				} else {
 					gfp_flags |= __GFP_NOFAIL;
+				}
 				congestion_wait(BLK_RW_ASYNC, HZ/50);
 				goto retry_encrypt;
 			}
@@ -513,7 +532,7 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 	do {
 		if (!buffer_async_write(bh))
 			continue;
-		ret = io_submit_add_bh(io, inode, page, bounce_page, bh);
+		ret = io_submit_add_bh(io, inode, bounce_page ?: page, bh);
 		if (ret) {
 			/*
 			 * We only get here on ENOMEM.  Not much else

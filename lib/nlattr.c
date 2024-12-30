@@ -69,8 +69,7 @@ static int validate_nla_bitfield32(const struct nlattr *nla,
 }
 
 static int validate_nla(const struct nlattr *nla, int maxtype,
-			const struct nla_policy *policy,
-			const char **error_msg)
+			const struct nla_policy *policy)
 {
 	const struct nla_policy *pt;
 	int minlen = 0, attrlen = nla_len(nla), type = nla_type(nla);
@@ -82,23 +81,12 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 
 	BUG_ON(pt->type > NLA_TYPE_MAX);
 
-	if ((nla_attr_len[pt->type] && attrlen != nla_attr_len[pt->type]) ||
-	    (pt->type == NLA_EXACT_LEN_WARN && attrlen != pt->len)) {
+	if (nla_attr_len[pt->type] && attrlen != nla_attr_len[pt->type]) {
 		pr_warn_ratelimited("netlink: '%s': attribute type %d has an invalid length.\n",
 				    current->comm, type);
 	}
 
 	switch (pt->type) {
-	case NLA_EXACT_LEN:
-		if (attrlen != pt->len)
-			return -ERANGE;
-		break;
-
-	case NLA_REJECT:
-		if (pt->validation_data && error_msg)
-			*error_msg = pt->validation_data;
-		return -EINVAL;
-
 	case NLA_FLAG:
 		if (attrlen > 0)
 			return -ERANGE;
@@ -192,10 +180,11 @@ int nla_validate(const struct nlattr *head, int len, int maxtype,
 	int rem;
 
 	nla_for_each_attr(nla, head, len, rem) {
-		int err = validate_nla(nla, maxtype, policy, NULL);
+		int err = validate_nla(nla, maxtype, policy);
 
 		if (err < 0) {
-			NL_SET_BAD_ATTR(extack, nla);
+			if (extack)
+				extack->bad_attr = nla;
 			return err;
 		}
 	}
@@ -261,15 +250,11 @@ int nla_parse(struct nlattr **tb, int maxtype, const struct nlattr *head,
 		u16 type = nla_type(nla);
 
 		if (type > 0 && type <= maxtype) {
-			static const char _msg[] = "Attribute failed policy validation";
-			const char *msg = _msg;
-
 			if (policy) {
-				err = validate_nla(nla, maxtype, policy, &msg);
+				err = validate_nla(nla, maxtype, policy);
 				if (err < 0) {
-					NL_SET_BAD_ATTR(extack, nla);
-					if (extack)
-						extack->_msg = msg;
+					NL_SET_ERR_MSG_ATTR(extack, nla,
+							    "Attribute failed policy validation");
 					goto errout;
 				}
 			}
@@ -412,12 +397,12 @@ EXPORT_SYMBOL(nla_memcmp);
  */
 int nla_strcmp(const struct nlattr *nla, const char *str)
 {
-	int len = strlen(str);
+	size_t len = strlen(str);
 	char *buf = nla_data(nla);
 	int attrlen = nla_len(nla);
 	int d;
 
-	while (attrlen > 0 && buf[attrlen - 1] == '\0')
+	if (attrlen > 0 && buf[attrlen - 1] == '\0')
 		attrlen--;
 
 	d = attrlen - len;

@@ -179,7 +179,6 @@ struct mipi_dsi_device_info {
  * struct mipi_dsi_device - DSI peripheral device
  * @host: DSI host for this peripheral
  * @dev: driver model device node for this peripheral
- * @attached: the DSI device has been successfully attached
  * @name: DSI peripheral chip type
  * @channel: virtual channel assigned to the peripheral
  * @format: pixel format for video mode
@@ -189,7 +188,6 @@ struct mipi_dsi_device_info {
 struct mipi_dsi_device {
 	struct mipi_dsi_host *host;
 	struct device dev;
-	bool attached;
 
 	char name[DSI_DEV_NAME_SIZE];
 	unsigned int channel;
@@ -303,10 +301,6 @@ int mipi_dsi_dcs_set_display_brightness(struct mipi_dsi_device *dsi,
 					u16 brightness);
 int mipi_dsi_dcs_get_display_brightness(struct mipi_dsi_device *dsi,
 					u16 *brightness);
-int mipi_dsi_dcs_set_display_brightness_large(struct mipi_dsi_device *dsi,
-					     u16 brightness);
-int mipi_dsi_dcs_get_display_brightness_large(struct mipi_dsi_device *dsi,
-					     u16 *brightness);
 
 /**
  * struct mipi_dsi_driver - DSI driver

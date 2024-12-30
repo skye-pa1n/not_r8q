@@ -26,7 +26,6 @@
 #include <linux/sched/prio.h>
 #include <linux/signal_types.h>
 #include <linux/mm_types_task.h>
-#include <linux/mm_event.h>
 #include <linux/task_io_accounting.h>
 #include <linux/rseq.h>
 
@@ -538,16 +537,6 @@ struct sched_entity {
 	u64				sum_exec_runtime;
 	u64				vruntime;
 	u64				prev_sum_exec_runtime;
-#ifdef CONFIG_SCHED_BORE
-	u64				burst_time;
-	u8				prev_burst_penalty;
-	u8				curr_burst_penalty;
-	u8				burst_penalty;
-	u8				burst_score;
-	u8				child_burst;
-	u32				child_burst_cnt;
-	u64				child_burst_last_cached;
-#endif // CONFIG_SCHED_BORE
 
 	u64				nr_migrations;
 
@@ -560,6 +549,13 @@ struct sched_entity {
 	struct cfs_rq			*cfs_rq;
 	/* rq "owned" by this entity/group: */
 	struct cfs_rq			*my_q;
+#endif
+
+#ifdef CONFIG_FAST_TRACK
+	int ftt_mark;
+	int ftt_enqueue_time;
+	atomic64_t ftt_dyn_mark;
+	u64 ftt_vrt_delta;
 #endif
 
 #ifdef CONFIG_SMP
@@ -584,8 +580,6 @@ struct cpu_cycle_counter_cb {
 };
 
 #define MAX_NUM_CGROUP_COLOC_ID	20
-#define SCHED_CPUFREQ_CONTINUE	(1U << 8)
-#define SCHED_CPUFREQ_BOOST_UPDATE	(1U << 9)
 
 DECLARE_PER_CPU_READ_MOSTLY(int, sched_load_boost);
 
@@ -808,6 +802,10 @@ union rcu_special {
 	} b; /* Bits. */
 	u32 s; /* Set of bits. */
 };
+
+#ifdef CONFIG_FIVE
+struct task_integrity;
+#endif
 
 enum perf_event_task_context {
 	perf_invalid_context = -1,
@@ -1161,8 +1159,8 @@ struct task_struct {
 	struct seccomp			seccomp;
 
 	/* Thread group tracking: */
-	u64				parent_exec_id;
-	u64				self_exec_id;
+	u32				parent_exec_id;
+	u32				self_exec_id;
 
 	/* Protection against (de-)allocation: mm, files, fs, tty, keyrings, mems_allowed, mempolicy: */
 	spinlock_t			alloc_lock;
@@ -1180,10 +1178,7 @@ struct task_struct {
 	/* Deadlock detection and priority inheritance handling: */
 	struct rt_mutex_waiter		*pi_blocked_on;
 #endif
-#ifdef CONFIG_MM_EVENT_STAT
-	struct mm_event_task	mm_event[MM_TYPE_NUM];
-	unsigned long		next_period;
-#endif
+
 #ifdef CONFIG_DEBUG_MUTEXES
 	/* Mutex deadlock detection: */
 	struct mutex_waiter		*blocked_on;
@@ -1358,10 +1353,7 @@ struct task_struct {
 
 	struct tlbflush_unmap_batch	tlb_ubc;
 
-	union {
-		refcount_t		rcu_users;
-		struct rcu_head		rcu;
-	};
+	struct rcu_head			rcu;
 
 	/* Cache last used pipe for splice(): */
 	struct pipe_inode_info		*splice_pipe;
@@ -1477,6 +1469,9 @@ struct task_struct {
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 	unsigned long			task_state_change;
 #endif
+#ifdef CONFIG_FIVE
+	struct task_integrity		*integrity;
+#endif
 	int				pagefault_disabled;
 #ifdef CONFIG_MMU
 	struct task_struct		*oom_reaper_list;
@@ -1495,36 +1490,10 @@ struct task_struct {
 	/* Used by LSM modules for access restriction: */
 	void				*security;
 #endif
-	/* task is frozen/stopped (used by the cgroup freezer) */
-	ANDROID_KABI_USE(1, unsigned frozen:1);
-		
-	/*
-	 * User pointer to hwui DrawFrameTask::mFrameInfo.
-	 * (used by hwui monitor)
-	 */
-	s64 __user *ui_frame_info;
-
-	/* 095444fad7e3 ("futex: Replace PF_EXITPIDONE with a state") */
-	ANDROID_KABI_USE(2, unsigned int futex_state);
-
-	/*
-	 * f9b0c6c556db ("futex: Add mutex around futex exit")
-	 * A struct mutex takes 32 bytes, or 4 64bit entries, so pick off
-	 * 4 of the reserved members, and replace them with a struct mutex.
-	 * Do the GENKSYMS hack to work around the CRC issues
-	 */
-#ifdef __GENKSYMS__
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
-	ANDROID_KABI_RESERVE(5);
-	ANDROID_KABI_RESERVE(6);
-#else
-	struct mutex			futex_exit_mutex;
+#ifdef CONFIG_PERF_MGR
+	int drawing_flag;
+	int drawing_mig_boost;
 #endif
-
-	ANDROID_KABI_RESERVE(7);
-	ANDROID_KABI_RESERVE(8);
-
 	/*
 	 * New fields for task_struct should be added above here, so that
 	 * they are included in the randomized portion of task_struct.
@@ -1701,6 +1670,7 @@ extern struct pid *cad_pid;
  */
 #define PF_IDLE			0x00000002	/* I am an IDLE thread */
 #define PF_EXITING		0x00000004	/* Getting shut down */
+#define PF_EXITPIDONE		0x00000008	/* PI exit done on shut down */
 #define PF_VCPU			0x00000010	/* I'm a virtual CPU */
 #define PF_WQ_WORKER		0x00000020	/* I'm a workqueue worker */
 #define PF_FORKNOEXEC		0x00000040	/* Forked but didn't exec */
@@ -1711,6 +1681,7 @@ extern struct pid *cad_pid;
 #define PF_MEMALLOC		0x00000800	/* Allocating memory */
 #define PF_NPROC_EXCEEDED	0x00001000	/* set_user() noticed that RLIMIT_NPROC was exceeded */
 #define PF_USED_MATH		0x00002000	/* If unset the fpu must be initialized before use */
+#define PF_USED_ASYNC		0x00004000	/* Used async_schedule*(), used by module init */
 #define PF_NOFREEZE		0x00008000	/* This thread should not be frozen */
 #define PF_FROZEN		0x00010000	/* Frozen for system suspend */
 #define PF_KSWAPD		0x00020000	/* I am kswapd */
@@ -1933,7 +1904,6 @@ extern struct task_struct *find_get_task_by_vpid(pid_t nr);
 extern int wake_up_state(struct task_struct *tsk, unsigned int state);
 extern int wake_up_process(struct task_struct *tsk);
 extern void wake_up_new_task(struct task_struct *tsk);
-extern void sched_post_fork(struct task_struct *p);
 
 #ifdef CONFIG_SMP
 extern void kick_process(struct task_struct *tsk);

@@ -38,18 +38,6 @@ void blk_flush_integrity(void)
 	flush_workqueue(kintegrityd_wq);
 }
 
-void __bio_integrity_free(struct bio_set *bs, struct bio_integrity_payload *bip)
-{
-	if (bs && mempool_initialized(&bs->bio_integrity_pool)) {
-		if (bip->bip_vec)
-			bvec_free(&bs->bvec_integrity_pool, bip->bip_vec,
-				  bip->bip_slab);
-		mempool_free(bip, &bs->bio_integrity_pool);
-	} else {
-		kfree(bip);
-	}
-}
-
 /**
  * bio_integrity_alloc - Allocate integrity payload and attach it to bio
  * @bio:	bio to attach integrity metadata to
@@ -102,7 +90,7 @@ struct bio_integrity_payload *bio_integrity_alloc(struct bio *bio,
 
 	return bip;
 err:
-	__bio_integrity_free(bs, bip);
+	mempool_free(bip, &bs->bio_integrity_pool);
 	return ERR_PTR(-ENOMEM);
 }
 EXPORT_SYMBOL(bio_integrity_alloc);
@@ -123,7 +111,14 @@ static void bio_integrity_free(struct bio *bio)
 		kfree(page_address(bip->bip_vec->bv_page) +
 		      bip->bip_vec->bv_offset);
 
-	__bio_integrity_free(bs, bip);
+	if (bs && mempool_initialized(&bs->bio_integrity_pool)) {
+		bvec_free(&bs->bvec_integrity_pool, bip->bip_vec, bip->bip_slab);
+
+		mempool_free(bip, &bs->bio_integrity_pool);
+	} else {
+		kfree(bip);
+	}
+
 	bio->bi_integrity = NULL;
 	bio->bi_opf &= ~REQ_INTEGRITY;
 }
@@ -227,7 +222,6 @@ bool bio_integrity_prep(struct bio *bio)
 	unsigned int bytes, offset, i;
 	unsigned int intervals;
 	blk_status_t status;
-	gfp_t gfp = GFP_NOIO;
 
 	if (!bi)
 		return true;
@@ -250,20 +244,12 @@ bool bio_integrity_prep(struct bio *bio)
 		if (!bi->profile->generate_fn ||
 		    !(bi->flags & BLK_INTEGRITY_GENERATE))
 			return true;
-
-		/*
-		 * Zero the memory allocated to not leak uninitialized kernel
-		 * memory to disk.  For PI this only affects the app tag, but
-		 * for non-integrity metadata it affects the entire metadata
-		 * buffer.
-		 */
-		gfp |= __GFP_ZERO;
 	}
 	intervals = bio_integrity_intervals(bi, bio_sectors(bio));
 
 	/* Allocate kernel buffer for protection data */
 	len = intervals * bi->tuple_size;
-	buf = kmalloc(len, gfp | q->bounce_gfp);
+	buf = kmalloc(len, GFP_NOIO | q->bounce_gfp);
 	status = BLK_STS_RESOURCE;
 	if (unlikely(buf == NULL)) {
 		printk(KERN_ERR "could not allocate integrity buffer\n");
@@ -307,6 +293,7 @@ bool bio_integrity_prep(struct bio *bio)
 
 		if (ret == 0) {
 			printk(KERN_ERR "could not attach integrity payload\n");
+			kfree(buf);
 			status = BLK_STS_RESOURCE;
 			goto err_end_io;
 		}
@@ -408,7 +395,7 @@ void bio_integrity_advance(struct bio *bio, unsigned int bytes_done)
 	struct blk_integrity *bi = blk_get_integrity(bio->bi_disk);
 	unsigned bytes = bio_integrity_bytes(bi, bytes_done >> 9);
 
-	bip->bip_iter.bi_sector += bio_integrity_intervals(bi, bytes_done >> 9);
+	bip->bip_iter.bi_sector += bytes_done >> 9;
 	bvec_iter_advance(bip->bip_vec, &bip->bip_iter, bytes);
 }
 EXPORT_SYMBOL(bio_integrity_advance);
@@ -453,7 +440,6 @@ int bio_integrity_clone(struct bio *bio, struct bio *bio_src,
 
 	bip->bip_vcnt = bip_src->bip_vcnt;
 	bip->bip_iter = bip_src->bip_iter;
-	bip->bip_flags = bip_src->bip_flags & ~BIP_BLOCK_INTEGRITY;
 
 	return 0;
 }

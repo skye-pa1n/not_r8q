@@ -182,47 +182,39 @@ vcs_vc(struct inode *inode, int *viewed)
 	return vc_cons[currcons].d;
 }
 
-/**
- * vcs_size -- return size for a VC in @vc
- * @vc: which VC
- * @attr: does it use attributes?
- * @unicode: is it unicode?
- *
+/*
+ * Returns size for VC carried by inode.
  * Must be called with console_lock.
  */
-static int vcs_size(const struct vc_data *vc, bool attr, bool unicode)
+static int
+vcs_size(struct inode *inode)
 {
 	int size;
+	struct vc_data *vc;
 
 	WARN_CONSOLE_UNLOCKED();
 
+	vc = vcs_vc(inode, NULL);
+	if (!vc)
+		return -ENXIO;
+
 	size = vc->vc_rows * vc->vc_cols;
 
-	if (attr) {
-		if (unicode)
+	if (use_attributes(inode)) {
+		if (use_unicode(inode))
 			return -EOPNOTSUPP;
-
-		size = 2 * size + HEADER_SIZE;
-	} else if (unicode)
+		size = 2*size + HEADER_SIZE;
+	} else if (use_unicode(inode))
 		size *= 4;
-
 	return size;
 }
 
 static loff_t vcs_lseek(struct file *file, loff_t offset, int orig)
 {
-	struct inode *inode = file_inode(file);
-	struct vc_data *vc;
 	int size;
 
 	console_lock();
-	vc = vcs_vc(inode, NULL);
-	if (!vc) {
-		console_unlock();
-		return -ENXIO;
-	}
-
-	size = vcs_size(vc, use_attributes(inode), use_unicode(inode));
+	size = vcs_size(file_inode(file));
 	console_unlock();
 	if (size < 0)
 		return size;
@@ -255,6 +247,10 @@ vcs_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 
 	uni_mode = use_unicode(inode);
 	attr = use_attributes(inode);
+	ret = -ENXIO;
+	vc = vcs_vc(inode, &viewed);
+	if (!vc)
+		goto unlock_out;
 
 	ret = -EINVAL;
 	if (pos < 0)
@@ -274,20 +270,16 @@ vcs_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 		ssize_t orig_count;
 		long p = pos;
 
-		vc = vcs_vc(inode, &viewed);
-		if (!vc) {
-			ret = -ENXIO;
-			break;
-		}
-
 		/* Check whether we are above size each round,
 		 * as copy_to_user at the end of this loop
 		 * could sleep.
 		 */
-		size = vcs_size(vc, attr, uni_mode);
+		size = vcs_size(inode);
 		if (size < 0) {
+			if (read)
+				break;
 			ret = size;
-			break;
+			goto unlock_out;
 		}
 		if (pos >= size)
 			break;
@@ -465,11 +457,7 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 	if (!vc)
 		goto unlock_out;
 
-	size = vcs_size(vc, attr, false);
-	if (size < 0) {
-		ret = size;
-		goto unlock_out;
-	}
+	size = vcs_size(inode);
 	ret = -EINVAL;
 	if (pos < 0 || pos > size)
 		goto unlock_out;
@@ -504,18 +492,11 @@ vcs_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
 			}
 		}
 
-		/* The vc might have been freed or vcs_size might have changed
-		 * while we slept to grab the user buffer, so recheck.
+		/* The vcs_size might have changed while we slept to grab
+		 * the user buffer, so recheck.
 		 * Return data written up to now on failure.
 		 */
-		vc = vcs_vc(inode, &viewed);
-		if (!vc) {
-			if (written)
-				break;
-			ret = -ENXIO;
-			goto unlock_out;
-		}
-		size = vcs_size(vc, attr, false);
+		size = vcs_size(inode);
 		if (size < 0) {
 			if (written)
 				break;

@@ -452,8 +452,9 @@ static int stv0288_set_frontend(struct dvb_frontend *fe)
 	struct stv0288_state *state = fe->demodulator_priv;
 	struct dtv_frontend_properties *c = &fe->dtv_property_cache;
 
-	u8 tda[3], reg, time_out = 0;
-	s8 tm;
+	char tm;
+	unsigned char tda[3];
+	u8 reg, time_out = 0;
 
 	dprintk("%s : FE_SET_FRONTEND\n", __func__);
 
@@ -602,7 +603,7 @@ error:
 
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(stv0288_attach);
+EXPORT_SYMBOL(stv0288_attach);
 
 module_param(debug_legacy_dish_switch, int, 0444);
 MODULE_PARM_DESC(debug_legacy_dish_switch,

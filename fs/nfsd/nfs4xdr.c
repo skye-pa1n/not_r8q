@@ -1064,6 +1064,14 @@ nfsd4_decode_putfh(struct nfsd4_compoundargs *argp, struct nfsd4_putfh *putfh)
 }
 
 static __be32
+nfsd4_decode_putpubfh(struct nfsd4_compoundargs *argp, void *p)
+{
+	if (argp->minorversion == 0)
+		return nfs_ok;
+	return nfserr_notsupp;
+}
+
+static __be32
 nfsd4_decode_read(struct nfsd4_compoundargs *argp, struct nfsd4_read *read)
 {
 	DECODE_HEAD;
@@ -1810,7 +1818,7 @@ static const nfsd4_dec nfsd4_dec_ops[] = {
 	[OP_OPEN_CONFIRM]	= (nfsd4_dec)nfsd4_decode_open_confirm,
 	[OP_OPEN_DOWNGRADE]	= (nfsd4_dec)nfsd4_decode_open_downgrade,
 	[OP_PUTFH]		= (nfsd4_dec)nfsd4_decode_putfh,
-	[OP_PUTPUBFH]		= (nfsd4_dec)nfsd4_decode_noop,
+	[OP_PUTPUBFH]		= (nfsd4_dec)nfsd4_decode_putpubfh,
 	[OP_PUTROOTFH]		= (nfsd4_dec)nfsd4_decode_noop,
 	[OP_READ]		= (nfsd4_dec)nfsd4_decode_read,
 	[OP_READDIR]		= (nfsd4_dec)nfsd4_decode_readdir,
@@ -2976,9 +2984,18 @@ nfsd4_encode_dirent_fattr(struct xdr_stream *xdr, struct nfsd4_readdir *cd,
 	__be32 nfserr;
 	int ignore_crossmnt = 0;
 
-	dentry = lookup_positive_unlocked(name, cd->rd_fhp->fh_dentry, namlen);
+	dentry = lookup_one_len_unlocked(name, cd->rd_fhp->fh_dentry, namlen);
 	if (IS_ERR(dentry))
 		return nfserrno(PTR_ERR(dentry));
+	if (d_really_is_negative(dentry)) {
+		/*
+		 * we're not holding the i_mutex here, so there's
+		 * a window where this directory entry could have gone
+		 * away.
+		 */
+		dput(dentry);
+		return nfserr_noent;
+	}
 
 	exp_get(exp);
 	/*
@@ -3085,17 +3102,6 @@ nfsd4_encode_dirent(void *ccdv, const char *name, int namlen,
 	case nfserr_noent:
 		xdr_truncate_encode(xdr, start_offset);
 		goto skip_entry;
-	case nfserr_jukebox:
-		/*
-		 * The pseudoroot should only display dentries that lead to
-		 * exports. If we get EJUKEBOX here, then we can't tell whether
-		 * this entry should be included. Just fail the whole READDIR
-		 * with NFS4ERR_DELAY in that case, and hope that the situation
-		 * will resolve itself by the client's next attempt.
-		 */
-		if (cd->rd_fhp->fh_export->ex_flags & NFSEXP_V4ROOT)
-			goto fail;
-		/* fallthrough */
 	default:
 		/*
 		 * If the client requested the RDATTR_ERROR attribute,
@@ -3118,18 +3124,15 @@ nfsd4_encode_dirent(void *ccdv, const char *name, int namlen,
 		goto fail;
 	cd->rd_maxcount -= entry_bytes;
 	/*
-	 * RFC 3530 14.2.24 describes rd_dircount as only a "hint", and
-	 * notes that it could be zero. If it is zero, then the server
-	 * should enforce only the rd_maxcount value.
+	 * RFC 3530 14.2.24 describes rd_dircount as only a "hint", so
+	 * let's always let through the first entry, at least:
 	 */
-	if (cd->rd_dircount) {
-		name_and_cookie = 4 + 4 * XDR_QUADLEN(namlen) + 8;
-		if (name_and_cookie > cd->rd_dircount && cd->cookie_offset)
-			goto fail;
-		cd->rd_dircount -= min(cd->rd_dircount, name_and_cookie);
-		if (!cd->rd_dircount)
-			cd->rd_maxcount = 0;
-	}
+	if (!cd->rd_dircount)
+		goto fail;
+	name_and_cookie = 4 + 4 * XDR_QUADLEN(namlen) + 8;
+	if (name_and_cookie > cd->rd_dircount && cd->cookie_offset)
+		goto fail;
+	cd->rd_dircount -= min(cd->rd_dircount, name_and_cookie);
 
 	cd->cookie_offset = cookie_offset;
 skip_entry:
@@ -3386,7 +3389,7 @@ nfsd4_encode_open(struct nfsd4_compoundres *resp, __be32 nfserr, struct nfsd4_op
 		p = xdr_reserve_space(xdr, 32);
 		if (!p)
 			return nfserr_resource;
-		*p++ = cpu_to_be32(open->op_recall);
+		*p++ = cpu_to_be32(0);
 
 		/*
 		 * TODO: space_limit's in delegations
@@ -3588,7 +3591,7 @@ nfsd4_encode_read(struct nfsd4_compoundres *resp, __be32 nfserr,
 	if (resp->xdr.buf->page_len &&
 	    test_bit(RQ_SPLICE_OK, &resp->rqstp->rq_flags)) {
 		WARN_ON_ONCE(1);
-		return nfserr_serverfault;
+		return nfserr_resource;
 	}
 	xdr_commit_encode(xdr);
 
@@ -4118,17 +4121,20 @@ nfsd4_encode_getdeviceinfo(struct nfsd4_compoundres *resp, __be32 nfserr,
 
 	*p++ = cpu_to_be32(gdev->gd_layout_type);
 
-	ops = nfsd4_layout_ops[gdev->gd_layout_type];
-	nfserr = ops->encode_getdeviceinfo(xdr, gdev);
-	if (nfserr) {
-		/*
-		 * We don't bother to burden the layout drivers with
-		 * enforcing gd_maxcount, just tell the client to
-		 * come back with a bigger buffer if it's not enough.
-		 */
-		if (xdr->buf->len + 4 > gdev->gd_maxcount)
-			goto toosmall;
-		return nfserr;
+	/* If maxcount is 0 then just update notifications */
+	if (gdev->gd_maxcount != 0) {
+		ops = nfsd4_layout_ops[gdev->gd_layout_type];
+		nfserr = ops->encode_getdeviceinfo(xdr, gdev);
+		if (nfserr) {
+			/*
+			 * We don't bother to burden the layout drivers with
+			 * enforcing gd_maxcount, just tell the client to
+			 * come back with a bigger buffer if it's not enough.
+			 */
+			if (xdr->buf->len + 4 > gdev->gd_maxcount)
+				goto toosmall;
+			return nfserr;
+		}
 	}
 
 	if (gdev->gd_notify_types) {

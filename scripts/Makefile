@@ -10,9 +10,6 @@
 
 HOST_EXTRACFLAGS += -I$(srctree)/tools/include
 
-CRYPTO_LIBS = $(shell pkg-config --libs libcrypto 2> /dev/null || echo -lcrypto)
-CRYPTO_CFLAGS = $(shell pkg-config --cflags libcrypto 2> /dev/null)
-
 hostprogs-$(CONFIG_BUILD_BIN2C)  += bin2c
 hostprogs-$(CONFIG_KALLSYMS)     += kallsyms
 hostprogs-$(CONFIG_LOGO)         += pnmtologo
@@ -26,17 +23,13 @@ hostprogs-$(CONFIG_SYSTEM_EXTRA_CERTIFICATE) += insert-sys-cert
 
 HOSTCFLAGS_sortextable.o = -I$(srctree)/tools/include
 HOSTCFLAGS_asn1_compiler.o = -I$(srctree)/include
-HOSTCFLAGS_sign-file.o = $(CRYPTO_CFLAGS)
-HOSTLDLIBS_sign-file = $(CRYPTO_LIBS)
-HOSTCFLAGS_extract-cert.o = $(CRYPTO_CFLAGS)
-HOSTLDLIBS_extract-cert = $(CRYPTO_LIBS)
+HOSTLDLIBS_sign-file = -lcrypto
+HOSTLDLIBS_extract-cert = -lcrypto
 
 always		:= $(hostprogs-y) $(hostprogs-m)
 
 # The following hostprogs-y programs are only build on demand
 hostprogs-y += unifdef
-
-extra-$(CONFIG_LTO_CLANG)   += module-lto.lds
 
 # These targets are used internally to avoid "is up to date" messages
 PHONY += build_unifdef

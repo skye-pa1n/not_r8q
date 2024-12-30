@@ -343,18 +343,11 @@ static bool build_perf_domains(const struct cpumask *cpu_map)
 	struct perf_domain *pd = NULL, *tmp;
 	int cpu = cpumask_first(cpu_map);
 	struct root_domain *rd = cpu_rq(cpu)->rd;
-   
+
 	if (!sysctl_sched_energy_aware)
 		goto free;
 
-	/*
-	 * EAS gets disabled when there are no asymmetric capacity
-	 * CPUs in the system. For example, all big CPUs are
-	 * hotplugged out on a b.L system. We want EAS enabled
-	 * all the time to get both power and perf benefits. Apply
-	 * this policy when WALT is enabled.
-	 */
-#ifndef CONFIG_SCHED_WALT
+	/* EAS is enabled for asymmetric CPU capacity topologies. */
 	if (!per_cpu(sd_asym_cpucapacity, cpu)) {
 		if (sched_debug()) {
 			pr_info("rd %*pbl: CPUs do not have asymmetric capacities\n",
@@ -362,7 +355,6 @@ static bool build_perf_domains(const struct cpumask *cpu_map)
 		}
 		goto free;
 	}
-#endif
 
 	for_each_cpu(i, cpu_map) {
 		/* Skip already covered CPUs. */
@@ -647,6 +639,22 @@ static void update_top_cache_domain(int cpu)
 	rcu_assign_pointer(per_cpu(sd_asym_packing, cpu), sd);
 
 	sd = lowest_flag_domain(cpu, SD_ASYM_CPUCAPACITY);
+	/*
+	 * EAS gets disabled when there are no asymmetric capacity
+	 * CPUs in the system. For example, all big CPUs are
+	 * hotplugged out on a b.L system. We want EAS enabled
+	 * all the time to get both power and perf benefits. So,
+	 * lets assign sd_asym_cpucapacity to the only available
+	 * sched domain. This is also important for a single cluster
+	 * systems which wants to use EAS.
+	 *
+	 * Setting sd_asym_cpucapacity() to a sched domain which
+	 * has all symmetric capacity CPUs is technically incorrect but
+	 * works well for us in getting EAS enabled all the time.
+	 */
+	if (!sd)
+		sd = cpu_rq(cpu)->sd;
+
 	rcu_assign_pointer(per_cpu(sd_asym_cpucapacity, cpu), sd);
 }
 
@@ -1195,13 +1203,16 @@ static void set_domain_attribute(struct sched_domain *sd,
 	if (!attr || attr->relax_domain_level < 0) {
 		if (default_relax_domain_level < 0)
 			return;
-		request = default_relax_domain_level;
+		else
+			request = default_relax_domain_level;
 	} else
 		request = attr->relax_domain_level;
-
-	if (sd->level >= request) {
+	if (request < sd->level) {
 		/* Turn off idle balance on this domain: */
 		sd->flags &= ~(SD_BALANCE_WAKE|SD_BALANCE_NEWIDLE);
+	} else {
+		/* Turn on idle balance on this domain: */
+		sd->flags |= (SD_BALANCE_WAKE|SD_BALANCE_NEWIDLE);
 	}
 }
 
@@ -1323,7 +1334,7 @@ sd_init(struct sched_domain_topology_level *tl,
 		sd_flags = (*tl->sd_flags)();
 	if (WARN_ONCE(sd_flags & ~TOPOLOGY_SD_FLAGS,
 			"wrong sd_flags in topology description\n"))
-		sd_flags &= TOPOLOGY_SD_FLAGS;
+		sd_flags &= ~TOPOLOGY_SD_FLAGS;
 
 	/* Apply detected topology flags */
 	sd_flags |= dflags;
@@ -1550,58 +1561,66 @@ static void init_numa_topology_type(void)
 	}
 }
 
-
-#define NR_DISTANCE_VALUES (1 << DISTANCE_BITS)
-
 void sched_init_numa(void)
 {
+	int next_distance, curr_distance = node_distance(0, 0);
 	struct sched_domain_topology_level *tl;
-	unsigned long *distance_map;
-	int nr_levels = 0;
-	int i, j;
+	int level = 0;
+	int i, j, k;
+
+	sched_domains_numa_distance = kzalloc(sizeof(int) * (nr_node_ids + 1), GFP_KERNEL);
+	if (!sched_domains_numa_distance)
+		return;
+
+	/* Includes NUMA identity node at level 0. */
+	sched_domains_numa_distance[level++] = curr_distance;
+	sched_domains_numa_levels = level;
 
 	/*
 	 * O(nr_nodes^2) deduplicating selection sort -- in order to find the
 	 * unique distances in the node_distance() table.
+	 *
+	 * Assumes node_distance(0,j) includes all distances in
+	 * node_distance(i,j) in order to avoid cubic time.
 	 */
-	distance_map = bitmap_alloc(NR_DISTANCE_VALUES, GFP_KERNEL);
-	if (!distance_map)
-		return;
-
-	bitmap_zero(distance_map, NR_DISTANCE_VALUES);
+	next_distance = curr_distance;
 	for (i = 0; i < nr_node_ids; i++) {
 		for (j = 0; j < nr_node_ids; j++) {
-			int distance = node_distance(i, j);
+			for (k = 0; k < nr_node_ids; k++) {
+				int distance = node_distance(i, k);
 
-			if (distance < LOCAL_DISTANCE || distance >= NR_DISTANCE_VALUES) {
-				sched_numa_warn("Invalid distance value range");
-				return;
+				if (distance > curr_distance &&
+				    (distance < next_distance ||
+				     next_distance == curr_distance))
+					next_distance = distance;
+
+				/*
+				 * While not a strong assumption it would be nice to know
+				 * about cases where if node A is connected to B, B is not
+				 * equally connected to A.
+				 */
+				if (sched_debug() && node_distance(k, i) != distance)
+					sched_numa_warn("Node-distance not symmetric");
+
+				if (sched_debug() && i && !find_numa_distance(distance))
+					sched_numa_warn("Node-0 not representative");
 			}
-
-			bitmap_set(distance_map, distance, 1);
+			if (next_distance != curr_distance) {
+				sched_domains_numa_distance[level++] = next_distance;
+				sched_domains_numa_levels = level;
+				curr_distance = next_distance;
+			} else break;
 		}
-	}
-	/*
-	 * We can now figure out how many unique distance values there are and
-	 * allocate memory accordingly.
-	 */
-	nr_levels = bitmap_weight(distance_map, NR_DISTANCE_VALUES);
 
-	sched_domains_numa_distance = kcalloc(nr_levels, sizeof(int), GFP_KERNEL);
-	if (!sched_domains_numa_distance) {
-		bitmap_free(distance_map);
-		return;
+		/*
+		 * In case of sched_debug() we verify the above assumption.
+		 */
+		if (!sched_debug())
+			break;
 	}
-
-	for (i = 0, j = 0; i < nr_levels; i++, j++) {
-		j = find_next_bit(distance_map, NR_DISTANCE_VALUES, j);
-		sched_domains_numa_distance[i] = j;
-	}
-
-	bitmap_free(distance_map);
 
 	/*
-	 * 'nr_levels' contains the number of unique distances
+	 * 'level' contains the number of unique distances
 	 *
 	 * The sched_domains_numa_distance[] array includes the actual distance
 	 * numbers.
@@ -1610,15 +1629,15 @@ void sched_init_numa(void)
 	/*
 	 * Here, we should temporarily reset sched_domains_numa_levels to 0.
 	 * If it fails to allocate memory for array sched_domains_numa_masks[][],
-	 * the array will contain less then 'nr_levels' members. This could be
+	 * the array will contain less then 'level' members. This could be
 	 * dangerous when we use it to iterate array sched_domains_numa_masks[][]
 	 * in other functions.
 	 *
-	 * We reset it to 'nr_levels' at the end of this function.
+	 * We reset it to 'level' at the end of this function.
 	 */
 	sched_domains_numa_levels = 0;
 
-	sched_domains_numa_masks = kzalloc(sizeof(void *) * nr_levels, GFP_KERNEL);
+	sched_domains_numa_masks = kzalloc(sizeof(void *) * level, GFP_KERNEL);
 	if (!sched_domains_numa_masks)
 		return;
 
@@ -1626,7 +1645,7 @@ void sched_init_numa(void)
 	 * Now for each level, construct a mask per node which contains all
 	 * CPUs of nodes that are that many hops away from us.
 	 */
-	for (i = 0; i < nr_levels; i++) {
+	for (i = 0; i < level; i++) {
 		sched_domains_numa_masks[i] =
 			kzalloc(nr_node_ids * sizeof(void *), GFP_KERNEL);
 		if (!sched_domains_numa_masks[i])
@@ -1634,17 +1653,12 @@ void sched_init_numa(void)
 
 		for (j = 0; j < nr_node_ids; j++) {
 			struct cpumask *mask = kzalloc(cpumask_size(), GFP_KERNEL);
-			int k;
-
 			if (!mask)
 				return;
 
 			sched_domains_numa_masks[i][j] = mask;
 
 			for_each_node(k) {
-				if (sched_debug() && (node_distance(j, k) != node_distance(k, j)))
-					sched_numa_warn("Node-distance not symmetric");
-
 				if (node_distance(j, k) > sched_domains_numa_distance[i])
 					continue;
 
@@ -1656,7 +1670,7 @@ void sched_init_numa(void)
 	/* Compute default topology size */
 	for (i = 0; sched_domain_topology[i].mask; i++);
 
-	tl = kzalloc((i + nr_levels + 1) *
+	tl = kzalloc((i + level + 1) *
 			sizeof(struct sched_domain_topology_level), GFP_KERNEL);
 	if (!tl)
 		return;
@@ -1679,7 +1693,7 @@ void sched_init_numa(void)
 	/*
 	 * .. and append 'j' levels of NUMA goodness.
 	 */
-	for (j = 1; j < nr_levels; i++, j++) {
+	for (j = 1; j < level; i++, j++) {
 		tl[i] = (struct sched_domain_topology_level){
 			.mask = sd_numa_mask,
 			.sd_flags = cpu_numa_flags,
@@ -1691,8 +1705,8 @@ void sched_init_numa(void)
 
 	sched_domain_topology = tl;
 
-	sched_domains_numa_levels = nr_levels;
-	sched_max_numa_distance = sched_domains_numa_distance[nr_levels - 1];
+	sched_domains_numa_levels = level;
+	sched_max_numa_distance = sched_domains_numa_distance[level - 1];
 
 	init_numa_topology_type();
 }
@@ -1923,15 +1937,12 @@ next_level:
 static int
 build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *attr)
 {
-	enum s_alloc alloc_state = sa_none;
+	enum s_alloc alloc_state;
 	struct sched_domain *sd;
 	struct s_data d;
 	int i, ret = -ENOMEM;
 	struct sched_domain_topology_level *tl_asym;
 	bool has_asym = false;
-
-	if (WARN_ON(cpumask_empty(cpu_map)))
-		goto error;
 
 	alloc_state = __visit_domain_allocation_hell(&d, cpu_map);
 	if (alloc_state != sa_rootdomain)
@@ -2035,7 +2046,7 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	rcu_read_unlock();
 
 	if (has_asym)
-		static_branch_inc_cpuslocked(&sched_asym_cpucapacity);
+		static_branch_enable_cpuslocked(&sched_asym_cpucapacity);
 
 	ret = 0;
 error:
@@ -2126,11 +2137,7 @@ int sched_init_domains(const struct cpumask *cpu_map)
  */
 static void detach_destroy_domains(const struct cpumask *cpu_map)
 {
-	unsigned int cpu = cpumask_any(cpu_map);
 	int i;
-
-	if (rcu_access_pointer(per_cpu(sd_asym_cpucapacity, cpu)))
-		static_branch_dec_cpuslocked(&sched_asym_cpucapacity);
 
 	rcu_read_lock();
 	for_each_cpu(i, cpu_map)
@@ -2246,7 +2253,7 @@ match2:
 #ifdef CONFIG_ENERGY_MODEL
 	/* Build perf. domains: */
 	for (i = 0; i < ndoms_new; i++) {
-		for (j = 0; j < n && !sched_energy_update; j++) {
+		for (j = 0; j < n; j++) {
 			if (cpumask_equal(doms_new[i], doms_cur[j]) &&
 			    cpu_rq(cpumask_first(doms_cur[j]))->rd->pd) {
 				has_eas = true;

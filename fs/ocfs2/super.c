@@ -92,7 +92,7 @@ struct mount_options
 	unsigned long	commit_interval;
 	unsigned long	mount_opt;
 	unsigned int	atime_quantum;
-	unsigned short	slot;
+	signed short	slot;
 	int		localalloc_opt;
 	unsigned int	resv_level;
 	int		dir_resv_level;
@@ -985,10 +985,8 @@ static void ocfs2_disable_quotas(struct ocfs2_super *osb)
 	for (type = 0; type < OCFS2_MAXQUOTAS; type++) {
 		if (!sb_has_quota_loaded(sb, type))
 			continue;
-		if (!sb_has_quota_suspended(sb, type)) {
-			oinfo = sb_dqinfo(sb, type)->dqi_priv;
-			cancel_delayed_work_sync(&oinfo->dqi_sync_work);
-		}
+		oinfo = sb_dqinfo(sb, type)->dqi_priv;
+		cancel_delayed_work_sync(&oinfo->dqi_sync_work);
 		inode = igrab(sb->s_dquot.files[type]);
 		/* Turn off quotas. This will remove all dquot structures from
 		 * memory and so they will be automatically synced to global
@@ -1152,6 +1150,17 @@ static int ocfs2_fill_super(struct super_block *sb, void *data, int silent)
 		goto read_super_error;
 	}
 
+	root = d_make_root(inode);
+	if (!root) {
+		status = -ENOMEM;
+		mlog_errno(status);
+		goto read_super_error;
+	}
+
+	sb->s_root = root;
+
+	ocfs2_complete_mount_recovery(osb);
+
 	osb->osb_dev_kset = kset_create_and_add(sb->s_id, NULL,
 						&ocfs2_kset->kobj);
 	if (!osb->osb_dev_kset) {
@@ -1168,17 +1177,6 @@ static int ocfs2_fill_super(struct super_block *sb, void *data, int silent)
 			"/sys/fs/ocfs2/%s/filecheck.\n", sb->s_id);
 		goto read_super_error;
 	}
-
-	root = d_make_root(inode);
-	if (!root) {
-		status = -ENOMEM;
-		mlog_errno(status);
-		goto read_super_error;
-	}
-
-	sb->s_root = root;
-
-	ocfs2_complete_mount_recovery(osb);
 
 	if (ocfs2_mount_local(osb))
 		snprintf(nodestr, sizeof(nodestr), "local");
@@ -1386,7 +1384,7 @@ static int ocfs2_parse_options(struct super_block *sb,
 				goto bail;
 			}
 			if (option)
-				mopt->slot = (u16)option;
+				mopt->slot = (s16)option;
 			break;
 		case Opt_commit:
 			if (match_int(&args[0], &option)) {
@@ -1749,7 +1747,6 @@ static void ocfs2_inode_init_once(void *data)
 
 	oi->ip_blkno = 0ULL;
 	oi->ip_clusters = 0;
-	oi->ip_next_orphan = NULL;
 
 	ocfs2_resv_init_once(&oi->ip_la_data_resv);
 
@@ -2207,17 +2204,11 @@ static int ocfs2_initialize_super(struct super_block *sb,
 	}
 
 	if (ocfs2_clusterinfo_valid(osb)) {
-		/*
-		 * ci_stack and ci_cluster in ocfs2_cluster_info may not be null
-		 * terminated, so make sure no overflow happens here by using
-		 * memcpy. Destination strings will always be null terminated
-		 * because osb is allocated using kzalloc.
-		 */
 		osb->osb_stackflags =
 			OCFS2_RAW_SB(di)->s_cluster_info.ci_stackflags;
-		memcpy(osb->osb_cluster_stack,
+		strlcpy(osb->osb_cluster_stack,
 		       OCFS2_RAW_SB(di)->s_cluster_info.ci_stack,
-		       OCFS2_STACK_LABEL_LEN);
+		       OCFS2_STACK_LABEL_LEN + 1);
 		if (strlen(osb->osb_cluster_stack) != OCFS2_STACK_LABEL_LEN) {
 			mlog(ML_ERROR,
 			     "couldn't mount because of an invalid "
@@ -2226,9 +2217,9 @@ static int ocfs2_initialize_super(struct super_block *sb,
 			status = -EINVAL;
 			goto bail;
 		}
-		memcpy(osb->osb_cluster_name,
+		strlcpy(osb->osb_cluster_name,
 			OCFS2_RAW_SB(di)->s_cluster_info.ci_cluster,
-			OCFS2_CLUSTER_NAME_LEN);
+			OCFS2_CLUSTER_NAME_LEN + 1);
 	} else {
 		/* The empty string is identical with classic tools that
 		 * don't know about s_cluster_info. */
@@ -2374,7 +2365,6 @@ static int ocfs2_verify_volume(struct ocfs2_dinode *di,
 			       struct ocfs2_blockcheck_stats *stats)
 {
 	int status = -EAGAIN;
-	u32 blksz_bits;
 
 	if (memcmp(di->i_signature, OCFS2_SUPER_BLOCK_SIGNATURE,
 		   strlen(OCFS2_SUPER_BLOCK_SIGNATURE)) == 0) {
@@ -2389,15 +2379,11 @@ static int ocfs2_verify_volume(struct ocfs2_dinode *di,
 				goto out;
 		}
 		status = -EINVAL;
-		/* Acceptable block sizes are 512 bytes, 1K, 2K and 4K. */
-		blksz_bits = le32_to_cpu(di->id2.i_super.s_blocksize_bits);
-		if (blksz_bits < 9 || blksz_bits > 12) {
+		if ((1 << le32_to_cpu(di->id2.i_super.s_blocksize_bits)) != blksz) {
 			mlog(ML_ERROR, "found superblock with incorrect block "
-			     "size bits: found %u, should be 9, 10, 11, or 12\n",
-			     blksz_bits);
-		} else if ((1 << le32_to_cpu(blksz_bits)) != blksz) {
-			mlog(ML_ERROR, "found superblock with incorrect block "
-			     "size: found %u, should be %u\n", 1 << blksz_bits, blksz);
+			     "size: found %u, should be %u\n",
+			     1 << le32_to_cpu(di->id2.i_super.s_blocksize_bits),
+			       blksz);
 		} else if (le16_to_cpu(di->id2.i_super.s_major_rev_level) !=
 			   OCFS2_MAJOR_REV_LEVEL ||
 			   le16_to_cpu(di->id2.i_super.s_minor_rev_level) !=

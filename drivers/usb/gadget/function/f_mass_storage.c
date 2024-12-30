@@ -659,37 +659,21 @@ static int start_transfer(struct fsg_dev *fsg, struct usb_ep *ep,
 
 static bool start_in_transfer(struct fsg_common *common, struct fsg_buffhd *bh)
 {
-	int rc;
-
 	if (!fsg_is_set(common))
 		return false;
 	bh->state = BUF_STATE_SENDING;
-	rc = start_transfer(common->fsg, common->fsg->bulk_in, bh->inreq);
-	if (rc) {
+	if (start_transfer(common->fsg, common->fsg->bulk_in, bh->inreq))
 		bh->state = BUF_STATE_EMPTY;
-		if (rc == -ESHUTDOWN) {
-			common->running = 0;
-			return false;
-		}
-	}
 	return true;
 }
 
 static bool start_out_transfer(struct fsg_common *common, struct fsg_buffhd *bh)
 {
-	int rc;
-
 	if (!fsg_is_set(common))
 		return false;
 	bh->state = BUF_STATE_RECEIVING;
-	rc = start_transfer(common->fsg, common->fsg->bulk_out, bh->outreq);
-	if (rc) {
+	if (start_transfer(common->fsg, common->fsg->bulk_out, bh->outreq))
 		bh->state = BUF_STATE_FULL;
-		if (rc == -ESHUTDOWN) {
-			common->running = 0;
-			return false;
-		}
-	}
 	return true;
 }
 
@@ -1287,7 +1271,7 @@ static void invalidate_sub(struct fsg_lun *curlun)
 {
 	struct file	*filp = curlun->filp;
 	struct inode	*inode = file_inode(filp);
-	unsigned long __maybe_unused	rc;
+	unsigned long	rc;
 
 	rc = invalidate_mapping_pages(inode->i_mapping, 0, -1);
 	VLDBG(curlun, "invalidate_mapping_pages -> %ld\n", rc);
@@ -2651,6 +2635,8 @@ reset:
 			fsg->bulk_out_enabled = 0;
 		}
 
+		/* allow usb LPM after eps are disabled */
+		usb_gadget_autopm_put_async(common->gadget);
 		common->fsg = NULL;
 		wake_up(&common->fsg_wait);
 	}
@@ -2714,6 +2700,9 @@ reset:
 static int fsg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct fsg_dev *fsg = fsg_from_func(f);
+
+	/* prevents usb LPM until thread runs to completion */
+	usb_gadget_autopm_get_async(fsg->common->gadget);
 
 	__raise_exception(fsg->common, FSG_STATE_CONFIG_CHANGE, fsg);
 	return USB_GADGET_DELAYED_STATUS;

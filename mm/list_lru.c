@@ -542,6 +542,7 @@ static void memcg_drain_list_lru_node(struct list_lru *lru, int nid,
 	struct list_lru_node *nlru = &lru->node[nid];
 	int dst_idx = dst_memcg->kmemcg_id;
 	struct list_lru_one *src, *dst;
+	bool set;
 
 	/*
 	 * Since list_lru_{add,del} may be called under an IRQ-safe lock,
@@ -553,12 +554,11 @@ static void memcg_drain_list_lru_node(struct list_lru *lru, int nid,
 	dst = list_lru_from_memcg_idx(nlru, dst_idx);
 
 	list_splice_init(&src->list, &dst->list);
-
-	if (src->nr_items) {
-		dst->nr_items += src->nr_items;
+	set = (!dst->nr_items && src->nr_items);
+	dst->nr_items += src->nr_items;
+	if (set)
 		memcg_set_shrinker_bit(dst_memcg, nid, lru_shrinker_id(lru));
-		src->nr_items = 0;
-	}
+	src->nr_items = 0;
 
 	spin_unlock_irq(&nlru->lock);
 }

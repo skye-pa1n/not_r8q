@@ -50,8 +50,6 @@ struct flow_dissector_key_vlan {
 	u16	vlan_id:12,
 		vlan_priority:3;
 	__be16	vlan_tpid;
-	__be16	vlan_eth_type;
-	u16	padding;
 };
 
 struct flow_dissector_key_mpls {

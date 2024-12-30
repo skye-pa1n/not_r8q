@@ -232,8 +232,7 @@ static const char * const mnt_info_table[] = {
 	"failed srcname match",
 	"failed type match",
 	"failed flags match",
-	"failed data match",
-	"failed perms check"
+	"failed data match"
 };
 
 /*
@@ -288,8 +287,8 @@ static int do_match_mnt(struct aa_dfa *dfa, unsigned int start,
 			return 0;
 	}
 
-	/* failed at perms check, don't confuse with flags match */
-	return 6;
+	/* failed at end of flags match */
+	return 4;
 }
 
 
@@ -686,7 +685,6 @@ int aa_pivotroot(struct aa_label *label, const struct path *old_path,
 			aa_put_label(target);
 			goto out;
 		}
-		aa_put_label(target);
 	} else
 		/* already audited error */
 		error = PTR_ERR(target);

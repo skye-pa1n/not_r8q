@@ -82,7 +82,7 @@ skip:
 	return __per_cpu_start + __per_cpu_offset[smp_processor_id()];
 }
 
-static inline __init void
+static inline void
 alloc_per_cpu_data(void)
 {
 	cpu_data = __alloc_bootmem(PERCPU_PAGE_SIZE * num_possible_cpus(),

@@ -26,7 +26,6 @@
 #include <linux/page_ref.h>
 #include <linux/memremap.h>
 #include <linux/overflow.h>
-#include <linux/android_kabi.h>
 
 struct mempolicy;
 struct anon_vma;
@@ -138,16 +137,9 @@ extern int mmap_rnd_compat_bits __read_mostly;
 
 extern int sysctl_max_map_count;
 
-extern unsigned long sysctl_anon_min_kbytes;
-extern unsigned long sysctl_clean_low_kbytes;
-extern unsigned long sysctl_clean_min_kbytes;
-
 extern unsigned long sysctl_user_reserve_kbytes;
 extern unsigned long sysctl_admin_reserve_kbytes;
 
-#ifdef CONFIG_ZRAM_ENTROPY
-extern unsigned long sysctl_zram_entropy_threshold;
-#endif
 extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;
 extern unsigned long sysctl_overcommit_kbytes;
@@ -482,11 +474,6 @@ struct vm_operations_struct {
 	 */
 	struct page *(*find_special_page)(struct vm_area_struct *vma,
 					  unsigned long addr);
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 static inline void INIT_VMA(struct vm_area_struct *vma)
@@ -647,13 +634,7 @@ static inline void *kvcalloc(size_t n, size_t size, gfp_t flags)
 }
 
 extern void kvfree(const void *addr);
-extern void kvfree_sensitive(const void *addr, size_t len);
 
-/*
- * Mapcount of compound page as a whole, does not include mapped sub-pages.
- *
- * Must be called only for compound pages or any their tail sub-pages.
- */
 static inline int compound_mapcount(struct page *page)
 {
 	VM_BUG_ON_PAGE(!PageCompound(page), page);
@@ -673,16 +654,10 @@ static inline void page_mapcount_reset(struct page *page)
 
 int __page_mapcount(struct page *page);
 
-/*
- * Mapcount of 0-order page; when compound sub-page, includes
- * compound_mapcount().
- *
- * Result is undefined for pages which cannot be mapped into userspace.
- * For example SLAB or special types of pages. See function page_has_type().
- * They use this place in struct page differently.
- */
 static inline int page_mapcount(struct page *page)
 {
+	VM_BUG_ON_PAGE(PageSlab(page), page);
+
 	if (unlikely(PageCompound(page)))
 		return __page_mapcount(page);
 	return atomic_read(&page->_mapcount) + 1;
@@ -1414,7 +1389,6 @@ struct zap_details {
 	struct address_space *check_mapping;	/* Check page->mapping if set */
 	pgoff_t	first_index;			/* Lowest page->index to unmap */
 	pgoff_t last_index;			/* Highest page->index to unmap */
-	struct page *single_page;		/* Locked page to be unmapped */
 };
 
 struct page *__vm_normal_page(struct vm_area_struct *vma, unsigned long addr,
@@ -1506,19 +1480,22 @@ int generic_access_phys(struct vm_area_struct *vma, unsigned long addr,
 #ifdef CONFIG_SPECULATIVE_PAGE_FAULT
 static inline void vm_write_begin(struct vm_area_struct *vma)
 {
-        /*
-         * Isolated vma might be freed without exclusive mmap_lock but
-         * speculative page fault handler still needs to know it was changed.
-         */
-        if (!RB_EMPTY_NODE(&vma->vm_rb))
-		WARN_ON_ONCE(!rwsem_is_locked(&(vma->vm_mm)->mmap_sem));
-	/*
-	 * The reads never spins and preemption
-	 * disablement is not required.
-	 */
-	raw_write_seqcount_begin(&vma->vm_sequence);
+	write_seqcount_begin(&vma->vm_sequence);
+}
+static inline void vm_write_begin_nested(struct vm_area_struct *vma,
+					 int subclass)
+{
+	write_seqcount_begin_nested(&vma->vm_sequence, subclass);
 }
 static inline void vm_write_end(struct vm_area_struct *vma)
+{
+	write_seqcount_end(&vma->vm_sequence);
+}
+static inline void vm_raw_write_begin(struct vm_area_struct *vma)
+{
+	raw_write_seqcount_begin(&vma->vm_sequence);
+}
+static inline void vm_raw_write_end(struct vm_area_struct *vma)
 {
 	raw_write_seqcount_end(&vma->vm_sequence);
 }
@@ -1526,7 +1503,17 @@ static inline void vm_write_end(struct vm_area_struct *vma)
 static inline void vm_write_begin(struct vm_area_struct *vma)
 {
 }
+static inline void vm_write_begin_nested(struct vm_area_struct *vma,
+					 int subclass)
+{
+}
 static inline void vm_write_end(struct vm_area_struct *vma)
+{
+}
+static inline void vm_raw_write_begin(struct vm_area_struct *vma)
+{
+}
+static inline void vm_raw_write_end(struct vm_area_struct *vma)
 {
 }
 #endif /* CONFIG_SPECULATIVE_PAGE_FAULT */
@@ -1582,7 +1569,6 @@ static inline bool can_reuse_spf_vma(struct vm_area_struct *vma,
 extern int fixup_user_fault(struct task_struct *tsk, struct mm_struct *mm,
 			    unsigned long address, unsigned int fault_flags,
 			    bool *unlocked);
-void unmap_mapping_page(struct page *page);
 void unmap_mapping_pages(struct address_space *mapping,
 		pgoff_t start, pgoff_t nr, bool even_cows);
 void unmap_mapping_range(struct address_space *mapping,
@@ -1603,7 +1589,6 @@ static inline int fixup_user_fault(struct task_struct *tsk,
 	BUG();
 	return -EFAULT;
 }
-static inline void unmap_mapping_page(struct page *page) { }
 static inline void unmap_mapping_pages(struct address_space *mapping,
 		pgoff_t start, pgoff_t nr, bool even_cows) { }
 static inline void unmap_mapping_range(struct address_space *mapping,
@@ -2344,7 +2329,7 @@ static inline void zero_resv_unavail(void) {}
 
 extern void set_dma_reserve(unsigned long new_dma_reserve);
 extern void memmap_init_zone(unsigned long, int, unsigned long, unsigned long,
-		enum meminit_context, struct vmem_altmap *);
+		enum memmap_context, struct vmem_altmap *);
 extern void setup_per_zone_wmarks(void);
 extern void update_kswapd_threads(void);
 extern int __meminit init_per_zone_wmark_min(void);
@@ -2500,8 +2485,6 @@ extern int install_special_mapping(struct mm_struct *mm,
 				   unsigned long addr, unsigned long len,
 				   unsigned long flags, struct page **pages);
 
-unsigned long randomize_page(unsigned long start, unsigned long range);
-
 extern unsigned long get_unmapped_area(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 
 extern unsigned long mmap_region(struct file *file, unsigned long addr,
@@ -2591,8 +2574,8 @@ int __must_check write_one_page(struct page *page);
 void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
-#define VM_MAX_READAHEAD	2048	/* kbytes */
-#define VM_MIN_READAHEAD	2048	/* kbytes (includes current page) */
+#define VM_MAX_READAHEAD	128	/* kbytes */
+#define VM_MIN_READAHEAD	16	/* kbytes (includes current page) */
 extern int mmap_readaround_limit;
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
@@ -2758,15 +2741,6 @@ static inline vm_fault_t vmf_insert_pfn(struct vm_area_struct *vma,
 
 	return VM_FAULT_NOPAGE;
 }
-
-#ifndef io_remap_pfn_range
-static inline int io_remap_pfn_range(struct vm_area_struct *vma,
-				     unsigned long addr, unsigned long pfn,
-				     unsigned long size, pgprot_t prot)
-{
-	return remap_pfn_range(vma, addr, pfn, size, pgprot_decrypted(prot));
-}
-#endif
 
 static inline vm_fault_t vmf_error(int err)
 {
@@ -3107,6 +3081,7 @@ static inline void record_memsize_reserved(const char *name, phys_addr_t base,
 				    phys_addr_t size, bool nomap,
 				    bool reusable) { }
 #endif
+extern bool ion_account_print_usage(void);
 
 #endif /* __KERNEL__ */
 #endif /* _LINUX_MM_H */

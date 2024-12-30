@@ -1947,7 +1947,6 @@ static int max77705_fg_get_property(struct power_supply *psy,
 	struct timespec c_ts = {0, };
 	static struct timespec old_ts = {0, };
 	u8 data[2] = { 0, 0 };
-	union power_supply_propval value;
 
 
 	switch (psp) {
@@ -2196,8 +2195,7 @@ static int max77705_fg_get_property(struct power_supply *psy,
 		pr_debug("%s: FilterCFG=0x%04X\n", __func__, data[1] << 8 | data[0]);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
-		psy_do_property("battery", get, POWER_SUPPLY_PROP_CHARGE_FULL, value);
-		val->intval = value.intval/1000 * fuelgauge->raw_capacity;
+		val->intval = fuelgauge->battery_data->Capacity * fuelgauge->raw_capacity;
 		break;
 	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {

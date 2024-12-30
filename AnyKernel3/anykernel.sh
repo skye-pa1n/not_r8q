@@ -15,7 +15,7 @@ device.name2=r8qxx
 device.name3=r8qxxx
 device.name4=e3q
 device.name5=e3qxxx
-supported.versions=14 - 15
+supported.versions=13 - 15
 supported.patchlevels=
 '; } # end properties
 
@@ -49,6 +49,10 @@ elif [ $android == 15 ]; then
     ui_print " "
     ui_print " • Using A15 Device Tree Blob • "
     mv $home/a15.dtb $home/dtb
+elif [ $android == 13 ]; then
+    ui_print " "
+    ui_print " • Using A13 Device Tree Blob • "
+    mv $home/a13.dtb $home/dtb
 fi
 
 # end dtb changes
@@ -80,11 +84,15 @@ oneui=$(file_getprop /system/build.prop ro.build.version.oneui);
 gsi=$(file_getprop /system/build.prop ro.product.system.device);
 if [ -n "$oneui" ]; then
    ui_print " "
-   ui_print " • OneUI ROM detected! • "
+   ui_print " • OneUI ROM detected! Proceed with Caution! • "
+   ui_print " "
+   ui_print " • Patching Fingerprint Sensor... • "
    patch_cmdline "android.is_aosp" "android.is_aosp=0";
 elif [ $gsi == "generic" ]; then
    ui_print " "
-   ui_print " • GSI ROM detected! • "
+   ui_print " • GSI ROM detected! Proceed with Caution! • "
+   ui_print " "
+   ui_print " • Patching Fingerprint Sensor... • "
    patch_cmdline "android.is_aosp" "android.is_aosp=0";
 else
    ui_print " "

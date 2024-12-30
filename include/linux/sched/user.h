@@ -16,10 +16,6 @@ struct user_struct {
 	refcount_t __count;	/* reference count */
 	atomic_t processes;	/* How many processes does this user have? */
 	atomic_t sigpending;	/* How many pending signals does this user have? */
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	int android_kabi_reserved1; /* SusFS Dependencies */
-        int android_kabi_reserved2; /* SusFS Dependencies */
-#endif
 #ifdef CONFIG_FANOTIFY
 	atomic_t fanotify_listeners;
 #endif
@@ -47,6 +43,7 @@ struct user_struct {
     defined(CONFIG_NET)
 	atomic_long_t locked_vm;
 #endif
+
 	/* Miscellaneous per-user rate limit */
 	struct ratelimit_state ratelimit;
 };

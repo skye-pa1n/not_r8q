@@ -139,15 +139,15 @@ static void increment_one_qlen(u32 sfbhash, u32 slot, struct sfb_sched_data *q)
 	}
 }
 
-static void increment_qlen(const struct sfb_skb_cb *cb, struct sfb_sched_data *q)
+static void increment_qlen(const struct sk_buff *skb, struct sfb_sched_data *q)
 {
 	u32 sfbhash;
 
-	sfbhash = cb->hashes[0];
+	sfbhash = sfb_hash(skb, 0);
 	if (sfbhash)
 		increment_one_qlen(sfbhash, 0, q);
 
-	sfbhash = cb->hashes[1];
+	sfbhash = sfb_hash(skb, 1);
 	if (sfbhash)
 		increment_one_qlen(sfbhash, 1, q);
 }
@@ -285,10 +285,8 @@ static int sfb_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 {
 
 	struct sfb_sched_data *q = qdisc_priv(sch);
-	unsigned int len = qdisc_pkt_len(skb);
 	struct Qdisc *child = q->qdisc;
 	struct tcf_proto *fl;
-	struct sfb_skb_cb cb;
 	int i;
 	u32 p_min = ~0;
 	u32 minqlen = ~0;
@@ -405,12 +403,11 @@ static int sfb_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	}
 
 enqueue:
-	memcpy(&cb, sfb_skb_cb(skb), sizeof(cb));
 	ret = qdisc_enqueue(skb, child, to_free);
 	if (likely(ret == NET_XMIT_SUCCESS)) {
-		sch->qstats.backlog += len;
+		qdisc_qstats_backlog_inc(sch, skb);
 		sch->q.qlen++;
-		increment_qlen(&cb, q);
+		increment_qlen(skb, q);
 	} else if (net_xmit_drop_count(ret)) {
 		q->stats.childdrop++;
 		qdisc_qstats_drop(sch);
@@ -473,7 +470,7 @@ static void sfb_destroy(struct Qdisc *sch)
 	struct sfb_sched_data *q = qdisc_priv(sch);
 
 	tcf_block_put(q->block);
-	qdisc_put(q->qdisc);
+	qdisc_destroy(q->qdisc);
 }
 
 static const struct nla_policy sfb_policy[TCA_SFB_MAX + 1] = {
@@ -527,7 +524,7 @@ static int sfb_change(struct Qdisc *sch, struct nlattr *opt,
 
 	qdisc_tree_reduce_backlog(q->qdisc, q->qdisc->q.qlen,
 				  q->qdisc->qstats.backlog);
-	qdisc_put(q->qdisc);
+	qdisc_destroy(q->qdisc);
 	q->qdisc = child;
 
 	q->rehash_interval = msecs_to_jiffies(ctl->rehash_interval);

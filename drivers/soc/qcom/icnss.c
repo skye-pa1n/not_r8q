@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "icnss: " fmt
@@ -35,6 +35,8 @@
 #include <linux/of_irq.h>
 #include <linux/soc/qcom/qmi.h>
 #include <linux/sysfs.h>
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
 #include <soc/qcom/memory_dump.h>
 #include <soc/qcom/icnss.h>
 #include <soc/qcom/secure_buffer.h>
@@ -54,7 +56,6 @@
 
 #define ICNSS_SERVICE_LOCATION_CLIENT_NAME			"ICNSS-WLAN"
 #define ICNSS_WLAN_SERVICE_NAME					"wlan/fw"
-#define ICNSS_CHAIN1_REGULATOR                                  "vdd-3.3-ch1"
 #define ICNSS_THRESHOLD_HIGH		3600000
 #define ICNSS_THRESHOLD_LOW		3450000
 #define ICNSS_THRESHOLD_GUARD		20000
@@ -115,11 +116,11 @@ struct icnss_msa_perm_list_t msa_perm_list[ICNSS_MSA_PERM_MAX] = {
 };
 
 static struct icnss_vreg_info icnss_vreg_info[] = {
-	{NULL, "vdd-cx-mx", 752000, 752000, 0, 0, false, true},
-	{NULL, "vdd-1.8-xo", 1800000, 1800000, 0, 0, false, true},
-	{NULL, "vdd-1.3-rfa", 1304000, 1304000, 0, 0, false, true},
-	{NULL, "vdd-3.3-ch1", 3312000, 3312000, 0, 0, false, true},
-	{NULL, "vdd-3.3-ch0", 3312000, 3312000, 0, 0, false, true},
+	{NULL, "vdd-cx-mx", 752000, 752000, 0, 0, false},
+	{NULL, "vdd-1.8-xo", 1800000, 1800000, 0, 0, false},
+	{NULL, "vdd-1.3-rfa", 1304000, 1304000, 0, 0, false},
+	{NULL, "vdd-3.3-ch1", 3312000, 3312000, 0, 0, false},
+	{NULL, "vdd-3.3-ch0", 3312000, 3312000, 0, 0, false},
 };
 
 #define ICNSS_VREG_INFO_SIZE		ARRAY_SIZE(icnss_vreg_info)
@@ -154,6 +155,9 @@ static const char * const icnss_pdr_cause[] = {
 	[ICNSS_ROOT_PD_SHUTDOWN] = "Root PD shutdown",
 	[ICNSS_HOST_ERROR] = "Host error",
 };
+
+char ver_info[512] = {0,};
+char softap_info[512] = {0,};
 
 static ssize_t icnss_sysfs_store(struct kobject *kobj,
 				 struct kobj_attribute *attr,
@@ -392,17 +396,8 @@ static int icnss_vreg_on(struct icnss_priv *priv)
 	for (i = 0; i < ICNSS_VREG_INFO_SIZE; i++) {
 		vreg_info = &priv->vreg_info[i];
 
-		if (!vreg_info->reg || !vreg_info->is_supported)
+		if (!vreg_info->reg)
 			continue;
-
-		if (!priv->chain_reg_info_updated &&
-		    !strcmp(ICNSS_CHAIN1_REGULATOR, vreg_info->name)) {
-			priv->chain_reg_info_updated = true;
-			if (!priv->is_chain1_supported) {
-				vreg_info->is_supported = false;
-				continue;
-			}
-		}
 
 		if (vreg_info->min_v || vreg_info->max_v) {
 			icnss_pr_vdbg("Set voltage for regulator %s\n",
@@ -450,7 +445,7 @@ static int icnss_vreg_on(struct icnss_priv *priv)
 	for (; i >= 0; i--) {
 		vreg_info = &priv->vreg_info[i];
 
-		if (!vreg_info->reg || !vreg_info->is_supported)
+		if (!vreg_info->reg)
 			continue;
 
 		regulator_disable(vreg_info->reg);
@@ -475,7 +470,7 @@ static int icnss_vreg_off(struct icnss_priv *priv)
 	for (i = ICNSS_VREG_INFO_SIZE - 1; i >= 0; i--) {
 		vreg_info = &priv->vreg_info[i];
 
-		if (!vreg_info->reg || !vreg_info->is_supported)
+		if (!vreg_info->reg)
 			continue;
 
 		icnss_pr_vdbg("Regulator %s being disabled\n", vreg_info->name);
@@ -653,15 +648,6 @@ bool icnss_is_fw_ready(void)
 		return test_bit(ICNSS_FW_READY, &penv->state);
 }
 EXPORT_SYMBOL(icnss_is_fw_ready);
-
-unsigned long icnss_get_device_config(void)
-{
-	if (!penv)
-		return 0;
-
-	return penv->device_config;
-}
-EXPORT_SYMBOL(icnss_get_device_config);
 
 void icnss_block_shutdown(bool status)
 {
@@ -1083,6 +1069,10 @@ static int icnss_driver_event_server_arrive(void *data)
 
 	set_bit(ICNSS_WLFW_CONNECTED, &penv->state);
 
+	ret = icnss_hw_power_on(penv);
+	if (ret)
+		goto clear_server;
+
 	ret = wlfw_ind_register_send_sync_msg(penv);
 	if (ret < 0) {
 		if (ret == -EALREADY) {
@@ -1090,26 +1080,26 @@ static int icnss_driver_event_server_arrive(void *data)
 			goto qmi_registered;
 		}
 		ignore_assert = true;
-		goto fail;
+		goto err_power_on;
 	}
 
 	if (!penv->msa_va) {
 		icnss_pr_err("Invalid MSA address\n");
 		ret = -EINVAL;
-		goto fail;
+		goto err_power_on;
 	}
 
 	ret = wlfw_msa_mem_info_send_sync_msg(penv);
 	if (ret < 0) {
 		ignore_assert = true;
-		goto fail;
+		goto err_power_on;
 	}
 
 	if (!test_bit(ICNSS_MSA0_ASSIGNED, &penv->state)) {
 		ret = icnss_assign_msa_perm_all(penv,
 						ICNSS_MSA_PERM_WLAN_HW_RW);
 		if (ret < 0)
-			goto fail;
+			goto err_power_on;
 		set_bit(ICNSS_MSA0_ASSIGNED, &penv->state);
 	}
 
@@ -1124,10 +1114,6 @@ static int icnss_driver_event_server_arrive(void *data)
 		ignore_assert = true;
 		goto err_setup_msa;
 	}
-
-	ret = icnss_hw_power_on(penv);
-	if (ret)
-		goto err_setup_msa;
 
 	wlfw_dynamic_feature_mask_send_sync_msg(penv,
 						dynamic_feature_mask);
@@ -1149,6 +1135,10 @@ static int icnss_driver_event_server_arrive(void *data)
 err_setup_msa:
 	icnss_assign_msa_perm_all(penv, ICNSS_MSA_PERM_HLOS_ALL);
 	clear_bit(ICNSS_MSA0_ASSIGNED, &penv->state);
+err_power_on:
+	icnss_hw_power_off(penv);
+clear_server:
+	icnss_clear_server(penv);
 fail:
 	ICNSS_ASSERT(ignore_assert);
 qmi_registered:
@@ -1542,12 +1532,6 @@ static int icnss_driver_event_idle_restart(void *data)
 
 	if (!penv->ops || !penv->ops->idle_restart)
 		return 0;
-
-	if (!test_bit(ICNSS_DRIVER_PROBED, &penv->state) ||
-	    test_bit(ICNSS_DRIVER_UNLOADING, &penv->state)) {
-		icnss_pr_err("Driver unloaded or unloading is in progress, so reject idle restart");
-		return -EINVAL;
-	}
 
 	if (penv->is_ssr || test_bit(ICNSS_PDR, &penv->state) ||
 	    test_bit(ICNSS_REJUVENATE, &penv->state)) {
@@ -2277,9 +2261,6 @@ int icnss_set_fw_log_mode(struct device *dev, uint8_t fw_log_mode)
 	if (!dev)
 		return -ENODEV;
 
-	if (test_bit(SKIP_QMI, &quirks))
-		return 0;
-
 	if (test_bit(ICNSS_FW_DOWN, &penv->state) ||
 	    !test_bit(ICNSS_FW_READY, &penv->state)) {
 		icnss_pr_err("FW down, ignoring fw_log_mode state: 0x%lx\n",
@@ -2373,9 +2354,6 @@ int icnss_wlan_enable(struct device *dev, struct icnss_wlan_enable_cfg *config,
 		      enum icnss_driver_mode mode,
 		      const char *host_version)
 {
-	if (test_bit(SKIP_QMI, &quirks))
-		return 0;
-
 	if (test_bit(ICNSS_FW_DOWN, &penv->state) ||
 	    !test_bit(ICNSS_FW_READY, &penv->state)) {
 		icnss_pr_err("FW down, ignoring wlan_enable state: 0x%lx\n",
@@ -2395,9 +2373,6 @@ EXPORT_SYMBOL(icnss_wlan_enable);
 
 int icnss_wlan_disable(struct device *dev, enum icnss_driver_mode mode)
 {
-	if (test_bit(SKIP_QMI, &quirks))
-		return 0;
-
 	if (test_bit(ICNSS_FW_DOWN, &penv->state)) {
 		icnss_pr_dbg("FW down, ignoring wlan_disable state: 0x%lx\n",
 			     penv->state);
@@ -2608,6 +2583,7 @@ int icnss_trigger_recovery(struct device *dev)
 
 	icnss_pr_warn("PD restart request completed, ret: %d state: 0x%lx\n",
 		      ret, priv->state);
+	icnss_pr_err("%s\n", ver_info);
 
 out:
 	return ret;
@@ -2640,12 +2616,6 @@ int icnss_idle_restart(struct device *dev)
 
 	if (!priv) {
 		icnss_pr_err("Invalid drvdata: dev %pK", dev);
-		return -EINVAL;
-	}
-
-	if (!test_bit(ICNSS_DRIVER_PROBED, &penv->state) ||
-	    test_bit(ICNSS_DRIVER_UNLOADING, &penv->state)) {
-		icnss_pr_err("Driver unloaded or unloading is in progress, so reject idle restart");
 		return -EINVAL;
 	}
 
@@ -3813,11 +3783,228 @@ static int icnss_smmu_dt_parse(struct icnss_priv *priv)
 	return 0;
 }
 
-static void icnss_read_device_configs(struct icnss_priv *priv)
+/**
+ * enum driver_status: Driver Modules status
+ * @DRIVER_MODULES_UNINITIALIZED: Driver CDS modules uninitialized
+ * @DRIVER_MODULES_ENABLED: Driver CDS modules opened
+ * @DRIVER_MODULES_CLOSED: Driver CDS modules closed
+ */
+enum driver_modules_status {
+        DRIVER_MODULES_UNINITIALIZED,
+        DRIVER_MODULES_ENABLED,
+        DRIVER_MODULES_CLOSED
+};
+
+enum driver_modules_status current_driver_status = DRIVER_MODULES_UNINITIALIZED;
+
+void cnss_sysfs_update_driver_status(int32_t new_status, void *version, void *softap)
 {
-	if (of_property_read_bool(priv->pdev->dev.of_node,
-				  "wlan-ipa-disabled")) {
-		set_bit(ICNSS_IPA_DISABLED, &priv->device_config);
+	if (new_status == DRIVER_MODULES_ENABLED) {
+		memcpy(ver_info, version, 512);
+		memcpy(softap_info, softap, 512);
+	}
+	current_driver_status = new_status;
+}
+EXPORT_SYMBOL(cnss_sysfs_update_driver_status);
+
+#define MAC_ADDR_SIZE 6
+uint8_t mac_from_macloader[MAC_ADDR_SIZE] = {0,0,0,0,0,0};
+int pm_from_macloader = 0;
+int ant_from_macloader = 0;
+
+extern int cnss_utils_set_wlan_mac_address(const u8 *mac_list, const uint32_t len);
+static ssize_t store_mac_addr(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    const char *buf,
+			    size_t count)
+{
+	sscanf(buf, "%02X:%02X:%02X:%02X:%02X:%02X",
+		(unsigned int*)&mac_from_macloader[0],
+		(unsigned int*)&mac_from_macloader[1],
+		(unsigned int*)&mac_from_macloader[2],
+		(unsigned int*)&mac_from_macloader[3],
+		(unsigned int*)&mac_from_macloader[4],
+		(unsigned int*)&mac_from_macloader[5]);
+
+	icnss_pr_info("Assigning MAC from Macloader %02x:%02x:%02x:%02x:%02x:%02x\n",
+		mac_from_macloader[0], mac_from_macloader[1],mac_from_macloader[2],
+		mac_from_macloader[3], mac_from_macloader[4],mac_from_macloader[5]);
+
+	cnss_utils_set_wlan_mac_address(mac_from_macloader, MAC_ADDR_SIZE);
+
+	return 0;
+}
+
+static ssize_t show_verinfo(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 char *buf)
+{
+	return scnprintf(buf, 512, "%s", ver_info);
+}
+static ssize_t show_softapinfo(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 char *buf)
+{
+	return scnprintf(buf, 512, "%s", softap_info);
+}
+
+static ssize_t show_qcwlanstate(struct kobject *kobj,
+                                struct kobj_attribute *attr,
+                                char *buf)
+{
+       char status[20];
+       static const char wlan_off_str[] = "OFF";
+       static const char wlan_on_str[] = "ON";
+
+       switch (current_driver_status) {
+               case DRIVER_MODULES_UNINITIALIZED:
+               case DRIVER_MODULES_CLOSED:
+                       icnss_pr_info("Modules not initialized just return");
+                       memset(status, '\0', sizeof("OFF"));
+                       memcpy(status, wlan_off_str, sizeof("OFF"));
+                       break;
+               case DRIVER_MODULES_ENABLED:
+                       icnss_pr_info("Modules enabled");
+                       memset(status, '\0', sizeof("ON"));
+                       memcpy(status, wlan_on_str, sizeof("ON"));
+                       break;
+       }
+
+       return scnprintf(buf, PAGE_SIZE, "%s", status);
+}
+
+static ssize_t store_pm_info(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    const char *buf,
+			    size_t count)
+{
+	icnss_pr_info("%s enter\n", __func__);
+	sscanf(buf, "%d", &pm_from_macloader);
+	pm_from_macloader = !pm_from_macloader;
+	icnss_pr_info("pm_from_macloader %d\n", pm_from_macloader);
+
+	return 0;
+}
+
+int cnss_sysfs_get_pm_info(void)
+{
+	return pm_from_macloader;
+}
+EXPORT_SYMBOL(cnss_sysfs_get_pm_info);
+
+static ssize_t store_ant_info(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    const char *buf,
+			    size_t count)
+{
+	icnss_pr_info("%s enter\n", __func__);
+	sscanf(buf, "%d", &ant_from_macloader);
+	icnss_pr_info("ant_from_macloader %d\n", ant_from_macloader);
+
+	return 0;
+}
+
+static ssize_t show_wificableinfo(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 char *buf)
+{
+	struct device_node *np;
+	int wifi_cable1 = 0;
+	int wifi_cable2 = 0;
+	char antbuffer[2] = {0};
+
+	np = of_find_compatible_node(NULL, NULL, "samsung,rome_cable");
+
+	if (!np) {
+		printk(KERN_ERR "[WIFI] %s : can not fine the rome_cable\n",__FUNCTION__);
+		return 0;
+	}
+
+	wifi_cable1 = of_get_named_gpio(np, "wlan_cable_wifi1", 0);
+	wifi_cable2 = of_get_named_gpio(np, "wlan_cable_wifi2", 0);
+
+	printk(KERN_INFO "%s : gpio=%d value = %d \n",__FUNCTION__, wifi_cable1, gpio_get_value(wifi_cable1));
+	printk(KERN_INFO "%s : gpio=%d value = %d \n",__FUNCTION__, wifi_cable2, gpio_get_value(wifi_cable2));
+
+	printk(KERN_ERR "%s : gpio=%d value = %d \n",__FUNCTION__, wifi_cable1, gpio_get_value(wifi_cable1));
+	printk(KERN_ERR "%s : gpio=%d value = %d \n",__FUNCTION__, wifi_cable2, gpio_get_value(wifi_cable2));
+
+	sprintf(antbuffer, "%c%c\n", (gpio_get_value(wifi_cable1) > 0) ? 'D' : 'E' , (gpio_get_value(wifi_cable2) > 0) ? 'D' : 'E');
+
+	return scnprintf(buf, PAGE_SIZE, "%s", antbuffer);
+}
+
+static ssize_t store_memdump_info(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    const char *buf,
+			    size_t count)
+{
+	icnss_pr_info("%s called\n", __func__);
+	return 0;
+}
+
+static struct kobj_attribute sec_mac_addr_attribute =
+        __ATTR(mac_addr, 0220, NULL, store_mac_addr);
+static struct kobj_attribute sec_verinfo_sysfs_attribute =
+	__ATTR(wifiver, 0440, show_verinfo, NULL);
+static struct kobj_attribute sec_softapinfo_sysfs_attribute =
+	__ATTR(softap, 0440, show_softapinfo, NULL);
+static struct kobj_attribute qcwlanstate_attribute =
+       __ATTR(qcwlanstate, 0440, show_qcwlanstate, NULL);
+static struct kobj_attribute sec_pminfo_sysfs_attribute =
+       __ATTR(pm, 0220, NULL, store_pm_info);
+static struct kobj_attribute sec_antinfo_sysfs_attribute =
+       __ATTR(ant, 0220, NULL, store_ant_info);
+static struct kobj_attribute sec_wificableinfo_sysfs_attribute =
+	__ATTR(wificable, 0440, show_wificableinfo, NULL);
+static struct kobj_attribute sec_memdumpinfo_sysfs_attribute =
+	__ATTR(memdump, 0220, NULL, store_memdump_info);
+
+static struct attribute *sec_sysfs_attrs[] = {
+	&sec_mac_addr_attribute.attr,
+	&sec_verinfo_sysfs_attribute.attr,
+	&sec_softapinfo_sysfs_attribute.attr,
+	&qcwlanstate_attribute.attr,
+	&sec_pminfo_sysfs_attribute.attr,
+	&sec_antinfo_sysfs_attribute.attr,
+	&sec_wificableinfo_sysfs_attribute.attr,
+	&sec_memdumpinfo_sysfs_attribute.attr,
+	NULL
+};
+
+static struct attribute_group sec_sysfs_attr_group = {
+        .attrs = sec_sysfs_attrs,
+};
+
+static int sec_create_wifi_sysfs(struct icnss_priv *priv)
+{
+	int ret = 0;
+
+	priv->wifi_kobj = kobject_create_and_add("wifi", NULL);
+	if (!priv->wifi_kobj) {
+		icnss_pr_err("Failed to create shutdown_wlan kernel object\n");
+		return -ENOMEM;
+	}
+
+        ret = sysfs_create_group(priv->wifi_kobj, &sec_sysfs_attr_group);
+        if (ret) {
+                icnss_pr_err("could not create group %d", ret);
+		kobject_put(priv->wifi_kobj);
+		priv->wifi_kobj = NULL;
+	}
+
+	icnss_pr_info("%s done\n", __func__);
+
+	return ret;
+}
+
+static void sec_remove_wifi_sysfs(struct icnss_priv *priv)
+{
+	if (priv->wifi_kobj) {
+		sysfs_remove_group(priv->wifi_kobj,
+				  &sec_sysfs_attr_group);
+		kobject_put(priv->wifi_kobj);
+		priv->wifi_kobj = NULL;
 	}
 }
 
@@ -3844,11 +4031,8 @@ static int icnss_probe(struct platform_device *pdev)
 	priv->pdev = pdev;
 
 	priv->vreg_info = icnss_vreg_info;
-	priv->is_chain1_supported = true;
 
 	icnss_allow_recursive_recovery(dev);
-
-	icnss_read_device_configs(priv);
 
 	ret = icnss_resource_parse(priv);
 	if (ret)
@@ -3887,6 +4071,7 @@ static int icnss_probe(struct platform_device *pdev)
 	icnss_debugfs_create(priv);
 
 	icnss_sysfs_create(priv);
+	sec_create_wifi_sysfs(priv);
 
 	ret = device_init_wakeup(&priv->pdev->dev, true);
 	if (ret)
@@ -3920,7 +4105,7 @@ static int icnss_remove(struct platform_device *pdev)
 	icnss_unregister_power_supply_notifier(penv);
 
 	icnss_debugfs_destroy(penv);
-
+	sec_remove_wifi_sysfs(penv);
 	icnss_sysfs_destroy(penv);
 
 	complete_all(&penv->unblock_shutdown);

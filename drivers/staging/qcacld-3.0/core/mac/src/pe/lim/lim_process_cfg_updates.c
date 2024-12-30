@@ -129,7 +129,7 @@ void lim_handle_param_update(struct mac_context *mac, eUpdateIEsType cfgId)
 
 		if (status != QDF_STATUS_SUCCESS)
 			pe_err("Failed lim_post_msg_api %u", status);
-			break;
+		break;
 	}
 	default:
 		break;
@@ -232,6 +232,8 @@ static void lim_update_config(struct mac_context *mac, struct pe_session *pe_ses
 	/* association response is received */
 	if (pe_session->limWsmEnabled && LIM_IS_AP_ROLE(pe_session))
 		pe_session->limHcfEnabled = 1;
+
+	pe_session->lim11dEnabled = mac->mlme_cfg->gen.enabled_11d ? 1 : 0;
 
 	pe_debug("Updated Lim shadow state based on CFG");
 }

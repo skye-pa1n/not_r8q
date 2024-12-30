@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -490,11 +490,6 @@ static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 		return -ENOMEM;
 
 	core->platform_data = vidc_get_drv_data(&pdev->dev);
-	if(!core->platform_data) {
-		d_vpr_e("Failed to get platform data\n");
-		rc = -EINVAL;
-		goto err_core_init;
-	}
 	dev_set_drvdata(&pdev->dev, core);
 	rc = msm_vidc_initialize_core(pdev, core);
 	if (rc) {
@@ -508,12 +503,6 @@ static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 	}
 
 	core->id = MSM_VIDC_CORE_VENUS;
-
-	vidc_driver->ctxt = kcalloc(core->platform_data->max_inst_count,
-		sizeof(*vidc_driver->ctxt), GFP_KERNEL);
-	if (!vidc_driver->ctxt)
-		goto err_vidc_context;
-	vidc_driver->num_ctxt = core->platform_data->max_inst_count;
 
 	rc = v4l2_device_register(&pdev->dev, &core->v4l2_dev);
 	if (rc) {
@@ -584,10 +573,8 @@ static int msm_vidc_probe_vidc_device(struct platform_device *pdev)
 	list_add_tail(&core->list, &vidc_driver->cores);
 	mutex_unlock(&vidc_driver->lock);
 
-#ifdef CONFIG_DEBUG_FS
 	core->debugfs_root = msm_vidc_debugfs_init_core(
 		core, vidc_driver->debugfs_root);
-#endif
 
 	vidc_driver->sku_version = core->resources.sku_version;
 
@@ -629,8 +616,6 @@ err_enc:
 err_dec:
 	v4l2_device_unregister(&core->v4l2_dev);
 err_v4l2_register:
-	kfree(vidc_driver->ctxt);
-err_vidc_context:
 	sysfs_remove_group(&pdev->dev.kobj, &msm_vidc_core_attr_group);
 err_core_init:
 	dev_set_drvdata(&pdev->dev, NULL);
@@ -716,7 +701,6 @@ static int msm_vidc_remove(struct platform_device *pdev)
 	mutex_destroy(&core->resources.cb_lock);
 	mutex_destroy(&core->lock);
 	kfree(core);
-	kfree(vidc_driver->ctxt);
 	return rc;
 }
 
@@ -786,12 +770,9 @@ static int __init msm_vidc_init(void)
 
 	INIT_LIST_HEAD(&vidc_driver->cores);
 	mutex_init(&vidc_driver->lock);
-
-#ifdef CONFIG_DEBUG_FS
 	vidc_driver->debugfs_root = msm_vidc_debugfs_init_drv();
 	if (!vidc_driver->debugfs_root)
 		d_vpr_e("Failed to create debugfs for msm_vidc\n");
-#endif
 
 	rc = platform_driver_register(&msm_vidc_driver);
 	if (rc) {

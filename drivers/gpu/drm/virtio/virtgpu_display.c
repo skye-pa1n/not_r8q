@@ -187,8 +187,6 @@ static int virtio_gpu_conn_get_modes(struct drm_connector *connector)
 		DRM_DEBUG("add mode: %dx%d\n", width, height);
 		mode = drm_cvt_mode(connector->dev, width, height, 60,
 				    false, false, false);
-		if (!mode)
-			return count;
 		mode->type |= DRM_MODE_TYPE_PREFERRED;
 		drm_mode_probed_add(connector, mode);
 		count++;
@@ -356,7 +354,7 @@ static const struct drm_mode_config_funcs virtio_gpu_mode_funcs = {
 	.atomic_commit = drm_atomic_helper_commit,
 };
 
-void virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
+int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 {
 	int i;
 
@@ -374,6 +372,7 @@ void virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 		vgdev_output_init(vgdev, i);
 
 	drm_mode_config_reset(vgdev->ddev);
+	return 0;
 }
 
 void virtio_gpu_modeset_fini(struct virtio_gpu_device *vgdev)

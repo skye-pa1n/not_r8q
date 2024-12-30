@@ -670,13 +670,6 @@ static int limits_dcvs_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 	request_reg = be32_to_cpu(addr[0]) + LIMITS_CLUSTER_REQ_OFFSET;
-	
-	if (!IS_ENABLED(CONFIG_QTI_THERMAL_LIMITS_DCVS)) {
-		limits_isens_vref_ldo_init(pdev, hw);
-		devm_kfree(&pdev->dev, hw->cdev_data);
-		devm_kfree(&pdev->dev, hw);
-		return 0;
-	}
 
 	/*
 	 * Setup virtual thermal zones for each LMH-DCVS hardware
@@ -742,7 +735,6 @@ static int limits_dcvs_probe(struct platform_device *pdev)
 	hw->lmh_freq_attr.attr.name = "lmh_freq_limit";
 	hw->lmh_freq_attr.show = lmh_freq_limit_show;
 	hw->lmh_freq_attr.attr.mode = 0444;
-	sysfs_attr_init(&hw->lmh_freq_attr.attr);
 	device_create_file(&pdev->dev, &hw->lmh_freq_attr);
 
 probe_exit:

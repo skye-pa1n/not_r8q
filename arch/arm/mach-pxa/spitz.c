@@ -13,6 +13,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/module.h>	/* symbol_get ; symbol_put */
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/gpio_keys.h>
@@ -516,6 +517,17 @@ static struct pxa2xx_spi_chip spitz_ads7846_chip = {
 	.gpio_cs		= SPITZ_GPIO_ADS7846_CS,
 };
 
+static void spitz_bl_kick_battery(void)
+{
+	void (*kick_batt)(void);
+
+	kick_batt = symbol_get(sharpsl_battery_kick);
+	if (kick_batt) {
+		kick_batt();
+		symbol_put(sharpsl_battery_kick);
+	}
+}
+
 static struct corgi_lcd_platform_data spitz_lcdcon_info = {
 	.init_mode		= CORGI_LCD_MODE_VGA,
 	.max_intensity		= 0x2f,
@@ -523,7 +535,7 @@ static struct corgi_lcd_platform_data spitz_lcdcon_info = {
 	.limit_mask		= 0x0b,
 	.gpio_backlight_cont	= SPITZ_GPIO_BACKLIGHT_CONT,
 	.gpio_backlight_on	= SPITZ_GPIO_BACKLIGHT_ON,
-	.kick_battery		= sharpsl_battery_kick,
+	.kick_battery		= spitz_bl_kick_battery,
 };
 
 static struct pxa2xx_spi_chip spitz_lcdcon_chip = {

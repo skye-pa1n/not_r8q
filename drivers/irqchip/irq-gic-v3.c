@@ -29,7 +29,6 @@
 #include <linux/percpu.h>
 #include <linux/slab.h>
 #include <linux/msm_rtb.h>
-#include <linux/wakeup_reason.h>
 
 #include <linux/irqchip.h>
 #include <linux/irqchip/arm-gic-common.h>
@@ -103,11 +102,11 @@ static inline void __iomem *gic_dist_base(struct irq_data *d)
 	return NULL;
 }
 
-static void gic_do_wait_for_rwp(void __iomem *base, u32 bit)
+static void gic_do_wait_for_rwp(void __iomem *base)
 {
 	u32 count = 1000000;	/* 1s! */
 
-	while (readl_relaxed_no_log(base + GICD_CTLR) & bit) {
+	while (readl_relaxed_no_log(base + GICD_CTLR) & GICD_CTLR_RWP) {
 		count--;
 		if (!count) {
 			pr_err_ratelimited("RWP timeout, gone fishing\n");
@@ -121,13 +120,13 @@ static void gic_do_wait_for_rwp(void __iomem *base, u32 bit)
 /* Wait for completion of a distributor change */
 static void gic_dist_wait_for_rwp(void)
 {
-	gic_do_wait_for_rwp(gic_data.dist_base, GICD_CTLR_RWP);
+	gic_do_wait_for_rwp(gic_data.dist_base);
 }
 
 /* Wait for completion of a redistributor change */
 static void gic_redist_wait_for_rwp(void)
 {
-	gic_do_wait_for_rwp(gic_data_rdist_rd_base(), GICR_CTLR_RWP);
+	gic_do_wait_for_rwp(gic_data_rdist_rd_base());
 }
 
 #ifdef CONFIG_ARM64
@@ -261,13 +260,6 @@ static int gic_irq_set_irqchip_state(struct irq_data *d,
 	}
 
 	gic_poke_irq(d, reg);
-
-	/*
-	 * Force read-back to guarantee that the active state has taken
-	 * effect, and won't race with a guest-driven deactivation.
-	 */
-	if (reg == GICD_ISACTIVER)
-		gic_peek_irq(d, reg);
 	return 0;
 }
 
@@ -355,29 +347,6 @@ static int gic_suspend(void)
 	return 0;
 }
 
-/*
- * gic_show_pending_irq - Shows the pending interrupts
- * Note: Interrupts should be disabled on the cpu from which
- * this is called to get accurate list of pending interrupts.
- */
-void gic_show_pending_irqs(void)
-{
-	void __iomem *base;
-	u32 pending, enabled;
-	unsigned int j;
-
-	base = gic_data.dist_base;
-	for (j = 0; j * 32 < gic_data.irq_nr; j++) {
-		enabled = readl_relaxed(base +
-					GICD_ISENABLER + j * 4);
-		pending = readl_relaxed(base +
-					GICD_ISPENDR + j * 4);
-		pr_err("Pending and enabled irqs[%d] %x %x\n", j,
-				pending, enabled);
-
-	}
-}
-
 static void gic_show_resume_irq(struct gic_chip_data *gic)
 {
 	unsigned int i;
@@ -397,8 +366,8 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 	for (i = find_first_bit((unsigned long *)pending, gic->irq_nr);
 	     i < gic->irq_nr;
 	     i = find_next_bit((unsigned long *)pending, gic->irq_nr, i+1)) {
-#ifndef CONFIG_SEC_PM
 		unsigned int irq = irq_find_mapping(gic->domain, i);
+#ifndef CONFIG_SEC_PM
 		struct irq_desc *desc = irq_to_desc(irq);
 		const char *name = "null";
 
@@ -408,6 +377,8 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 			name = desc->action->name;
 
 		pr_warn("%s: %d triggered %s\n", __func__, irq, name);
+#else
+		log_wakeup_reason(irq);
 #endif
 	}
 }
@@ -467,8 +438,6 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 			err = handle_domain_irq(gic_data.domain, irqnr, regs);
 			if (err) {
 				WARN_ONCE(true, "Unexpected interrupt received!\n");
-				log_abnormal_wakeup_reason(
-						"unexpected HW IRQ %u", irqnr);
 				if (static_branch_likely(&supports_deactivate_key)) {
 					if (irqnr < 8192)
 						gic_write_dir(irqnr);
@@ -1314,15 +1283,12 @@ static void __init gic_populate_ppi_partitions(struct device_node *gic_node)
 				continue;
 
 			cpu = of_cpu_node_to_id(cpu_node);
-			if (WARN_ON(cpu < 0)) {
-				of_node_put(cpu_node);
+			if (WARN_ON(cpu < 0))
 				continue;
-			}
 
 			pr_cont("%pOF[%d] ", cpu_node, cpu);
 
 			cpumask_set_cpu(cpu, &part->mask);
-			of_node_put(cpu_node);
 		}
 
 		pr_cont("}\n");

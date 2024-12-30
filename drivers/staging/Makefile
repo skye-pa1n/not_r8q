@@ -48,11 +48,11 @@ obj-$(CONFIG_SOC_MT7621)	+= mt7621-pci/
 obj-$(CONFIG_SOC_MT7621)	+= mt7621-pinctrl/
 obj-$(CONFIG_SOC_MT7621)	+= mt7621-spi/
 obj-$(CONFIG_SOC_MT7621)	+= mt7621-dma/
+obj-$(CONFIG_SOC_MT7621)	+= mt7621-mmc/
 obj-$(CONFIG_SOC_MT7621)	+= mt7621-eth/
 obj-$(CONFIG_SOC_MT7621)	+= mt7621-dts/
 obj-$(CONFIG_STAGING_GASKET_FRAMEWORK)	+= gasket/
 obj-$(CONFIG_XIL_AXIS_FIFO)	+= axis-fifo/
+obj-$(CONFIG_EROFS_FS)		+= erofs/
 obj-$(CONFIG_SEC_STI)		+= sti/
 obj-$(CONFIG_QCA_CLD_WLAN)	+= qcacld-3.0/
-
-subdir-ccflags-y += -Wno-unused-variable

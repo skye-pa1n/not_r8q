@@ -1025,7 +1025,7 @@ QDF_STATUS populate_dot11f_rrm_ie(struct mac_context *mac,
 				struct pe_session *pe_session);
 
 void populate_mdie(struct mac_context *mac, tDot11fIEMobilityDomain *pDot11f,
-		   uint8_t mdie[]);
+				   uint8_t mdie[SIR_MDIE_SIZE]);
 
 #ifdef WLAN_FEATURE_FILS_SK
 /**
@@ -1227,20 +1227,6 @@ QDF_STATUS populate_dot11f_twt_extended_caps(struct mac_context *mac_ctx,
 	return QDF_STATUS_SUCCESS;
 }
 #endif
-
-/**
- * populate_dot11f_btm_caps() - populate btm extended capabilities
- * @mac_ctx: Global MAC context.
- * @pe_session: Pointer to the PE session.
- * @dot11f: Pointer to the extended capabilities of the session.
- *
- * Disable btm for SAE types for Helium firmware limit
- *
- * Return: QDF_STATUS Success or Failure
- */
-QDF_STATUS populate_dot11f_btm_caps(struct mac_context *mac_ctx,
-				    struct pe_session *pe_session,
-				    struct sDot11fIEExtCap *dot11f);
 
 /**
  * lim_truncate_ppet: truncates ppet of trailling zeros

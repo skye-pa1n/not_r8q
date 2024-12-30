@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  */
 
 
@@ -9,9 +9,6 @@
 
 #include <ipc/apr.h>
 #include <linux/msm_audio.h>
-
-/* number of threshold levels in speaker protection module */
-#define MAX_CPS_LEVELS 3
 
 /* size of header needed for passing data out of band */
 #define APR_CMD_OB_HDR_SZ  12
@@ -2367,28 +2364,6 @@ int16_t        excursionf[AFE_SPKR_PROT_EXCURSIONF_LEN];
  */
 } __packed;
 
-struct lpass_swr_spkr_dep_cfg_t {
-	uint32_t vbatt_pkd_reg_addr;
-	uint32_t temp_pkd_reg_addr;
-	uint32_t value_normal_thrsd[MAX_CPS_LEVELS];
-	uint32_t value_low1_thrsd[MAX_CPS_LEVELS];
-	uint32_t value_low2_thrsd[MAX_CPS_LEVELS];
-} __packed;
-
-struct lpass_swr_hw_reg_cfg_t {
-	uint32_t lpass_wr_cmd_reg_phy_addr;
-	uint32_t lpass_rd_cmd_reg_phy_addr;
-	uint32_t lpass_rd_fifo_reg_phy_addr;
-	uint32_t vbatt_lower1_threshold;
-	uint32_t vbatt_lower2_threshold;
-	uint32_t num_spkr;
-} __packed;
-
-struct afe_cps_hw_intf_cfg {
-	uint32_t lpass_hw_intf_cfg_mode;
-	struct lpass_swr_hw_reg_cfg_t hw_reg_cfg;
-	struct lpass_swr_spkr_dep_cfg_t *spkr_dep_cfg;
-} __packed;
 
 #define AFE_SERVICE_CMD_REGISTER_RT_PORT_DRIVER	0x000100E0
 
@@ -3965,7 +3940,6 @@ struct afe_param_id_device_hw_delay_cfg {
 } __packed;
 
 #define AFE_PARAM_ID_SET_TOPOLOGY    0x0001025A
-#define AFE_PARAM_ID_DEREGISTER_TOPOLOGY	0x000102E8
 #define AFE_API_VERSION_TOPOLOGY_V1 0x1
 
 struct afe_param_id_set_topology_cfg {
@@ -10906,7 +10880,6 @@ struct cmd_set_topologies {
 #define AFE_PARAM_ID_FBSP_MODE_RX_CFG 0x0001021D
 #define AFE_PARAM_ID_FBSP_PTONE_RAMP_CFG 0x00010260
 #define AFE_PARAM_ID_SP_RX_TMAX_XMAX_LOGGING 0x000102BC
-#define AFE_PARAM_ID_CPS_LPASS_HW_INTF_CFG 0x000102EF
 
 struct asm_fbsp_mode_rx_cfg {
 	uint32_t minor_version;
@@ -12263,27 +12236,6 @@ struct afe_clk_set {
 	uint32_t enable;
 };
 
-#define AVS_BUILD_MAJOR_VERSION_V2		2
-#define AVS_BUILD_MINOR_VERSION_V9		9
-#define AVS_BUILD_BRANCH_VERSION_V3		3
-
-#define AFE_PARAM_ID_CLOCK_SET_V2		0x000102E6
-
-#define AFE_API_VERSION_CLOCK_SET_V2		0x1
-
-struct afe_param_id_clock_set_v2_t {
-	uint32_t	clk_set_minor_version;
-	uint32_t	clk_id;
-	uint32_t	clk_freq_in_hz;
-	uint16_t	clk_attri;
-	uint16_t	clk_root;
-	uint32_t	enable;
-	uint32_t	divider_2x;
-	uint32_t	m;
-	uint32_t	n;
-	uint32_t	d;
-};
-
 struct afe_clk_cfg {
 /* Minor version used for tracking the version of the I2S
  * configuration interface.
@@ -12324,15 +12276,16 @@ struct afe_clk_cfg {
 #define AFE_MODULE_CLOCK_SET		0x0001028F
 #define AFE_PARAM_ID_CLOCK_SET		0x00010290
 
-#define CLK_SRC_NAME_MAX 32
-
-enum {
-	CLK_SRC_INTEGRAL,
-	CLK_SRC_FRACT,
-	CLK_SRC_MAX
-};
-
 struct afe_set_clk_drift {
+	/*
+	 * Clock ID
+	 *	@values
+	 *	- 0x100 to 0x10E
+	 *	- 0x200 to 0x20C
+	 *	- 0x500 to 0x505
+	 */
+	uint32_t clk_id;
+
 	/*
 	 * Clock drift  (in PPB) to be set.
 	 *	@values
@@ -12341,20 +12294,12 @@ struct afe_set_clk_drift {
 	int32_t clk_drift;
 
 	/*
-	 * Clock reset.
+	 * Clock rest.
 	 *	@values
 	 *	- 1 -- Reset PLL with the original frequency
 	 *	- 0 -- Adjust the clock with the clk drift value
 	 */
 	uint32_t clk_reset;
-	/*
-	 * Clock src name.
-	 *  @values
-	 *  - values to be set from machine driver
-	 *  - LPAPLL0 -- integral clk src
-	 *  - LPAPLL2 -- fractional clk src
-	 */
-	char clk_src_name[CLK_SRC_NAME_MAX];
 } __packed;
 
 /* This param id is used to adjust audio interface PLL*/

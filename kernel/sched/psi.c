@@ -173,6 +173,14 @@ __setup("psi=", setup_psi);
 #define WINDOW_MAX_US 10000000	/* Max window size is 10s */
 #define UPDATES_PER_WINDOW 10	/* 10 updates per window */
 
+#define MONITOR_WINDOW_MIN_NS 1000000000 /* 1s */
+#define MONITOR_THRESHOLD_MIN_NS 100000000 /* 100ms */
+
+#define PERFLOG_PSI_THRESHOLD	250
+#define AVG10			0
+#define AVG60			1
+#define AVG300			2
+
 u64 psi_full_max;
 
 /* Sampling frequency in nanoseconds */
@@ -412,6 +420,19 @@ static u64 update_averages(struct psi_group *group, u64 now)
 			sample = period;
 		group->avg_total[s] += sample;
 		calc_avgs(group->avg[s], missed_periods, sample, period);
+		if (s % 2 && (LOAD_INT(group->avg[s][AVG10]) * 100 + LOAD_FRAC(group->avg[s][AVG10])) >= PERFLOG_PSI_THRESHOLD) {
+			u64 total_full = 0, total_some = 0;
+			int some, full;
+			char title[NR_PSI_RESOURCES][4] = {"IO", "MEM", "CPU"};
+			char *strtitle;
+
+			strtitle = title[s / 2];
+			some = s - 1;
+			full = s;
+
+			total_some = div_u64(group->total[PSI_AVGS][some], NSEC_PER_USEC);
+			total_full = div_u64(group->total[PSI_AVGS][full], NSEC_PER_USEC);
+		}
 	}
 
 	return avg_next_update;
@@ -573,6 +594,14 @@ static u64 update_triggers(struct psi_group *group, u64 now)
 		/* Calculate growth since last update */
 		growth = window_update(&t->win, now, total[t->state]);
 
+		if ((t->win.size >= MONITOR_WINDOW_MIN_NS)){
+			if (t->state==3) { //FULL
+				if(growth < 5000000000 && growth > psi_full_max) {
+					psi_full_max = growth;
+				}
+			}
+		}
+
 		if (growth < t->threshold)
 			continue;
 
@@ -581,6 +610,11 @@ static u64 update_triggers(struct psi_group *group, u64 now)
 			continue;
 
 		trace_psi_event(t->state, t->threshold);
+
+		if ((t->win.size >= MONITOR_WINDOW_MIN_NS) && 
+		    (t->threshold >= MONITOR_THRESHOLD_MIN_NS))
+			printk_deferred("psi: %s %llu %llu %d %llu %llu\n", __func__, now,
+			       t->last_event_time, t->state, t->threshold, growth);
 
 		/* Generate an event */
 		if (cmpxchg(&t->event, 0, 1) == 0) {
@@ -1167,6 +1201,7 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group,
 	t->event = 0;
 	t->last_event_time = 0;
 	init_waitqueue_head(&t->event_wait);
+	kref_init(&t->refcount);
 	get_task_comm(t->comm, current);
 	timer_setup(&t->wdog_timer, ulmk_watchdog_fn, TIMER_DEFERRABLE);
 
@@ -1201,25 +1236,20 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group,
 	return t;
 }
 
-void psi_trigger_destroy(struct psi_trigger *t)
+static void psi_trigger_destroy(struct kref *ref)
 {
-	struct psi_group *group;
+	struct psi_trigger *t = container_of(ref, struct psi_trigger, refcount);
+	struct psi_group *group = t->group;
 	struct kthread_worker *kworker_to_destroy = NULL;
 
-	/*
-	 * We do not check psi_disabled since it might have been disabled after
-	 * the trigger got created.
-	 */
-	if (!t)
+	if (static_branch_likely(&psi_disabled))
 		return;
 
-	group = t->group;
 	/*
-	 * Wakeup waiters to stop polling and clear the queue to prevent it from
-	 * being accessed later. Can happen if cgroup is deleted from under a
-	 * polling process.
+	 * Wakeup waiters to stop polling. Can happen if cgroup is deleted
+	 * from under a polling process.
 	 */
-	wake_up_pollfree(&t->event_wait);
+	wake_up_interruptible(&t->event_wait);
 
 	mutex_lock(&group->trigger_lock);
 
@@ -1250,9 +1280,9 @@ void psi_trigger_destroy(struct psi_trigger *t)
 	mutex_unlock(&group->trigger_lock);
 
 	/*
-	 * Wait for psi_schedule_poll_work RCU to complete its read-side
-	 * critical section before destroying the trigger and optionally the
-	 * poll_task.
+	 * Wait for both *trigger_ptr from psi_trigger_replace and
+	 * poll_kworker RCUs to complete their read-side critical sections
+	 * before destroying the trigger and optionally the poll_kworker
 	 */
 	synchronize_rcu();
 	/*
@@ -1274,6 +1304,18 @@ void psi_trigger_destroy(struct psi_trigger *t)
 	kfree(t);
 }
 
+void psi_trigger_replace(void **trigger_ptr, struct psi_trigger *new)
+{
+	struct psi_trigger *old = *trigger_ptr;
+
+	if (static_branch_likely(&psi_disabled))
+		return;
+
+	rcu_assign_pointer(*trigger_ptr, new);
+	if (old)
+		kref_put(&old->refcount, psi_trigger_destroy);
+}
+
 __poll_t psi_trigger_poll(void **trigger_ptr,
 				struct file *file, poll_table *wait)
 {
@@ -1283,9 +1325,16 @@ __poll_t psi_trigger_poll(void **trigger_ptr,
 	if (static_branch_likely(&psi_disabled))
 		return DEFAULT_POLLMASK | EPOLLERR | EPOLLPRI;
 
-	t = smp_load_acquire(trigger_ptr);
-	if (!t)
+	rcu_read_lock();
+
+	t = rcu_dereference(*(void __rcu __force **)trigger_ptr);
+	if (!t) {
+		rcu_read_unlock();
 		return DEFAULT_POLLMASK | EPOLLERR | EPOLLPRI;
+	}
+	kref_get(&t->refcount);
+
+	rcu_read_unlock();
 
 	poll_wait(file, &t->event_wait, wait);
 
@@ -1294,6 +1343,8 @@ __poll_t psi_trigger_poll(void **trigger_ptr,
 		if (!strcmp(t->comm, ULMK_MAGIC))
 			ulmk_watchdog_pet(&t->wdog_timer);
 	}
+
+	kref_put(&t->refcount, psi_trigger_destroy);
 
 	return ret;
 }
@@ -1318,24 +1369,14 @@ static ssize_t psi_write(struct file *file, const char __user *user_buf,
 
 	buf[buf_size - 1] = '\0';
 
-	seq = file->private_data;
+	new = psi_trigger_create(&psi_system, buf, nbytes, res);
+	if (IS_ERR(new))
+		return PTR_ERR(new);
 
+	seq = file->private_data;
 	/* Take seq->lock to protect seq->private from concurrent writes */
 	mutex_lock(&seq->lock);
-
-	/* Allow only one trigger per file descriptor */
-	if (seq->private) {
-		mutex_unlock(&seq->lock);
-		return -EBUSY;
-	}
-
-	new = psi_trigger_create(&psi_system, buf, nbytes, res);
-	if (IS_ERR(new)) {
-		mutex_unlock(&seq->lock);
-		return PTR_ERR(new);
-	}
-
-	smp_store_release(&seq->private, new);
+	psi_trigger_replace(&seq->private, new);
 	mutex_unlock(&seq->lock);
 
 	return nbytes;
@@ -1370,7 +1411,7 @@ static int psi_fop_release(struct inode *inode, struct file *file)
 {
 	struct seq_file *seq = file->private_data;
 
-	psi_trigger_destroy(seq->private);
+	psi_trigger_replace(&seq->private, NULL);
 	return single_release(inode, file);
 }
 

@@ -2692,7 +2692,6 @@ static struct pci_driver idt_pci_driver = {
 
 static int __init idt_pci_driver_init(void)
 {
-	int ret;
 	pr_info("%s %s\n", NTB_DESC, NTB_VER);
 
 	/* Create the top DebugFS directory if the FS is initialized */
@@ -2700,11 +2699,7 @@ static int __init idt_pci_driver_init(void)
 		dbgfs_topdir = debugfs_create_dir(KBUILD_MODNAME, NULL);
 
 	/* Register the NTB hardware driver to handle the PCI device */
-	ret = pci_register_driver(&idt_pci_driver);
-	if (ret)
-		debugfs_remove_recursive(dbgfs_topdir);
-
-	return ret;
+	return pci_register_driver(&idt_pci_driver);
 }
 module_init(idt_pci_driver_init);
 

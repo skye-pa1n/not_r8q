@@ -69,12 +69,14 @@ static int mtu3_ep_enable(struct mtu3_ep *mep)
 	u32 interval = 0;
 	u32 mult = 0;
 	u32 burst = 0;
+	int max_packet;
 	int ret;
 
 	desc = mep->desc;
 	comp_desc = mep->comp_desc;
 	mep->type = usb_endpoint_type(desc);
-	mep->maxp = usb_endpoint_maxp(desc);
+	max_packet = usb_endpoint_maxp(desc);
+	mep->maxp = max_packet & GENMASK(10, 0);
 
 	switch (mtu->g.speed) {
 	case USB_SPEED_SUPER:
@@ -82,7 +84,7 @@ static int mtu3_ep_enable(struct mtu3_ep *mep)
 		if (usb_endpoint_xfer_int(desc) ||
 				usb_endpoint_xfer_isoc(desc)) {
 			interval = desc->bInterval;
-			interval = clamp_val(interval, 1, 16);
+			interval = clamp_val(interval, 1, 16) - 1;
 			if (usb_endpoint_xfer_isoc(desc) && comp_desc)
 				mult = comp_desc->bmAttributes;
 		}
@@ -94,16 +96,9 @@ static int mtu3_ep_enable(struct mtu3_ep *mep)
 		if (usb_endpoint_xfer_isoc(desc) ||
 				usb_endpoint_xfer_int(desc)) {
 			interval = desc->bInterval;
-			interval = clamp_val(interval, 1, 16);
-			mult = usb_endpoint_maxp_mult(desc) - 1;
+			interval = clamp_val(interval, 1, 16) - 1;
+			burst = (max_packet & GENMASK(12, 11)) >> 11;
 		}
-		break;
-	case USB_SPEED_FULL:
-		if (usb_endpoint_xfer_isoc(desc))
-			interval = clamp_val(desc->bInterval, 1, 16);
-		else if (usb_endpoint_xfer_int(desc))
-			interval = clamp_val(desc->bInterval, 1, 255);
-
 		break;
 	default:
 		break; /*others are ignored */
@@ -578,7 +573,6 @@ static int mtu3_gadget_stop(struct usb_gadget *g)
 
 	spin_unlock_irqrestore(&mtu->lock, flags);
 
-	synchronize_irq(mtu->irq);
 	return 0;
 }
 

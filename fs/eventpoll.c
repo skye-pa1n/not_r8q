@@ -223,7 +223,8 @@ struct eventpoll {
 	struct file *file;
 
 	/* used to optimize loop detection check */
-	u64 gen;
+	int visited;
+	struct list_head visited_list_link;
 
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	/* used to track busy poll napi_id */
@@ -273,8 +274,6 @@ static long max_user_watches __read_mostly;
  */
 static DEFINE_MUTEX(epmutex);
 
-static u64 loop_check_gen = 0;
-
 /* Used to check for epoll file descriptor inclusion loops */
 static struct nested_calls poll_loop_ncalls;
 
@@ -283,6 +282,9 @@ static struct kmem_cache *epi_cache __read_mostly;
 
 /* Slab cache used to allocate "struct eppoll_entry" */
 static struct kmem_cache *pwq_cache __read_mostly;
+
+/* Visited nodes during ep_loop_check(), so we can unset them when we finish */
+static LIST_HEAD(visited_list);
 
 /*
  * List of files with newly added links, where we may need to limit the number
@@ -1377,7 +1379,7 @@ static int reverse_path_check(void)
 
 static int ep_create_wakeup_source(struct epitem *epi)
 {
-	struct name_snapshot n;
+	const char *name;
 	struct wakeup_source *ws;
 
 	if (!epi->ep->ws) {
@@ -1386,9 +1388,8 @@ static int ep_create_wakeup_source(struct epitem *epi)
 			return -ENOMEM;
 	}
 
-	take_dentry_name_snapshot(&n, epi->ffd.file->f_path.dentry);
-	ws = wakeup_source_register(NULL, n.name);
-	release_dentry_name_snapshot(&n);
+	name = epi->ffd.file->f_path.dentry->d_name.name;
+	ws = wakeup_source_register(NULL, name);
 
 	if (!ws)
 		return -ENOMEM;
@@ -1868,12 +1869,13 @@ static int ep_loop_check_proc(void *priv, void *cookie, int call_nests)
 	struct epitem *epi;
 
 	mutex_lock_nested(&ep->mtx, call_nests + 1);
-	ep->gen = loop_check_gen;
+	ep->visited = 1;
+	list_add(&ep->visited_list_link, &visited_list);
 	for (rbp = rb_first_cached(&ep->rbr); rbp; rbp = rb_next(rbp)) {
 		epi = rb_entry(rbp, struct epitem, rbn);
 		if (unlikely(is_file_epoll(epi->ffd.file))) {
 			ep_tovisit = epi->ffd.file->private_data;
-			if (ep_tovisit->gen == loop_check_gen)
+			if (ep_tovisit->visited)
 				continue;
 			error = ep_call_nested(&poll_loop_ncalls, EP_MAX_NESTS,
 					ep_loop_check_proc, epi->ffd.file,
@@ -1914,8 +1916,18 @@ static int ep_loop_check_proc(void *priv, void *cookie, int call_nests)
  */
 static int ep_loop_check(struct eventpoll *ep, struct file *file)
 {
-	return ep_call_nested(&poll_loop_ncalls, EP_MAX_NESTS,
+	int ret;
+	struct eventpoll *ep_cur, *ep_next;
+
+	ret = ep_call_nested(&poll_loop_ncalls, EP_MAX_NESTS,
 			      ep_loop_check_proc, file, ep, current);
+	/* clear visited list */
+	list_for_each_entry_safe(ep_cur, ep_next, &visited_list,
+							visited_list_link) {
+		ep_cur->visited = 0;
+		list_del(&ep_cur->visited_list_link);
+	}
+	return ret;
 }
 
 static void clear_tfile_check_list(void)
@@ -2077,15 +2089,16 @@ SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 	mutex_lock_nested(&ep->mtx, 0);
 	if (op == EPOLL_CTL_ADD) {
 		if (!list_empty(&f.file->f_ep_links) ||
-				ep->gen == loop_check_gen ||
 						is_file_epoll(tf.file)) {
 			full_check = 1;
 			mutex_unlock(&ep->mtx);
 			mutex_lock(&epmutex);
 			if (is_file_epoll(tf.file)) {
 				error = -ELOOP;
-				if (ep_loop_check(ep, tf.file) != 0)
+				if (ep_loop_check(ep, tf.file) != 0) {
+					clear_tfile_check_list();
 					goto error_tgt_fput;
+				}
 			} else {
 				get_file(tf.file);
 				list_add(&tf.file->f_tfile_llink,
@@ -2114,6 +2127,8 @@ SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 			error = ep_insert(ep, &epds, tf.file, fd, full_check);
 		} else
 			error = -EEXIST;
+		if (full_check)
+			clear_tfile_check_list();
 		break;
 	case EPOLL_CTL_DEL:
 		if (epi)
@@ -2136,11 +2151,8 @@ SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 	mutex_unlock(&ep->mtx);
 
 error_tgt_fput:
-	if (full_check) {
-		clear_tfile_check_list();
-		loop_check_gen++;
+	if (full_check)
 		mutex_unlock(&epmutex);
-	}
 
 	fdput(tf);
 error_fput:

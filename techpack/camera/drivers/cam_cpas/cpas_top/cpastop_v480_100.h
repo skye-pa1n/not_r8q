@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _CPASTOP_V480_100_H_
@@ -393,19 +393,31 @@ static struct cam_camnoc_specific
 			.access_type = CAM_REG_TYPE_READ_WRITE,
 			.masked_value = 0,
 			.offset = 0x1438, /* IFE_RDI_WR_URGENCY_LOW */
+#if defined(CONFIG_SAMSUNG_SBI)
+			.value = 0x1070,// temp fix : pixel pipeline overflow 
+#else
 			.value = 0x1030,
+#endif
 		},
 		.danger_lut = {
 			.enable = true,
 			.access_type = CAM_REG_TYPE_READ_WRITE,
 			.offset = 0x1440, /* IFE_RDI_WR_DANGERLUT_LOW */
+#if defined(CONFIG_SAMSUNG_SBI)
+			.value = 0xFFFFFFF0,
+#else
 			.value = 0xFFFFFF00,
+#endif
 		},
 		.safe_lut = {
 			.enable = true,
 			.access_type = CAM_REG_TYPE_READ_WRITE,
 			.offset = 0x1448, /* IFE_RDI_WR_SAFELUT_LOW */
+#if defined(CONFIG_SAMSUNG_SBI)
+			.value = 0x1,
+#else
 			.value = 0x000F,
+#endif
 		},
 		.ubwc_ctl = {
 			/*
@@ -698,12 +710,6 @@ static struct cam_cpas_hw_errata_wa_list cam480_cpas100_errata_wa_list = {
 	},
 };
 
-struct cam_camnoc_fifo_lvl_info cam480_cpas100_camnoc_fifo_info = {
-	.ife_linear = 0xA20,
-	.ife_rdi_wr = 0x1420,
-	.ife_ubwc_stats = 0x1A20,
-};
-
 static struct cam_camnoc_info cam480_cpas100_camnoc_info = {
 	.specific = &cam_cpas_v480_100_camnoc_specific[0],
 	.specific_size = ARRAY_SIZE(cam_cpas_v480_100_camnoc_specific),
@@ -712,7 +718,6 @@ static struct cam_camnoc_info cam480_cpas100_camnoc_info = {
 	.irq_err_size = ARRAY_SIZE(cam_cpas_v480_100_irq_err),
 	.err_logger = &cam480_cpas100_err_logger_offsets,
 	.errata_wa_list = &cam480_cpas100_errata_wa_list,
-	.fill_lvl_register = &cam480_cpas100_camnoc_fifo_info,
 };
 
 #endif /* _CPASTOP_V480_100_H_ */

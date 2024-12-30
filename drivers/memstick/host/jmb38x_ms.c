@@ -316,7 +316,7 @@ static int jmb38x_ms_transfer_data(struct jmb38x_ms_host *host)
 	}
 
 	while (length) {
-		unsigned int p_off;
+		unsigned int uninitialized_var(p_off);
 
 		if (host->req->long_data) {
 			pg = nth_page(sg_page(&host->req->sg),
@@ -907,7 +907,7 @@ static struct memstick_host *jmb38x_ms_alloc_host(struct jmb38x_ms *jm, int cnt)
 
 	iounmap(host->addr);
 err_out_free:
-	memstick_free_host(msh);
+	kfree(msh);
 	return NULL;
 }
 

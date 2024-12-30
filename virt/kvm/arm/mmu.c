@@ -323,8 +323,7 @@ static void unmap_stage2_puds(struct kvm *kvm, pgd_t *pgd,
  * destroying the VM), otherwise another faulting VCPU may come in and mess
  * with things behind our backs.
  */
-static void __unmap_stage2_range(struct kvm *kvm, phys_addr_t start, u64 size,
-				 bool may_block)
+static void unmap_stage2_range(struct kvm *kvm, phys_addr_t start, u64 size)
 {
 	pgd_t *pgd;
 	phys_addr_t addr = start, end = start + size;
@@ -349,14 +348,9 @@ static void __unmap_stage2_range(struct kvm *kvm, phys_addr_t start, u64 size,
 		 * If the range is too large, release the kvm->mmu_lock
 		 * to prevent starvation and lockup detector warnings.
 		 */
-		if (may_block && next != end)
+		if (next != end)
 			cond_resched_lock(&kvm->mmu_lock);
 	} while (pgd++, addr = next, addr != end);
-}
-
-static void unmap_stage2_range(struct kvm *kvm, phys_addr_t start, u64 size)
-{
-	__unmap_stage2_range(kvm, start, size, true);
 }
 
 static void stage2_flush_ptes(struct kvm *kvm, pmd_t *pmd,
@@ -1282,9 +1276,6 @@ static bool transparent_hugepage_adjust(kvm_pfn_t *pfnp, phys_addr_t *ipap)
 
 static bool kvm_is_write_fault(struct kvm_vcpu *vcpu)
 {
-	if (kvm_vcpu_abt_iss1tw(vcpu))
-		return true;
-
 	if (kvm_vcpu_trap_is_iabt(vcpu))
 		return false;
 
@@ -1499,7 +1490,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	unsigned long flags = 0;
 
 	write_fault = kvm_is_write_fault(vcpu);
-	exec_fault = kvm_vcpu_trap_is_exec_fault(vcpu);
+	exec_fault = kvm_vcpu_trap_is_iabt(vcpu);
 	VM_BUG_ON(write_fault && exec_fault);
 
 	if (fault_status == FSC_PERM && !write_fault && !exec_fault) {
@@ -1829,20 +1820,18 @@ static int handle_hva_to_gpa(struct kvm *kvm,
 
 static int kvm_unmap_hva_handler(struct kvm *kvm, gpa_t gpa, u64 size, void *data)
 {
-	bool may_block = *(bool *)data;
-
-	__unmap_stage2_range(kvm, gpa, size, may_block);
+	unmap_stage2_range(kvm, gpa, size);
 	return 0;
 }
 
 int kvm_unmap_hva_range(struct kvm *kvm,
-			unsigned long start, unsigned long end, bool blockable)
+			unsigned long start, unsigned long end)
 {
 	if (!kvm->arch.pgd)
 		return 0;
 
 	trace_kvm_unmap_hva_range(start, end);
-	handle_hva_to_gpa(kvm, start, end, &kvm_unmap_hva_handler, &blockable);
+	handle_hva_to_gpa(kvm, start, end, &kvm_unmap_hva_handler, NULL);
 	return 0;
 }
 
@@ -2080,7 +2069,7 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 	 * Prevent userspace from creating a memory region outside of the IPA
 	 * space addressable by the KVM guest IPA space.
 	 */
-	if (memslot->base_gfn + memslot->npages >
+	if (memslot->base_gfn + memslot->npages >=
 	    (KVM_PHYS_SIZE >> PAGE_SHIFT))
 		return -EFAULT;
 

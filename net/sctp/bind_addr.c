@@ -88,12 +88,6 @@ int sctp_bind_addr_copy(struct net *net, struct sctp_bind_addr *dest,
 		}
 	}
 
-	/* If somehow no addresses were found that can be used with this
-	 * scope, it's an error.
-	 */
-	if (list_empty(&dest->address_list))
-		error = -ENETUNREACH;
-
 out:
 	if (error)
 		sctp_bind_addr_clean(dest);
@@ -462,7 +456,6 @@ static int sctp_copy_one_addr(struct net *net, struct sctp_bind_addr *dest,
 		 * well as the remote peer.
 		 */
 		if ((((AF_INET == addr->sa.sa_family) &&
-		      (flags & SCTP_ADDR4_ALLOWED) &&
 		      (flags & SCTP_ADDR4_PEERSUPP))) ||
 		    (((AF_INET6 == addr->sa.sa_family) &&
 		      (flags & SCTP_ADDR6_ALLOWED) &&

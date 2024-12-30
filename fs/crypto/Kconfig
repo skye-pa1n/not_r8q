@@ -30,11 +30,11 @@ config FS_ENCRYPTION_INLINE_CRYPT
 	help
 	  Enable fscrypt to use inline encryption hardware if available.
 
-config ENABLE_LEGACY_PFK
-	bool "Legacy method to generate per file key"
-	default n
+config FSCRYPT_SDP
+	bool "Sensitive Data Protection for Per-file-encryption"
+	depends on FS_ENCRYPTION
+	depends on SDP
 	help
-	  Enable legacy method to generate aes keys derived
-	  from nonce and master key. In private mode the keys
-	  will be used by inline crypto hardware to encrypt the
-	  file content.
+	  Enable SDP functional to fscrypto module.
+	  This feature is supporting "Data-At-Rest" for file systems using
+	  Per-file-encryption being controlled by SDP user status.

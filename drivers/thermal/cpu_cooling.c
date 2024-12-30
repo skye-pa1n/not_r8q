@@ -5,7 +5,6 @@
  *  Copyright (C) 2012  Amit Daniel <amit.kachhap@linaro.org>
  *
  *  Copyright (C) 2014  Viresh Kumar <viresh.kumar@linaro.org>
- *  Copyright (c) 2022  Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  *  This program is free software; you can redistribute it and/or modify
@@ -365,7 +364,7 @@ static int cpufreq_set_min_state(struct thermal_cooling_device *cdev,
 	unsigned int floor_freq;
 
 	if (state > cpufreq_cdev->max_level)
-		return -EINVAL;
+		state = cpufreq_cdev->max_level;
 
 	if (cpufreq_cdev->cpufreq_floor_state == state)
 		return 0;

@@ -44,6 +44,9 @@
 #include <asm/virt.h>
 
 #include "efi-header.S"
+#ifdef CONFIG_CFP_ROPP
+#include <asm/cfp.h>
+#endif
 
 #define __PHYS_OFFSET	(KERNEL_START - TEXT_OFFSET)
 
@@ -90,7 +93,11 @@ _head:
 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
 	le64sym	_kernel_flags_le		// Informative flags, little-endian
 	.quad	0				// reserved
-	.quad	0				// reserved
+#ifdef CONFIG_PROCA
+	le64sym	_proca_conf_offset		// memory info for proca ta
+#else
+	.quad	0xecefecef			// Magic number for proca ta
+#endif
 	.quad	0				// reserved
 	.ascii	"ARM\x64"			// Magic number
 #ifdef CONFIG_EFI
@@ -117,6 +124,9 @@ pe_header:
 	 *                                        current RELR displacement
 	 */
 ENTRY(stext)
+#ifdef CONFIG_CFP_ROPP
+	ropp_primary_early_init
+#endif
 	bl	preserve_boot_args
 	bl	el2_setup			// Drop to EL1, w0=cpu_boot_mode
 	adrp	x23, __PHYS_OFFSET
@@ -210,7 +220,7 @@ ENDPROC(preserve_boot_args)
  * to be composed of multiple pages. (This effectively scales the end index).
  *
  *	vstart:	virtual address of start of range
- *	vend:	virtual address of end of range - we map [vstart, vend]
+ *	vend:	virtual address of end of range
  *	shift:	shift used to transform virtual address into index
  *	ptrs:	number of entries in page table
  *	istart:	index in table corresponding to vstart
@@ -247,18 +257,17 @@ ENDPROC(preserve_boot_args)
  *
  *	tbl:	location of page table
  *	rtbl:	address to be used for first level page table entry (typically tbl + PAGE_SIZE)
- *	vstart:	virtual address of start of range
- *	vend:	virtual address of end of range - we map [vstart, vend - 1]
+ *	vstart:	start address to map
+ *	vend:	end address to map - we map [vstart, vend]
  *	flags:	flags to use to map last level entries
  *	phys:	physical address corresponding to vstart - physical memory is contiguous
  *	pgds:	the number of pgd entries
  *
  * Temporaries:	istart, iend, tmp, count, sv - these need to be different registers
- * Preserves:	vstart, flags
- * Corrupts:	tbl, rtbl, vend, istart, iend, tmp, count, sv
+ * Preserves:	vstart, vend, flags
+ * Corrupts:	tbl, rtbl, istart, iend, tmp, count, sv
  */
 	.macro map_memory, tbl, rtbl, vstart, vend, flags, phys, pgds, istart, iend, tmp, count, sv
-	sub \vend, \vend, #1
 	add \rtbl, \tbl, #PAGE_SIZE
 	mov \sv, \rtbl
 	mov \count, #0
@@ -680,7 +689,7 @@ ENTRY(__boot_cpu_mode)
  * with MMU turned off.
  */
 ENTRY(__early_cpu_boot_status)
-	.quad 	0
+	.long 	0
 
 	.popsection
 
@@ -733,6 +742,9 @@ __secondary_switched:
 	mov	sp, x1
 	ldr	x2, [x0, #CPU_BOOT_TASK]
 	msr	sp_el0, x2
+#ifdef CONFIG_CFP_ROPP
+	ropp_secondary_init x2
+#endif
 #ifdef CONFIG_SHADOW_CALL_STACK
 	ldr	x18, [x2, #TSK_TI_SCS]		// set shadow call stack
 	str	xzr, [x2, #TSK_TI_SCS]		// limit visibility of saved SCS
@@ -966,7 +978,6 @@ __primary_switch:
 
 	tlbi	vmalle1				// Remove any stale TLB entries
 	dsb	nsh
-	isb
 
 	msr	sctlr_el1, x19			// re-enable the MMU
 	isb

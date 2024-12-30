@@ -14,7 +14,6 @@
 #include <linux/uprobes.h>
 #include <linux/page-flags-layout.h>
 #include <linux/workqueue.h>
-#include <linux/android_kabi.h>
 
 #include <asm/mmu.h>
 
@@ -262,8 +261,8 @@ struct vm_userfaultfd_ctx {};
 #endif /* CONFIG_USERFAULTFD */
 
 /*
- * This struct describes a virtual memory area. There is one of these
- * per VM-area/task. A VM area is any part of the process virtual memory
+ * This struct defines a memory VMM memory area. There is one of these
+ * per VM-area/task.  A VM area is any part of the process virtual memory
  * space that has a special rule for the page-fault handlers (ie a shared
  * library, the executable area etc).
  */
@@ -336,18 +335,10 @@ struct vm_area_struct {
 	struct mempolicy *vm_policy;	/* NUMA policy for the VMA */
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
-#ifdef CONFIG_UKSM
-	struct vma_slot *uksm_vma_slot;
-#endif
 #ifdef CONFIG_SPECULATIVE_PAGE_FAULT
 	seqcount_t vm_sequence;		/* Speculative page fault field */
 	atomic_t vm_ref_count;		/* see vma_get(), vma_put() */
 #endif
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 } __randomize_layout;
 
 struct core_thread {

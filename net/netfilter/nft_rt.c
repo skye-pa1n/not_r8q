@@ -18,7 +18,7 @@
 
 struct nft_rt {
 	enum nft_rt_keys	key:8;
-	u8			dreg;
+	enum nft_registers	dreg:8;
 };
 
 static u16 get_tcpmss(const struct nft_pktinfo *pkt, const struct dst_entry *skbdst)
@@ -134,8 +134,9 @@ static int nft_rt_get_init(const struct nft_ctx *ctx,
 		return -EOPNOTSUPP;
 	}
 
-	return nft_parse_register_store(ctx, tb[NFTA_RT_DREG], &priv->dreg,
-					NULL, NFT_DATA_VALUE, len);
+	priv->dreg = nft_parse_register(tb[NFTA_RT_DREG]);
+	return nft_validate_register_store(ctx, priv->dreg, NULL,
+					   NFT_DATA_VALUE, len);
 }
 
 static int nft_rt_get_dump(struct sk_buff *skb,
@@ -158,11 +159,6 @@ static int nft_rt_validate(const struct nft_ctx *ctx, const struct nft_expr *exp
 {
 	const struct nft_rt *priv = nft_expr_priv(expr);
 	unsigned int hooks;
-
-	if (ctx->family != NFPROTO_IPV4 &&
-	    ctx->family != NFPROTO_IPV6 &&
-	    ctx->family != NFPROTO_INET)
-		return -EOPNOTSUPP;
 
 	switch (priv->key) {
 	case NFT_RT_NEXTHOP4:

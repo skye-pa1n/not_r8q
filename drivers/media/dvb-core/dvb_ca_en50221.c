@@ -162,19 +162,13 @@ struct dvb_ca_private {
 
 	/* mutex serializing ioctls */
 	struct mutex ioctl_mutex;
-
-	/* A mutex used when a device is disconnected */
-	struct mutex remove_mutex;
-
-	/* Whether the device is disconnected */
-	int exit;
 };
 
 static void dvb_ca_private_free(struct dvb_ca_private *ca)
 {
 	unsigned int i;
 
-	dvb_device_put(ca->dvbdev);
+	dvb_free_device(ca->dvbdev);
 	for (i = 0; i < ca->slot_count; i++)
 		vfree(ca->slot_info[i].rx_buffer.data);
 
@@ -204,7 +198,7 @@ static void dvb_ca_en50221_thread_wakeup(struct dvb_ca_private *ca);
 static int dvb_ca_en50221_read_data(struct dvb_ca_private *ca, int slot,
 				    u8 *ebuf, int ecount);
 static int dvb_ca_en50221_write_data(struct dvb_ca_private *ca, int slot,
-				     u8 *ebuf, int ecount, int size_write_flag);
+				     u8 *ebuf, int ecount);
 
 /**
  * Safely find needle in haystack.
@@ -387,7 +381,7 @@ static int dvb_ca_en50221_link_init(struct dvb_ca_private *ca, int slot)
 	ret = dvb_ca_en50221_wait_if_status(ca, slot, STATUSREG_FR, HZ / 10);
 	if (ret)
 		return ret;
-	ret = dvb_ca_en50221_write_data(ca, slot, buf, 2, CMDREG_SW);
+	ret = dvb_ca_en50221_write_data(ca, slot, buf, 2);
 	if (ret != 2)
 		return -EIO;
 	ret = ca->pub->write_cam_control(ca->pub, slot, CTRLIF_COMMAND, IRQEN);
@@ -795,13 +789,11 @@ exit:
  * @buf: The data in this buffer is treated as a complete link-level packet to
  *	 be written.
  * @bytes_write: Size of ebuf.
- * @size_write_flag: A flag on Command Register which says whether the link size
- * information will be writen or not.
  *
  * return: Number of bytes written, or < 0 on error.
  */
 static int dvb_ca_en50221_write_data(struct dvb_ca_private *ca, int slot,
-				     u8 *buf, int bytes_write, int size_write_flag)
+				     u8 *buf, int bytes_write)
 {
 	struct dvb_ca_slot *sl = &ca->slot_info[slot];
 	int status;
@@ -836,7 +828,7 @@ static int dvb_ca_en50221_write_data(struct dvb_ca_private *ca, int slot,
 
 	/* OK, set HC bit */
 	status = ca->pub->write_cam_control(ca->pub, slot, CTRLIF_COMMAND,
-					    IRQEN | CMDREG_HC | size_write_flag);
+					    IRQEN | CMDREG_HC);
 	if (status)
 		goto exit;
 
@@ -1524,7 +1516,7 @@ static ssize_t dvb_ca_en50221_io_write(struct file *file,
 
 			mutex_lock(&sl->slot_lock);
 			status = dvb_ca_en50221_write_data(ca, slot, fragbuf,
-							   fraglen + 2, 0);
+							   fraglen + 2);
 			mutex_unlock(&sl->slot_lock);
 			if (status == (fraglen + 2)) {
 				written = 1;
@@ -1725,22 +1717,12 @@ static int dvb_ca_en50221_io_open(struct inode *inode, struct file *file)
 
 	dprintk("%s\n", __func__);
 
-	mutex_lock(&ca->remove_mutex);
-
-	if (ca->exit) {
-		mutex_unlock(&ca->remove_mutex);
-		return -ENODEV;
-	}
-
-	if (!try_module_get(ca->pub->owner)) {
-		mutex_unlock(&ca->remove_mutex);
+	if (!try_module_get(ca->pub->owner))
 		return -EIO;
-	}
 
 	err = dvb_generic_open(inode, file);
 	if (err < 0) {
 		module_put(ca->pub->owner);
-		mutex_unlock(&ca->remove_mutex);
 		return err;
 	}
 
@@ -1765,7 +1747,6 @@ static int dvb_ca_en50221_io_open(struct inode *inode, struct file *file)
 
 	dvb_ca_private_get(ca);
 
-	mutex_unlock(&ca->remove_mutex);
 	return 0;
 }
 
@@ -1785,8 +1766,6 @@ static int dvb_ca_en50221_io_release(struct inode *inode, struct file *file)
 
 	dprintk("%s\n", __func__);
 
-	mutex_lock(&ca->remove_mutex);
-
 	/* mark the CA device as closed */
 	ca->open = 0;
 	dvb_ca_en50221_thread_update_delay(ca);
@@ -1796,13 +1775,6 @@ static int dvb_ca_en50221_io_release(struct inode *inode, struct file *file)
 	module_put(ca->pub->owner);
 
 	dvb_ca_private_put(ca);
-
-	if (dvbdev->users == 1 && ca->exit == 1) {
-		mutex_unlock(&ca->remove_mutex);
-		wake_up(&dvbdev->wait_queue);
-	} else {
-		mutex_unlock(&ca->remove_mutex);
-	}
 
 	return err;
 }
@@ -1928,7 +1900,6 @@ int dvb_ca_en50221_init(struct dvb_adapter *dvb_adapter,
 	}
 
 	mutex_init(&ca->ioctl_mutex);
-	mutex_init(&ca->remove_mutex);
 
 	if (signal_pending(current)) {
 		ret = -EINTR;
@@ -1970,14 +1941,6 @@ void dvb_ca_en50221_release(struct dvb_ca_en50221 *pubca)
 	int i;
 
 	dprintk("%s\n", __func__);
-
-	mutex_lock(&ca->remove_mutex);
-	ca->exit = 1;
-	mutex_unlock(&ca->remove_mutex);
-
-	if (ca->dvbdev->users < 1)
-		wait_event(ca->dvbdev->wait_queue,
-				ca->dvbdev->users == 1);
 
 	/* shutdown the thread if there was one */
 	kthread_stop(ca->thread);

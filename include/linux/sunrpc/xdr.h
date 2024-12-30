@@ -26,7 +26,8 @@ struct rpc_rqst;
 #define XDR_QUADLEN(l)		(((l) + 3) >> 2)
 
 /*
- * Generic opaque `network object.'
+ * Generic opaque `network object.' At the kernel level, this type
+ * is used only by lockd.
  */
 #define XDR_MAX_NETOBJ		1024
 struct xdr_netobj {
@@ -508,8 +509,6 @@ xdr_stream_decode_uint32_array(struct xdr_stream *xdr,
 	ssize_t retval;
 
 	if (unlikely(xdr_stream_decode_u32(xdr, &len) < 0))
-		return -EBADMSG;
-	if (len > SIZE_MAX / sizeof(*p))
 		return -EBADMSG;
 	p = xdr_inline_decode(xdr, len * sizeof(*p));
 	if (unlikely(!p))

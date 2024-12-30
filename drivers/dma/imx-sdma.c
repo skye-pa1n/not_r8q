@@ -1347,12 +1347,10 @@ static struct sdma_desc *sdma_transfer_init(struct sdma_channel *sdmac,
 		sdma_config_ownership(sdmac, false, true, false);
 
 	if (sdma_load_context(sdmac))
-		goto err_bd_out;
+		goto err_desc_out;
 
 	return desc;
 
-err_bd_out:
-	sdma_free_bd(desc);
 err_desc_out:
 	kfree(desc);
 err_out:
@@ -1773,7 +1771,7 @@ static int sdma_event_remap(struct sdma_engine *sdma)
 	u32 reg, val, shift, num_map, i;
 	int ret = 0;
 
-	if (IS_ERR(np) || !gpr_np)
+	if (IS_ERR(np) || IS_ERR(gpr_np))
 		goto out;
 
 	event_remap = of_find_property(np, propname, NULL);
@@ -1821,7 +1819,7 @@ static int sdma_event_remap(struct sdma_engine *sdma)
 	}
 
 out:
-	if (gpr_np)
+	if (!IS_ERR(gpr_np))
 		of_node_put(gpr_np);
 
 	return ret;

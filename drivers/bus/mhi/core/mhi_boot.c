@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
 
 #include <linux/debugfs.h>
 #include <linux/delay.h>
@@ -185,7 +185,7 @@ static int __mhi_download_rddm_in_panic(struct mhi_controller *mhi_cntrl)
 	enum mhi_ee ee;
 	const u32 delayus = 5000;
 	u32 retry = (mhi_cntrl->timeout_ms * 1000) / delayus;
-	const u32 rddm_timeout_us = 350000;
+	const u32 rddm_timeout_us = 200000;
 	int rddm_retry = rddm_timeout_us / delayus; /* time to enter rddm */
 	void __iomem *base = mhi_cntrl->bhie;
 
@@ -492,7 +492,7 @@ int mhi_alloc_bhie_table(struct mhi_controller *mhi_cntrl,
 		if (!mhi_buf->buf)
 			goto error_alloc_segment;
 
-		MHI_CNTRL_LOG("Entry:%d Address:0x%llx size:%lu\n", i,
+		MHI_CNTRL_LOG("Entry:%d Address:0x%llx size:%zu\n", i,
 			mhi_buf->dma_addr, mhi_buf->len);
 	}
 
@@ -612,9 +612,12 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 	ret = mhi_fw_load_sbl(mhi_cntrl, dma_addr, size);
 	mhi_free_coherent(mhi_cntrl, size, buf, dma_addr);
 
+	if (!mhi_cntrl->fbc_download || ret || mhi_cntrl->ee == MHI_EE_EDL)
+		release_firmware(firmware);
+
 	/* error or in edl, we're done */
 	if (ret || mhi_cntrl->ee == MHI_EE_EDL)
-		goto release_fw;
+		return;
 
 	write_lock_irq(&mhi_cntrl->pm_lock);
 	mhi_cntrl->dev_state = MHI_STATE_RESET;
@@ -629,7 +632,7 @@ void mhi_fw_load_handler(struct mhi_controller *mhi_cntrl)
 					   firmware->size);
 		if (ret) {
 			MHI_CNTRL_ERR("Error alloc size:%zu\n", firmware->size);
-			goto release_fw;
+			goto error_alloc_fw_table;
 		}
 
 		MHI_CNTRL_LOG("Copying firmware image into vector table\n");
@@ -648,7 +651,7 @@ fw_load_ee_pthru:
 			TO_MHI_EXEC_STR(mhi_cntrl->ee), ret);
 
 	if (!mhi_cntrl->fbc_download)
-		goto release_fw;
+		return;
 
 	if (ret) {
 		MHI_CNTRL_ERR("Did not transition to READY state\n");
@@ -688,7 +691,7 @@ fw_load_ee_pthru:
 error_read:
 	mhi_free_bhie_table(mhi_cntrl, &mhi_cntrl->fbc_image);
 
-release_fw:
+error_alloc_fw_table:
 	release_firmware(firmware);
 }
 

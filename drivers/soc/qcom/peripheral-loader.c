@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2020, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -779,12 +779,11 @@ static int pil_init_entry_addr(struct pil_priv *priv, const struct pil_mdt *mdt)
 }
 
 static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
-				phys_addr_t max_addr, size_t align,
-				size_t mdt_size)
+				phys_addr_t max_addr, size_t align)
 {
 	void *region;
 	size_t size = max_addr - min_addr;
-	size_t aligned_size = max(size, mdt_size);
+	size_t aligned_size;
 
 	/* Don't reallocate due to fragmentation concerns, just sanity check */
 	if (priv->region) {
@@ -824,8 +823,7 @@ static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 	return 0;
 }
 
-static int pil_setup_region(struct pil_priv *priv, const struct pil_mdt *mdt,
-				size_t mdt_size)
+static int pil_setup_region(struct pil_priv *priv, const struct pil_mdt *mdt)
 {
 	const struct elf32_phdr *phdr;
 	phys_addr_t min_addr_r, min_addr_n, max_addr_r, max_addr_n, start, end;
@@ -870,8 +868,7 @@ static int pil_setup_region(struct pil_priv *priv, const struct pil_mdt *mdt,
 	max_addr_r = ALIGN(max_addr_r, SZ_4K);
 
 	if (relocatable) {
-		ret = pil_alloc_region(priv, min_addr_r, max_addr_r, align,
-					mdt_size);
+		ret = pil_alloc_region(priv, min_addr_r, max_addr_r, align);
 	} else {
 		priv->region_start = min_addr_n;
 		priv->region_end = max_addr_n;
@@ -902,15 +899,14 @@ static int pil_cmp_seg(void *priv, struct list_head *a, struct list_head *b)
 	return ret;
 }
 
-static int pil_init_mmap(struct pil_desc *desc, const struct pil_mdt *mdt,
-			size_t mdt_size)
+static int pil_init_mmap(struct pil_desc *desc, const struct pil_mdt *mdt)
 {
 	struct pil_priv *priv = desc->priv;
 	const struct elf32_phdr *phdr;
 	struct pil_seg *seg;
 	int i, ret;
 
-	ret = pil_setup_region(priv, mdt, mdt_size);
+	ret = pil_setup_region(priv, mdt);
 	if (ret)
 		return ret;
 
@@ -1288,7 +1284,7 @@ int pil_boot(struct pil_desc *desc)
 		goto release_fw;
 	}
 
-	ret = pil_init_mmap(desc, mdt, fw->size);
+	ret = pil_init_mmap(desc, mdt);
 	if (ret)
 		goto release_fw;
 
@@ -1301,8 +1297,7 @@ int pil_boot(struct pil_desc *desc)
 
 	pil_log("before_init_image", desc);
 	if (desc->ops->init_image)
-		ret = desc->ops->init_image(desc, fw->data, fw->size,
-				priv->region_start, priv->region);
+		ret = desc->ops->init_image(desc, fw->data, fw->size);
 	if (ret) {
 		pil_err(desc, "Initializing image failed(rc:%d)\n", ret);
 		secure_check_fail = true;

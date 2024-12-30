@@ -732,10 +732,7 @@ static void ef4_init_rx_recycle_ring(struct ef4_nic *efx,
 					    efx->rx_bufs_per_page);
 	rx_queue->page_ring = kcalloc(page_ring_size,
 				      sizeof(*rx_queue->page_ring), GFP_KERNEL);
-	if (!rx_queue->page_ring)
-		rx_queue->page_ptr_mask = 0;
-	else
-		rx_queue->page_ptr_mask = page_ring_size - 1;
+	rx_queue->page_ptr_mask = page_ring_size - 1;
 }
 
 void ef4_init_rx_queue(struct ef4_rx_queue *rx_queue)

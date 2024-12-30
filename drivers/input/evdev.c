@@ -53,8 +53,19 @@ struct evdev_client {
 	bool revoked;
 	unsigned long *evmasks[EV_CNT];
 	unsigned int bufsize;
+
+#ifdef CONFIG_SEC_INPUT_BOOSTER
+	int device_type;
+	int touch_slot_cnt;
+	int ev_cnt;
+#endif
+
 	struct input_event buffer[];
 };
+
+#ifdef CONFIG_SEC_INPUT_BOOSTER
+#include <linux/input/input_booster.h>
+#endif
 
 static size_t evdev_get_mask_cnt(unsigned int type)
 {
@@ -214,9 +225,21 @@ static int evdev_set_clk_type(struct evdev_client *client, unsigned int clkid)
 	return 0;
 }
 
+#ifdef CONFIG_SEC_INPUT_BOOSTER
+#include "evdev_booster.c"
+#endif //--CONFIG_SEC_INPUT_BOOSTER
+
 static void __pass_event(struct evdev_client *client,
 			 const struct input_event *event)
 {
+#ifdef CONFIG_SEC_INPUT_BOOSTER
+	unsigned long flags;
+
+	pr_booster("Raw Input Data : %d, code : %d, Val : %d",
+		event->type, event->code, event->value);
+	client->ev_cnt++;
+#endif
+
 	client->buffer[client->head++] = *event;
 	client->head &= client->bufsize - 1;
 
@@ -240,6 +263,13 @@ static void __pass_event(struct evdev_client *client,
 
 	if (event->type == EV_SYN && event->code == SYN_REPORT) {
 		client->packet_head = client->head;
+#ifdef CONFIG_SEC_INPUT_BOOSTER
+		pr_booster("IB Triggered :: HEAD(%d) TAIL(%d)", client->head, client->tail);
+		spin_lock_irqsave(&ib_type_lock, flags);
+		input_booster(client, client->head);
+		client->ev_cnt = 0;
+		spin_unlock_irqrestore(&ib_type_lock, flags);
+#endif
 		kill_fasync(&client->fasync, SIGIO, POLL_IN);
 	}
 }
@@ -327,6 +357,20 @@ static int evdev_fasync(int fd, struct file *file, int on)
 	struct evdev_client *client = file->private_data;
 
 	return fasync_helper(fd, file, on, &client->fasync);
+}
+
+static int evdev_flush(struct file *file, fl_owner_t id)
+{
+	struct evdev_client *client = file->private_data;
+	struct evdev *evdev = client->evdev;
+
+	mutex_lock(&evdev->mutex);
+
+	if (evdev->exist && !client->revoked)
+		input_flush_device(&evdev->handle, file);
+
+	mutex_unlock(&evdev->mutex);
+	return 0;
 }
 
 static void evdev_free(struct device *dev)
@@ -442,10 +486,6 @@ static int evdev_release(struct inode *inode, struct file *file)
 	unsigned int i;
 
 	mutex_lock(&evdev->mutex);
-
-	if (evdev->exist && !client->revoked)
-		input_flush_device(&evdev->handle, file);
-
 	evdev_ungrab(evdev, client);
 	mutex_unlock(&evdev->mutex);
 
@@ -1307,6 +1347,7 @@ static const struct file_operations evdev_fops = {
 	.compat_ioctl	= evdev_ioctl_compat,
 #endif
 	.fasync		= evdev_fasync,
+	.flush		= evdev_flush,
 	.llseek		= no_llseek,
 };
 
@@ -1437,6 +1478,9 @@ static struct input_handler evdev_handler = {
 
 static int __init evdev_init(void)
 {
+#ifdef CONFIG_SEC_INPUT_BOOSTER
+	input_booster_init();
+#endif
 	return input_register_handler(&evdev_handler);
 }
 

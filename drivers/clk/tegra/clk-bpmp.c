@@ -162,7 +162,7 @@ static unsigned long tegra_bpmp_clk_recalc_rate(struct clk_hw *hw,
 
 	err = tegra_bpmp_clk_transfer(clk->bpmp, &msg);
 	if (err < 0)
-		return 0;
+		return err;
 
 	return response.rate;
 }
@@ -471,7 +471,7 @@ tegra_bpmp_clk_register(struct tegra_bpmp *bpmp,
 			unsigned int num_clocks)
 {
 	struct tegra_bpmp_clk *clk;
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 	const char **parents;
 	unsigned int i;
 	int err;

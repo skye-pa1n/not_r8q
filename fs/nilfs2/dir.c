@@ -143,9 +143,6 @@ static bool nilfs_check_page(struct page *page)
 			goto Enamelen;
 		if (((offs + rec_len - 1) ^ offs) & ~(chunk_size-1))
 			goto Espan;
-		if (unlikely(p->inode &&
-			     NILFS_PRIVATE_INODE(le64_to_cpu(p->inode))))
-			goto Einumber;
 	}
 	if (offs != limit)
 		goto Eend;
@@ -171,9 +168,6 @@ Enamelen:
 	goto bad_entry;
 Espan:
 	error = "directory entry across blocks";
-	goto bad_entry;
-Einumber:
-	error = "disallowed inode number";
 bad_entry:
 	nilfs_error(sb,
 		    "bad entry in directory #%lu: %s - offset=%lu, inode=%lu, rec_len=%d, name_len=%d",
@@ -192,24 +186,19 @@ fail:
 	return false;
 }
 
-static void *nilfs_get_page(struct inode *dir, unsigned long n,
-		struct page **pagep)
+static struct page *nilfs_get_page(struct inode *dir, unsigned long n)
 {
 	struct address_space *mapping = dir->i_mapping;
 	struct page *page = read_mapping_page(mapping, n, NULL);
-	void *kaddr;
 
-	if (IS_ERR(page))
-		return page;
-
-	kaddr = kmap(page);
-	if (unlikely(!PageChecked(page))) {
-		if (!nilfs_check_page(page))
-			goto fail;
+	if (!IS_ERR(page)) {
+		kmap(page);
+		if (unlikely(!PageChecked(page))) {
+			if (PageError(page) || !nilfs_check_page(page))
+				goto fail;
+		}
 	}
-
-	*pagep = page;
-	return kaddr;
+	return page;
 
 fail:
 	nilfs_put_page(page);
@@ -254,7 +243,7 @@ nilfs_filetype_table[NILFS_FT_MAX] = {
 
 #define S_SHIFT 12
 static unsigned char
-nilfs_type_by_mode[(S_IFMT >> S_SHIFT) + 1] = {
+nilfs_type_by_mode[S_IFMT >> S_SHIFT] = {
 	[S_IFREG >> S_SHIFT]	= NILFS_FT_REG_FILE,
 	[S_IFDIR >> S_SHIFT]	= NILFS_FT_DIR,
 	[S_IFCHR >> S_SHIFT]	= NILFS_FT_CHRDEV,
@@ -286,14 +275,14 @@ static int nilfs_readdir(struct file *file, struct dir_context *ctx)
 	for ( ; n < npages; n++, offset = 0) {
 		char *kaddr, *limit;
 		struct nilfs_dir_entry *de;
-		struct page *page;
+		struct page *page = nilfs_get_page(inode, n);
 
-		kaddr = nilfs_get_page(inode, n, &page);
-		if (IS_ERR(kaddr)) {
+		if (IS_ERR(page)) {
 			nilfs_error(sb, "bad page in #%lu", inode->i_ino);
 			ctx->pos += PAGE_SIZE - offset;
 			return -EIO;
 		}
+		kaddr = page_address(page);
 		de = (struct nilfs_dir_entry *)(kaddr + offset);
 		limit = kaddr + nilfs_last_byte(inode, n) -
 			NILFS_DIR_REC_LEN(1);
@@ -356,9 +345,11 @@ nilfs_find_entry(struct inode *dir, const struct qstr *qstr,
 		start = 0;
 	n = start;
 	do {
-		char *kaddr = nilfs_get_page(dir, n, &page);
+		char *kaddr;
 
-		if (!IS_ERR(kaddr)) {
+		page = nilfs_get_page(dir, n);
+		if (!IS_ERR(page)) {
+			kaddr = page_address(page);
 			de = (struct nilfs_dir_entry *)kaddr;
 			kaddr += nilfs_last_byte(dir, n) - reclen;
 			while ((char *) de <= kaddr) {
@@ -396,39 +387,15 @@ found:
 
 struct nilfs_dir_entry *nilfs_dotdot(struct inode *dir, struct page **p)
 {
-	struct page *page;
-	struct nilfs_dir_entry *de, *next_de;
-	size_t limit;
-	char *msg;
+	struct page *page = nilfs_get_page(dir, 0);
+	struct nilfs_dir_entry *de = NULL;
 
-	de = nilfs_get_page(dir, 0, &page);
-	if (IS_ERR(de))
-		return NULL;
-
-	limit = nilfs_last_byte(dir, 0);  /* is a multiple of chunk size */
-	if (unlikely(!limit || le64_to_cpu(de->inode) != dir->i_ino ||
-		     !nilfs_match(1, ".", de))) {
-		msg = "missing '.'";
-		goto fail;
+	if (!IS_ERR(page)) {
+		de = nilfs_next_entry(
+			(struct nilfs_dir_entry *)page_address(page));
+		*p = page;
 	}
-
-	next_de = nilfs_next_entry(de);
-	/*
-	 * If "next_de" has not reached the end of the chunk, there is
-	 * at least one more record.  Check whether it matches "..".
-	 */
-	if (unlikely((char *)next_de == (char *)de + nilfs_chunk_size(dir) ||
-		     !nilfs_match(2, "..", next_de))) {
-		msg = "missing '..'";
-		goto fail;
-	}
-	*p = page;
-	return next_de;
-
-fail:
-	nilfs_error(dir->i_sb, "directory #%lu %s", dir->i_ino, msg);
-	nilfs_put_page(page);
-	return NULL;
+	return de;
 }
 
 ino_t nilfs_inode_by_name(struct inode *dir, const struct qstr *qstr)
@@ -492,11 +459,12 @@ int nilfs_add_link(struct dentry *dentry, struct inode *inode)
 	for (n = 0; n <= npages; n++) {
 		char *dir_end;
 
-		kaddr = nilfs_get_page(dir, n, &page);
-		err = PTR_ERR(kaddr);
-		if (IS_ERR(kaddr))
+		page = nilfs_get_page(dir, n);
+		err = PTR_ERR(page);
+		if (IS_ERR(page))
 			goto out;
 		lock_page(page);
+		kaddr = page_address(page);
 		dir_end = kaddr + nilfs_last_byte(dir, n);
 		de = (struct nilfs_dir_entry *)kaddr;
 		kaddr += PAGE_SIZE - reclen;
@@ -659,10 +627,11 @@ int nilfs_empty_dir(struct inode *inode)
 		char *kaddr;
 		struct nilfs_dir_entry *de;
 
-		kaddr = nilfs_get_page(inode, i, &page);
-		if (IS_ERR(kaddr))
-			return 0;
+		page = nilfs_get_page(inode, i);
+		if (IS_ERR(page))
+			continue;
 
+		kaddr = page_address(page);
 		de = (struct nilfs_dir_entry *)kaddr;
 		kaddr += nilfs_last_byte(inode, i) - NILFS_DIR_REC_LEN(1);
 

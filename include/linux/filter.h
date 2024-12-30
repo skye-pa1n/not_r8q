@@ -64,11 +64,6 @@ struct sock_reuseport;
 /* unused opcode to mark call to interpreter with arguments */
 #define BPF_CALL_ARGS	0xe0
 
-/* unused opcode to mark speculation barrier for mitigating
- * Speculative Store Bypass
- */
-#define BPF_NOSPEC	0xc0
-
 /* As per nm, we expose JITed images as text (code) section for
  * kallsyms. That way, tools like perf can find it to match
  * addresses.
@@ -81,14 +76,6 @@ struct sock_reuseport;
 /* Helper macros for filter block array initializers. */
 
 /* ALU ops on registers, bpf_add|sub|...: dst_reg += src_reg */
-
-#define BPF_ALU_REG(CLASS, OP, DST, SRC)			\
-	((struct bpf_insn) {					\
-		.code  = CLASS | BPF_OP(OP) | BPF_X,		\
-		.dst_reg = DST,					\
-		.src_reg = SRC,					\
-		.off   = 0,					\
-		.imm   = 0 })
 
 #define BPF_ALU64_REG(OP, DST, SRC)				\
 	((struct bpf_insn) {					\
@@ -136,14 +123,6 @@ struct sock_reuseport;
 
 /* Short form of mov, dst_reg = src_reg */
 
-#define BPF_MOV_REG(CLASS, DST, SRC)				\
-	((struct bpf_insn) {					\
-		.code  = CLASS | BPF_MOV | BPF_X,		\
-		.dst_reg = DST,					\
-		.src_reg = SRC,					\
-		.off   = 0,					\
-		.imm   = 0 })
-
 #define BPF_MOV64_REG(DST, SRC)					\
 	((struct bpf_insn) {					\
 		.code  = BPF_ALU64 | BPF_MOV | BPF_X,		\
@@ -177,14 +156,6 @@ struct sock_reuseport;
 		.src_reg = 0,					\
 		.off   = 0,					\
 		.imm   = IMM })
-
-#define BPF_RAW_REG(insn, DST, SRC)				\
-	((struct bpf_insn) {					\
-		.code  = (insn).code,				\
-		.dst_reg = DST,					\
-		.src_reg = SRC,					\
-		.off   = (insn).off,				\
-		.imm   = (insn).imm })
 
 /* BPF_LD_IMM64 macro encodes single 'load 64-bit immediate' insn */
 #define BPF_LD_IMM64(DST, IMM)					\
@@ -354,16 +325,6 @@ struct sock_reuseport;
 #define BPF_EXIT_INSN()						\
 	((struct bpf_insn) {					\
 		.code  = BPF_JMP | BPF_EXIT,			\
-		.dst_reg = 0,					\
-		.src_reg = 0,					\
-		.off   = 0,					\
-		.imm   = 0 })
-
-/* Speculation barrier */
-
-#define BPF_ST_NOSPEC()						\
-	((struct bpf_insn) {					\
-		.code  = BPF_ST | BPF_NOSPEC,			\
 		.dst_reg = 0,					\
 		.src_reg = 0,					\
 		.off   = 0,					\
@@ -845,18 +806,18 @@ void sk_filter_uncharge(struct sock *sk, struct sk_filter *fp);
 u64 __bpf_call_base(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5);
 #define __bpf_call_base_args \
 	((u64 (*)(u64, u64, u64, u64, u64, const struct bpf_insn *)) \
-	 (void *)__bpf_call_base)
+	 __bpf_call_base)
 
 struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog);
 void bpf_jit_compile(struct bpf_prog *prog);
 bool bpf_helper_changes_pkt_data(void *func);
 
-static inline bool bpf_dump_raw_ok(const struct cred *cred)
+static inline bool bpf_dump_raw_ok(void)
 {
 	/* Reconstruction of call-sites is dependent on kallsyms,
 	 * thus make dump the same restriction.
 	 */
-	return kallsyms_show_value(cred);
+	return kallsyms_show_value() == 1;
 }
 
 struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
@@ -937,7 +898,6 @@ extern int bpf_jit_enable;
 extern int bpf_jit_harden;
 extern int bpf_jit_kallsyms;
 extern long bpf_jit_limit;
-extern long bpf_jit_limit_max;
 
 typedef void (*bpf_jit_fill_hole_t)(void *area, unsigned int size);
 

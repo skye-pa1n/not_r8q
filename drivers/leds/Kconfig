@@ -78,13 +78,6 @@ config LEDS_AS3645A
 	  controller. V4L2 flash API is provided as well if
 	  CONFIG_V4L2_FLASH_API is enabled.
 
-config LEDS_AW2016
-	tristate "LED Support for AW2016"
-	depends on LEDS_CLASS && I2C
-	help
-		this option enables support for the AW2016 RGB LED connected
-		through I2C. Say Y to enable support for the AW2016 LED
-
 config LEDS_BCM6328
 	tristate "LED Support for Broadcom BCM6328"
 	depends on LEDS_CLASS
@@ -662,16 +655,6 @@ config LEDS_MENF21BMC
 	  This driver can also be built as a module. If so the module
 	  will be called leds-menf21bmc.
 
-config LEDS_KTD2692
-	tristate "LED support for KTD2692 flash LED controller"
-	depends on LEDS_CLASS_FLASH && OF
-	depends on GPIOLIB || COMPILE_TEST
-	help
-	  This option enables support for KTD2692 LED flash connected
-	  through ExpressWire interface.
-
-	  Say Y to enable this driver.
-
 config LEDS_IS31FL319X
 	tristate "LED Support for ISSI IS31FL319x I2C LED controller family"
 	depends on LEDS_CLASS && I2C && OF
@@ -813,7 +796,7 @@ config LEDS_S2MPB02
 	  This option enables support for the LEDs on the S2MPB02.
 
 config LEDS_KTD2692
-	tristate "LED support for the KTD2692"
+	bool "LED support for the KTD2692"
 	depends on LEDS_CLASS
 	help
 	  This option enables support for the LEDs on the KTD2692.
@@ -823,16 +806,6 @@ config LEDS_RT8547
 	depends on LEDS_CLASS
 	help
 	  This option enables support for the LEDs on the RT8547.
-
-config LEDS_QPNP_VIBRATOR
-	tristate "Vibrator support for QPNP PMIC"
-	depends on LEDS_CLASS && MFD_SPMI_PMIC
-	help
-	  This option enables device driver support for the vibrator
-	  on the Qualcomm technologies Inc's QPNP PMICs. The vibrator
-	  is connected on the VIB_DRV_N line and can be controlled
-	  manually or by the DTEST lines.It uses the android timed-output
-	  framework.
 
 comment "LED Triggers"
 source "drivers/leds/trigger/Kconfig"

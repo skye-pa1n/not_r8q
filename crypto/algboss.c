@@ -193,6 +193,8 @@ static int cryptomgr_schedule_probe(struct crypto_larval *larval)
 	if (IS_ERR(thread))
 		goto err_put_larval;
 
+	wait_for_completion_interruptible(&larval->completion);
+
 	return NOTIFY_STOP;
 
 err_put_larval:
@@ -211,7 +213,7 @@ static int cryptomgr_test(void *data)
 	u32 type = param->type;
 	int err = 0;
 
-#ifdef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
+#ifdef CONFIG_CRYPTO_FIPS /* FIPS_140_2 */
 	goto skiptest;
 #endif
 

@@ -711,7 +711,6 @@ static int omap3xxx_prm_late_init(void)
 	}
 
 	irq_num = of_irq_get(np, 0);
-	of_node_put(np);
 	if (irq_num == -EPROBE_DEFER)
 		return irq_num;
 

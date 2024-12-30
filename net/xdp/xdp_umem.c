@@ -258,9 +258,9 @@ static int xdp_umem_account_pages(struct xdp_umem *umem)
 static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 {
 	u32 chunk_size = mr->chunk_size, headroom = mr->headroom;
-	u64 npgs, addr = mr->addr, size = mr->len;
 	unsigned int chunks, chunks_per_page;
-	int err, i;
+	u64 addr = mr->addr, size = mr->len;
+	int size_chk, err, i;
 
 	if (chunk_size < XDP_UMEM_MIN_CHUNK_SIZE || chunk_size > PAGE_SIZE) {
 		/* Strictly speaking we could support this, if:
@@ -285,10 +285,6 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	if ((addr + size) < addr)
 		return -EINVAL;
 
-	npgs = div_u64(size, PAGE_SIZE);
-	if (npgs > U32_MAX)
-		return -EINVAL;
-
 	chunks = (unsigned int)div_u64(size, chunk_size);
 	if (chunks == 0)
 		return -EINVAL;
@@ -299,7 +295,8 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 
 	headroom = ALIGN(headroom, 64);
 
-	if (headroom >= chunk_size - XDP_PACKET_HEADROOM)
+	size_chk = chunk_size - headroom - XDP_PACKET_HEADROOM;
+	if (size_chk < 0)
 		return -EINVAL;
 
 	umem->address = (unsigned long)addr;
@@ -307,7 +304,7 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	umem->props.size = size;
 	umem->headroom = headroom;
 	umem->chunk_size_nohr = chunk_size - headroom;
-	umem->npgs = (u32)npgs;
+	umem->npgs = size / PAGE_SIZE;
 	umem->pgs = NULL;
 	umem->user = NULL;
 	INIT_LIST_HEAD(&umem->xsk_list);

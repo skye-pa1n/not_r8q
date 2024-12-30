@@ -92,6 +92,7 @@ config SENSORS_A96T3X6
 	  This option enables grip sensors using
 	  SemTech a96t3x6 device driver.
 	  Say N here if you do not use a96t3x6.
+
 config SENSORS_A96T3X6_2CH
 	depends on I2C
 	tristate "SENSORS_A96T3X6_2CH driver for grip"
@@ -180,10 +181,6 @@ config SENSORS_A96T3X6_BLOCK_SAR_ONLY
 	default n
 	help
 	  Prevent entering sar only mode.
-
-config SENSORS_A96T365IF
-	bool "Choose A96T365IF"
-	default n
 
 config SENSORS_A96T3X6_UNSUPPORT_OTG
 	depends on I2C

@@ -664,15 +664,14 @@ int mwifiex_send_delba(struct mwifiex_private *priv, int tid, u8 *peer_mac,
 	uint16_t del_ba_param_set;
 
 	memset(&delba, 0, sizeof(delba));
+	delba.del_ba_param_set = cpu_to_le16(tid << DELBA_TID_POS);
 
-	del_ba_param_set = tid << DELBA_TID_POS;
-
+	del_ba_param_set = le16_to_cpu(delba.del_ba_param_set);
 	if (initiator)
 		del_ba_param_set |= IEEE80211_DELBA_PARAM_INITIATOR_MASK;
 	else
 		del_ba_param_set &= ~IEEE80211_DELBA_PARAM_INITIATOR_MASK;
 
-	delba.del_ba_param_set = cpu_to_le16(del_ba_param_set);
 	memcpy(&delba.peer_mac_addr, peer_mac, ETH_ALEN);
 
 	/* We don't wait for the response of this command */
@@ -901,7 +900,7 @@ mwifiex_send_delba_txbastream_tbl(struct mwifiex_private *priv, u8 tid)
  */
 void mwifiex_update_ampdu_txwinsize(struct mwifiex_adapter *adapter)
 {
-	u8 i, j;
+	u8 i;
 	u32 tx_win_size;
 	struct mwifiex_private *priv;
 
@@ -932,8 +931,8 @@ void mwifiex_update_ampdu_txwinsize(struct mwifiex_adapter *adapter)
 		if (tx_win_size != priv->add_ba_param.tx_win_size) {
 			if (!priv->media_connected)
 				continue;
-			for (j = 0; j < MAX_NUM_TID; j++)
-				mwifiex_send_delba_txbastream_tbl(priv, j);
+			for (i = 0; i < MAX_NUM_TID; i++)
+				mwifiex_send_delba_txbastream_tbl(priv, i);
 		}
 	}
 }

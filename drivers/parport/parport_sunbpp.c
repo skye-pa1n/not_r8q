@@ -313,7 +313,7 @@ static int bpp_probe(struct platform_device *op)
 	value_tcr &= ~P_TCR_DIR;
 	sbus_writeb(value_tcr, &regs->p_tcr);
 
-	pr_info("%s: sunbpp at 0x%lx\n", p->name, p->base);
+	printk(KERN_INFO "%s: sunbpp at 0x%lx\n", p->name, p->base);
 
 	dev_set_drvdata(&op->dev, p);
 

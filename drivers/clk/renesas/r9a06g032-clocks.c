@@ -51,7 +51,7 @@ struct r9a06g032_clkdesc {
 			u16 sel, g1, r1, g2, r2;
 		} dual;
 	};
-};
+} __packed;
 
 #define I_GATE(_clk, _rst, _rdy, _midle, _scon, _mirack, _mistat) \
 	{ .gate = _clk, .reset = _rst, \
@@ -277,8 +277,8 @@ static const struct r9a06g032_clkdesc r9a06g032_clocks[] __initconst = {
 		.name = "uart_group_012",
 		.type = K_BITSEL,
 		.source = 1 + R9A06G032_DIV_UART,
-		/* R9A06G032_SYSCTRL_REG_PWRCTRL_PG0_0 */
-		.dual.sel = ((0x34 / 4) << 5) | 30,
+		/* R9A06G032_SYSCTRL_REG_PWRCTRL_PG1_PR2 */
+		.dual.sel = ((0xec / 4) << 5) | 24,
 		.dual.group = 0,
 	},
 	{
@@ -286,8 +286,8 @@ static const struct r9a06g032_clkdesc r9a06g032_clocks[] __initconst = {
 		.name = "uart_group_34567",
 		.type = K_BITSEL,
 		.source = 1 + R9A06G032_DIV_P2_PG,
-		/* R9A06G032_SYSCTRL_REG_PWRCTRL_PG1_PR2 */
-		.dual.sel = ((0xec / 4) << 5) | 24,
+		/* R9A06G032_SYSCTRL_REG_PWRCTRL_PG0_0 */
+		.dual.sel = ((0x34 / 4) << 5) | 30,
 		.dual.group = 1,
 	},
 	D_UGATE(CLK_UART0, "clk_uart0", UART_GROUP_012, 0, 0, 0x1b2, 0x1b3, 0x1b4, 0x1b5),
@@ -416,7 +416,7 @@ r9a06g032_register_gate(struct r9a06g032_priv *clocks,
 {
 	struct clk *clk;
 	struct r9a06g032_clk_gate *g;
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 
 	g = kzalloc(sizeof(*g), GFP_KERNEL);
 	if (!g)
@@ -586,7 +586,7 @@ r9a06g032_register_div(struct r9a06g032_priv *clocks,
 {
 	struct r9a06g032_clk_div *div;
 	struct clk *clk;
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 	unsigned int i;
 
 	div = kzalloc(sizeof(*div), GFP_KERNEL);
@@ -670,7 +670,7 @@ r9a06g032_register_bitsel(struct r9a06g032_priv *clocks,
 {
 	struct clk *clk;
 	struct r9a06g032_clk_bitsel *g;
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 	const char *names[2];
 
 	/* allocate the gate */
@@ -761,7 +761,7 @@ r9a06g032_register_dualgate(struct r9a06g032_priv *clocks,
 {
 	struct r9a06g032_clk_dualgate *g;
 	struct clk *clk;
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 
 	/* allocate the gate */
 	g = kzalloc(sizeof(*g), GFP_KERNEL);

@@ -725,7 +725,7 @@ static int xtpg_parse_of(struct xtpg_device *xtpg)
 		const struct xvip_video_format *format;
 		struct device_node *endpoint;
 
-		if (!of_node_name_eq(port, "port"))
+		if (!port->name || of_node_cmp(port->name, "port"))
 			continue;
 
 		format = xvip_of_get_format(port);

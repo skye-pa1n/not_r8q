@@ -34,35 +34,26 @@ static void memfd_tag_pins(struct address_space *mapping)
 	void __rcu **slot;
 	pgoff_t start;
 	struct page *page;
-	int latency = 0;
-	int cache_count;
+	unsigned int tagged = 0;
 
 	lru_add_drain();
 	start = 0;
 
 	xa_lock_irq(&mapping->i_pages);
 	radix_tree_for_each_slot(slot, &mapping->i_pages, &iter, start) {
-		cache_count = 1;
 		page = radix_tree_deref_slot_protected(slot, &mapping->i_pages.xa_lock);
-		if (!page || radix_tree_exception(page) || PageTail(page)) {
+		if (!page || radix_tree_exception(page)) {
 			if (radix_tree_deref_retry(page)) {
 				slot = radix_tree_iter_retry(&iter);
 				continue;
 			}
-		} else {
-			if (PageTransHuge(page) && !PageHuge(page))
-				cache_count = HPAGE_PMD_NR;
-			if (cache_count !=
-			    page_count(page) - total_mapcount(page)) {
-				radix_tree_tag_set(&mapping->i_pages,
-						iter.index, MEMFD_TAG_PINNED);
-			}
+		} else if (page_count(page) - page_mapcount(page) > 1) {
+			radix_tree_tag_set(&mapping->i_pages, iter.index,
+					   MEMFD_TAG_PINNED);
 		}
 
-		latency += cache_count;
-		if (latency < 1024)
+		if (++tagged % 1024)
 			continue;
-		latency = 0;
 
 		slot = radix_tree_iter_resume(slot, &iter);
 		xa_unlock_irq(&mapping->i_pages);
@@ -88,7 +79,6 @@ static int memfd_wait_for_pins(struct address_space *mapping)
 	pgoff_t start;
 	struct page *page;
 	int error, scan;
-	int cache_count;
 
 	memfd_tag_pins(mapping);
 
@@ -117,12 +107,8 @@ static int memfd_wait_for_pins(struct address_space *mapping)
 				page = NULL;
 			}
 
-			cache_count = 1;
-			if (page && PageTransHuge(page) && !PageHuge(page))
-				cache_count = HPAGE_PMD_NR;
-
-			if (page && cache_count !=
-			    page_count(page) - total_mapcount(page)) {
+			if (page &&
+			    page_count(page) - page_mapcount(page) != 1) {
 				if (scan < LAST_SCAN)
 					goto continue_resched;
 

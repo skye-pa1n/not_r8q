@@ -68,7 +68,7 @@ u32 ieee80211_mandatory_rates(struct ieee80211_supported_band *sband,
 }
 EXPORT_SYMBOL(ieee80211_mandatory_rates);
 
-u32 ieee80211_channel_to_freq_khz(int chan, enum nl80211_band band)
+int ieee80211_channel_to_frequency(int chan, enum nl80211_band band)
 {
 	/* see 802.11 17.3.8.3.2 and Annex J
 	 * there are overlapping channel numbers in 5GHz and 2GHz bands */
@@ -77,39 +77,34 @@ u32 ieee80211_channel_to_freq_khz(int chan, enum nl80211_band band)
 	switch (band) {
 	case NL80211_BAND_2GHZ:
 		if (chan == 14)
-			return MHZ_TO_KHZ(2484);
+			return 2484;
 		else if (chan < 14)
-			return MHZ_TO_KHZ(2407 + chan * 5);
+			return 2407 + chan * 5;
 		break;
 	case NL80211_BAND_5GHZ:
 		if (chan >= 182 && chan <= 196)
-			return MHZ_TO_KHZ(4000 + chan * 5);
+			return 4000 + chan * 5;
 		else
-			return MHZ_TO_KHZ(5000 + chan * 5);
+			return 5000 + chan * 5;
 		break;
 	case NL80211_BAND_6GHZ:
-		/* see 802.11ax D6.1 27.3.23.2 */
-		if (chan == 2)
-			return MHZ_TO_KHZ(5935);
+		/* see 802.11ax D4.1 27.3.22.2 */
 		if (chan <= 253)
-			return MHZ_TO_KHZ(5950 + chan * 5);
+			return 5940 + chan * 5;
 		break;
 	case NL80211_BAND_60GHZ:
-		if (chan < 7)
-			return MHZ_TO_KHZ(56160 + chan * 2160);
+		if (chan < 5)
+			return 56160 + chan * 2160;
 		break;
 	default:
 		;
 	}
 	return 0; /* not supported */
 }
-EXPORT_SYMBOL(ieee80211_channel_to_freq_khz);
+EXPORT_SYMBOL(ieee80211_channel_to_frequency);
 
-int ieee80211_freq_khz_to_channel(u32 freq)
+int ieee80211_frequency_to_channel(int freq)
 {
-	/* TODO: just handle MHz for now */
-	freq = KHZ_TO_MHZ(freq);
-
 	/* see 802.11 17.3.8.3.2 and Annex J */
 	if (freq == 2484)
 		return 14;
@@ -117,22 +112,19 @@ int ieee80211_freq_khz_to_channel(u32 freq)
 		return (freq - 2407) / 5;
 	else if (freq >= 4910 && freq <= 4980)
 		return (freq - 4000) / 5;
-	else if (freq < 5925)
+	else if (freq < 5940)
 		return (freq - 5000) / 5;
-	else if (freq == 5935)
-		return 2;
 	else if (freq <= 45000) /* DMG band lower limit */
-		/* see 802.11ax D6.1 27.3.23.2 */
-		return (freq - 5950) / 5;
-	else if (freq >= 58320 && freq <= 70200)
+		/* see 802.11ax D4.1 27.3.22.2 */
+		return (freq - 5940) / 5;
+	else if (freq >= 58320 && freq <= 64800)
 		return (freq - 56160) / 2160;
 	else
 		return 0;
 }
-EXPORT_SYMBOL(ieee80211_freq_khz_to_channel);
+EXPORT_SYMBOL(ieee80211_frequency_to_channel);
 
-struct ieee80211_channel *ieee80211_get_channel_khz(struct wiphy *wiphy,
-						    u32 freq)
+struct ieee80211_channel *ieee80211_get_channel(struct wiphy *wiphy, int freq)
 {
 	enum nl80211_band band;
 	struct ieee80211_supported_band *sband;
@@ -145,16 +137,14 @@ struct ieee80211_channel *ieee80211_get_channel_khz(struct wiphy *wiphy,
 			continue;
 
 		for (i = 0; i < sband->n_channels; i++) {
-			struct ieee80211_channel *chan = &sband->channels[i];
-
-			if (ieee80211_channel_to_khz(chan) == freq)
-				return chan;
+			if (sband->channels[i].center_freq == freq)
+				return &sband->channels[i];
 		}
 	}
 
 	return NULL;
 }
-EXPORT_SYMBOL(ieee80211_get_channel_khz);
+EXPORT_SYMBOL(ieee80211_get_channel);
 
 static void set_mandatory_flags_band(struct ieee80211_supported_band *sband)
 {
@@ -233,51 +223,16 @@ bool cfg80211_supported_cipher_suite(struct wiphy *wiphy, u32 cipher)
 	return false;
 }
 
-static bool
-cfg80211_igtk_cipher_supported(struct cfg80211_registered_device *rdev)
-{
-	struct wiphy *wiphy = &rdev->wiphy;
-	int i;
-
-	for (i = 0; i < wiphy->n_cipher_suites; i++) {
-		switch (wiphy->cipher_suites[i]) {
-		case WLAN_CIPHER_SUITE_AES_CMAC:
-		case WLAN_CIPHER_SUITE_BIP_CMAC_256:
-		case WLAN_CIPHER_SUITE_BIP_GMAC_128:
-		case WLAN_CIPHER_SUITE_BIP_GMAC_256:
-			return true;
-		}
-	}
-
-	return false;
-}
-
-bool cfg80211_valid_key_idx(struct cfg80211_registered_device *rdev,
-			    int key_idx, bool pairwise)
-{
-	int max_key_idx;
-
-	if (pairwise)
-		max_key_idx = 3;
-	else if (wiphy_ext_feature_isset(&rdev->wiphy,
-				    NL80211_EXT_FEATURE_BEACON_PROTECTION))
-		max_key_idx = 7;
-	else if (cfg80211_igtk_cipher_supported(rdev))
-		max_key_idx = 5;
-	else
-		max_key_idx = 3;
-
-	if (key_idx < 0 || key_idx > max_key_idx)
-		return false;
-
-	return true;
-}
-
 int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 				   struct key_params *params, int key_idx,
 				   bool pairwise, const u8 *mac_addr)
 {
-	if (!cfg80211_valid_key_idx(rdev, key_idx, pairwise))
+	int max_key_idx = 5;
+
+	if (wiphy_ext_feature_isset(&rdev->wiphy,
+				    NL80211_EXT_FEATURE_BEACON_PROTECTION))
+		max_key_idx = 7;
+	if (key_idx > max_key_idx)
 		return -EINVAL;
 
 	if (!pairwise && mac_addr && !(rdev->wiphy.flags & WIPHY_FLAG_IBSS_RSN))
@@ -307,8 +262,6 @@ int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
 		/* Disallow BIP (group-only) cipher as pairwise cipher */
 		if (pairwise)
-			return -EINVAL;
-		if (key_idx < 4)
 			return -EINVAL;
 		break;
 	case WLAN_CIPHER_SUITE_WEP40:
@@ -481,7 +434,7 @@ EXPORT_SYMBOL(ieee80211_get_mesh_hdrlen);
 
 int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 				  const u8 *addr, enum nl80211_iftype iftype,
-				  u8 data_offset, bool is_amsdu)
+				  u8 data_offset)
 {
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *) skb->data;
 	struct {
@@ -569,7 +522,7 @@ int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 	skb_copy_bits(skb, hdrlen, &payload, sizeof(payload));
 	tmp.h_proto = payload.proto;
 
-	if (likely((!is_amsdu && ether_addr_equal(payload.hdr, rfc1042_header) &&
+	if (likely((ether_addr_equal(payload.hdr, rfc1042_header) &&
 		    tmp.h_proto != htons(ETH_P_AARP) &&
 		    tmp.h_proto != htons(ETH_P_IPX)) ||
 		   ether_addr_equal(payload.hdr, bridge_tunnel_header)))
@@ -710,9 +663,6 @@ void ieee80211_amsdu_to_8023s(struct sk_buff *skb, struct sk_buff_head *list,
 		/* the last MSDU has no padding */
 		remaining = skb->len - offset;
 		if (subframe_len > remaining)
-			goto purge;
-		/* mitigate A-MSDU aggregation injection attacks */
-		if (ether_addr_equal(eth.h_dest, rfc1042_header))
 			goto purge;
 
 		offset += sizeof(struct ethhdr);
@@ -972,7 +922,6 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 
 		switch (otype) {
 		case NL80211_IFTYPE_AP:
-		case NL80211_IFTYPE_P2P_GO:
 			cfg80211_stop_ap(rdev, dev, true);
 			break;
 		case NL80211_IFTYPE_ADHOC:
@@ -987,9 +936,6 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 			break;
 		case NL80211_IFTYPE_MESH_POINT:
 			/* mesh should be handled? */
-			break;
-		case NL80211_IFTYPE_OCB:
-			cfg80211_leave_ocb(rdev, dev);
 			break;
 		default:
 			break;
@@ -1262,7 +1208,7 @@ static u32 cfg80211_calculate_bitrate_he(struct rate_info *rate)
 		 2048, /*  1.000000... */
 	};
 	u32 rates_160M[3] = { 960777777, 907400000, 816666666 };
-	u32 rates_996[3] =  { 480388888, 453700000, 408333333 };
+	u32 rates_969[3] =  { 480388888, 453700000, 408333333 };
 	u32 rates_484[3] =  { 229411111, 216666666, 195000000 };
 	u32 rates_242[3] =  { 114711111, 108333333,  97500000 };
 	u32 rates_106[3] =  {  40000000,  37777777,  34000000 };
@@ -1282,14 +1228,12 @@ static u32 cfg80211_calculate_bitrate_he(struct rate_info *rate)
 	if (WARN_ON_ONCE(rate->nss < 1 || rate->nss > 8))
 		return 0;
 
-	if (rate->bw == RATE_INFO_BW_160 ||
-	    (rate->bw == RATE_INFO_BW_HE_RU &&
-	     rate->he_ru_alloc == NL80211_RATE_INFO_HE_RU_ALLOC_2x996))
+	if (rate->bw == RATE_INFO_BW_160)
 		result = rates_160M[rate->he_gi];
 	else if (rate->bw == RATE_INFO_BW_80 ||
 		 (rate->bw == RATE_INFO_BW_HE_RU &&
 		  rate->he_ru_alloc == NL80211_RATE_INFO_HE_RU_ALLOC_996))
-		result = rates_996[rate->he_gi];
+		result = rates_969[rate->he_gi];
 	else if (rate->bw == RATE_INFO_BW_40 ||
 		 (rate->bw == RATE_INFO_BW_HE_RU &&
 		  rate->he_ru_alloc == NL80211_RATE_INFO_HE_RU_ALLOC_484))
@@ -1678,7 +1622,7 @@ bool ieee80211_chandef_to_operating_class(struct cfg80211_chan_def *chandef,
 	}
 
 	/* 56.16 GHz, channel 1..4 */
-	if (freq >= 56160 + 2160 * 1 && freq <= 56160 + 2160 * 6) {
+	if (freq >= 56160 + 2160 * 1 && freq <= 56160 + 2160 * 4) {
 		if (chandef->width >= NL80211_CHAN_WIDTH_40)
 			return false;
 

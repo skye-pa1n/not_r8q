@@ -74,10 +74,8 @@ static int mcb_probe(struct device *dev)
 
 	get_device(dev);
 	ret = mdrv->probe(mdev, found_id);
-	if (ret) {
+	if (ret)
 		module_put(carrier_mod);
-		put_device(dev);
-	}
 
 	return ret;
 }
@@ -251,7 +249,6 @@ int mcb_device_register(struct mcb_bus *bus, struct mcb_device *dev)
 	return 0;
 
 out:
-	put_device(&dev->dev);
 
 	return ret;
 }
@@ -283,8 +280,8 @@ struct mcb_bus *mcb_alloc_bus(struct device *carrier)
 
 	bus_nr = ida_simple_get(&mcb_ida, 0, 0, GFP_KERNEL);
 	if (bus_nr < 0) {
-		kfree(bus);
-		return ERR_PTR(bus_nr);
+		rc = bus_nr;
+		goto err_free;
 	}
 
 	bus->bus_nr = bus_nr;
@@ -299,12 +296,12 @@ struct mcb_bus *mcb_alloc_bus(struct device *carrier)
 	dev_set_name(&bus->dev, "mcb:%d", bus_nr);
 	rc = device_add(&bus->dev);
 	if (rc)
-		goto err_put;
+		goto err_free;
 
 	return bus;
-
-err_put:
-	put_device(&bus->dev);
+err_free:
+	put_device(carrier);
+	kfree(bus);
 	return ERR_PTR(rc);
 }
 EXPORT_SYMBOL_GPL(mcb_alloc_bus);
@@ -393,13 +390,17 @@ EXPORT_SYMBOL_GPL(mcb_free_dev);
 
 static int __mcb_bus_add_devices(struct device *dev, void *data)
 {
+	struct mcb_device *mdev = to_mcb_device(dev);
 	int retval;
 
+	if (mdev->is_added)
+		return 0;
+
 	retval = device_attach(dev);
-	if (retval < 0) {
+	if (retval < 0)
 		dev_err(dev, "Error adding device (%d)\n", retval);
-		return retval;
-	}
+
+	mdev->is_added = true;
 
 	return 0;
 }

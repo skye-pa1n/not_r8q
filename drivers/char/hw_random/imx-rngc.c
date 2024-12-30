@@ -105,16 +105,14 @@ static int imx_rngc_self_test(struct imx_rngc *rngc)
 	cmd = readl(rngc->base + RNGC_COMMAND);
 	writel(cmd | RNGC_CMD_SELF_TEST, rngc->base + RNGC_COMMAND);
 
-	ret = wait_for_completion_timeout(&rngc->rng_op_done, msecs_to_jiffies(RNGC_TIMEOUT));
+	ret = wait_for_completion_timeout(&rngc->rng_op_done, RNGC_TIMEOUT);
 	if (!ret) {
 		imx_rngc_irq_mask_clear(rngc);
 		return -ETIMEDOUT;
 	}
 
-	if (rngc->err_reg != 0) {
-		imx_rngc_irq_mask_clear(rngc);
+	if (rngc->err_reg != 0)
 		return -EIO;
-	}
 
 	return 0;
 }
@@ -188,7 +186,9 @@ static int imx_rngc_init(struct hwrng *rng)
 		cmd = readl(rngc->base + RNGC_COMMAND);
 		writel(cmd | RNGC_CMD_SEED, rngc->base + RNGC_COMMAND);
 
-		ret = wait_for_completion_timeout(&rngc->rng_op_done, msecs_to_jiffies(RNGC_TIMEOUT));
+		ret = wait_for_completion_timeout(&rngc->rng_op_done,
+				RNGC_TIMEOUT);
+
 		if (!ret) {
 			imx_rngc_irq_mask_clear(rngc);
 			return -ETIMEDOUT;

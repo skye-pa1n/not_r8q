@@ -268,7 +268,6 @@ struct tmc_drvdata {
 	struct idr		idr;
 	struct mutex		idr_mutex;
 	struct etr_buf		*perf_buf;
-	bool			force_reg_dump;
 };
 
 struct etr_buf_operations {
@@ -394,7 +393,7 @@ ssize_t tmc_sg_table_get_data(struct tmc_sg_table *sg_table,
 static inline unsigned long
 tmc_sg_table_buf_size(struct tmc_sg_table *sg_table)
 {
-	return (unsigned long)sg_table->data_pages.nr_pages << PAGE_SHIFT;
+	return sg_table->data_pages.nr_pages << PAGE_SHIFT;
 }
 
 struct coresight_device *tmc_etr_get_catu_device(struct tmc_drvdata *drvdata);

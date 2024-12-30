@@ -46,7 +46,6 @@
 #include <linux/pkeys.h>
 #include <linux/oom.h>
 #include <linux/sched/mm.h>
-#include <linux/ksm.h>
 
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
@@ -170,7 +169,6 @@ static void __free_vma(struct vm_area_struct *vma)
 	if (vma->vm_file)
 		fput(vma->vm_file);
 	mpol_put(vma_policy(vma));
-	uksm_remove_vma(vma);
 	vm_area_free(vma);
 }
 
@@ -737,20 +735,33 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 	long adjust_next = 0;
 	int remove_next = 0;
 
-	vm_write_begin(vma);
+	/*
+	 * Why using vm_raw_write*() functions here to avoid lockdep's warning ?
+	 *
+	 * Locked is complaining about a theoretical lock dependency, involving
+	 * 3 locks:
+	 *   mapping->i_mmap_rwsem --> vma->vm_sequence --> fs_reclaim
+	 *
+	 * Here are the major path leading to this dependency :
+	 *  1. __vma_adjust() mmap_sem  -> vm_sequence -> i_mmap_rwsem
+	 *  2. move_vmap() mmap_sem -> vm_sequence -> fs_reclaim
+	 *  3. __alloc_pages_nodemask() fs_reclaim -> i_mmap_rwsem
+	 *  4. unmap_mapping_range() i_mmap_rwsem -> vm_sequence
+	 *
+	 * So there is no way to solve this easily, especially because in
+	 * unmap_mapping_range() the i_mmap_rwsem is grab while the impacted
+	 * VMAs are not yet known.
+	 * However, the way the vm_seq is used is guarantying that we will
+	 * never block on it since we just check for its value and never wait
+	 * for it to move, see vma_has_changed() and handle_speculative_fault().
+	 */
+	vm_raw_write_begin(vma);
 	if (next)
-		vm_write_begin(next);
-
-/*
- * to avoid deadlock, ksm_remove_vma must be done before any spin_lock is
- * acquired
- */
-	uksm_remove_vma(vma);
+		vm_raw_write_begin(next);
 
 	if (next && !insert) {
 		struct vm_area_struct *exporter = NULL, *importer = NULL;
 
-		uksm_remove_vma(next);
 		if (end >= next->vm_end) {
 			/*
 			 * vma expands, overlapping all the next, and
@@ -830,8 +841,8 @@ int __vma_adjust(struct vm_area_struct *vma, unsigned long start,
 			error = anon_vma_clone(importer, exporter);
 			if (error) {
 				if (next && next != vma)
-					vm_write_end(next);
-				vm_write_end(vma);
+					vm_raw_write_end(next);
+				vm_raw_write_end(vma);
 				return error;
 			}
 		}
@@ -960,7 +971,7 @@ again:
 		if (next->anon_vma)
 			anon_vma_merge(vma, next);
 		mm->map_count--;
-		vm_write_end(next);
+		vm_raw_write_end(next);
 		put_vma(next);
 		/*
 		 * In mprotect's case 6 (see comments on vma_merge),
@@ -976,7 +987,7 @@ again:
 			 */
 			next = vma->vm_next;
 			if (next)
-				vm_write_begin(next);
+				vm_raw_write_begin(next);
 		} else {
 			/*
 			 * For the scope of the comment "next" and
@@ -993,7 +1004,6 @@ again:
 		if (remove_next == 2) {
 			remove_next = 1;
 			end = next->vm_end;
-			uksm_remove_vma(next);
 			goto again;
 		}
 		else if (next)
@@ -1020,18 +1030,14 @@ again:
 			 */
 			VM_WARN_ON(mm->highest_vm_end != vm_end_gap(vma));
 		}
-		} else {
-		if (next && !insert)
-			uksm_vma_add_new(next);
 	}
 	if (insert && file)
 		uprobe_mmap(insert);
 
-	uksm_vma_add_new(vma);
 	if (next && next != vma)
-		vm_write_end(next);
+		vm_raw_write_end(next);
 	if (!keep_locked)
-		vm_write_end(vma);
+		vm_raw_write_end(vma);
 
 	validate_mm(mm);
 
@@ -1501,10 +1507,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	vm_flags |= calc_vm_prot_bits(prot, pkey) | calc_vm_flag_bits(flags) |
 			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 
-		/* If uksm is enabled, we add VM_MERGEABLE to new VMAs. */
-	    uksm_vm_flags_mod(&vm_flags);
-
-		if (flags & MAP_LOCKED)
+	if (flags & MAP_LOCKED)
 		if (!can_do_mlock())
 			return -EPERM;
 
@@ -1726,12 +1729,8 @@ int vma_wants_writenotify(struct vm_area_struct *vma, pgprot_t vm_page_prot)
 	    pgprot_val(vm_pgprot_modify(vm_page_prot, vm_flags)))
 		return 0;
 
-	/*
-	 * Do we need to track softdirty? hugetlb does not support softdirty
-	 * tracking yet.
-	 */
-	if (IS_ENABLED(CONFIG_MEM_SOFT_DIRTY) && !(vm_flags & VM_SOFTDIRTY) &&
-	    !is_vm_hugetlb_page(vma))
+	/* Do we need to track softdirty? */
+	if (IS_ENABLED(CONFIG_MEM_SOFT_DIRTY) && !(vm_flags & VM_SOFTDIRTY))
 		return 1;
 
 	/* Specialty mapping? */
@@ -1876,7 +1875,6 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 			allow_write_access(file);
 	}
 	file = vma->vm_file;
-	uksm_vma_add_new(vma);
 out:
 	perf_event_mmap(vma);
 
@@ -1915,13 +1913,13 @@ unmap_and_free_vma:
 
 	/* Undo any partial mapping done by a device driver. */
 	unmap_region(mm, vma, prev, vma->vm_start, vma->vm_end);
+	charged = 0;
 	if (vm_flags & VM_SHARED)
 		mapping_unmap_writable(file->f_mapping);
 allow_write_and_free_vma:
 	if (vm_flags & VM_DENYWRITE)
 		allow_write_access(file);
 free_vma:
-	uksm_remove_vma(vma);
 	vm_area_free(vma);
 unacct_error:
 	if (charged)
@@ -2130,7 +2128,6 @@ found_highest:
 	VM_BUG_ON(gap_end < gap_start);
 	return gap_end;
 }
-EXPORT_SYMBOL_GPL(unmapped_area_topdown);
 
 /* Get an address range which is currently unmapped.
  * For shmat() with addr=0.
@@ -2182,8 +2179,19 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	info.low_limit = mm->mmap_base;
 	info.high_limit = TASK_SIZE;
 	info.align_mask = 0;
-	info.align_offset = 0;
-	return vm_unmapped_area(&info);
+	addr = vm_unmapped_area(&info);
+	if (addr == -ENOMEM) {
+		if (__ratelimit(&mmap_rs)) {
+			printk(KERN_ERR "%s %d - NOMEM from vm_unmapped_area "
+				"pid=%d total_vm=0x%lx flags=0x%lx length=0x%lx low_limit=0x%lx "
+				"high_limit=0x%lx align_mask=0x%lx\n",
+				__func__, __LINE__,
+				current->pid, current->mm->total_vm,
+				info.flags, info.length, info.low_limit,
+				info.high_limit, info.align_mask);
+		}
+	}
+	return addr;
 }
 #endif
 
@@ -2234,7 +2242,6 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 	info.low_limit = max(PAGE_SIZE, mmap_min_addr);
 	info.high_limit = mm->mmap_base;
 	info.align_mask = 0;
-	info.align_offset = 0;
 	addr = vm_unmapped_area(&info);
 
 	/*
@@ -2359,22 +2366,8 @@ struct vm_area_struct *get_vma(struct mm_struct *mm, unsigned long addr)
 
 	read_lock(&mm->mm_rb_lock);
 	vma = __find_vma(mm, addr);
-
-	/*
-	 * If there is a concurrent fast mremap, bail out since the entire
-	 * PMD/PUD subtree may have been remapped.
-	 *
-	 * This is usually safe for conventional mremap since it takes the
-	 * PTE locks as does SPF. However fast mremap only takes the lock
-	 * at the PMD/PUD level which is ok as it is done with the mmap
-	 * write lock held. But since SPF, as the term implies forgoes,
-	 * taking the mmap read lock and also cannot take PTL lock at the
-	 * larger PMD/PUD granualrity, since it would introduce huge
-	 * contention in the page fault path; fall back to regular fault
-	 * handling.
-	 */
-	if (vma && !atomic_inc_unless_negative(&vma->vm_ref_count))
-		vma = NULL;
+	if (vma)
+		atomic_inc(&vma->vm_ref_count);
 	read_unlock(&mm->mm_rb_lock);
 
 	return vma;
@@ -2632,7 +2625,7 @@ static int __init cmdline_parse_stack_guard_gap(char *p)
 	if (!*endptr)
 		stack_guard_gap = val << PAGE_SHIFT;
 
-	return 1;
+	return 0;
 }
 __setup("stack_guard_gap=", cmdline_parse_stack_guard_gap);
 
@@ -2727,28 +2720,11 @@ static void unmap_region(struct mm_struct *mm,
 {
 	struct vm_area_struct *next = prev ? prev->vm_next : mm->mmap;
 	struct mmu_gather tlb;
-	struct vm_area_struct *cur_vma;
 
 	lru_add_drain();
 	tlb_gather_mmu(&tlb, mm, start, end);
 	update_hiwater_rss(mm);
 	unmap_vmas(&tlb, vma, start, end);
-
-	/*
-	 * Ensure we have no stale TLB entries by the time this mapping is
-	 * removed from the rmap.
-	 * Note that we don't have to worry about nested flushes here because
-	 * we're holding the mm semaphore for removing the mapping - so any
-	 * concurrent flush in this region has to be coming through the rmap,
-	 * and we synchronize against that using the rmap lock.
-	 */
-	for (cur_vma = vma; cur_vma; cur_vma = cur_vma->vm_next) {
-		if ((cur_vma->vm_flags & (VM_PFNMAP|VM_MIXEDMAP)) != 0) {
-			tlb_flush_mmu(&tlb);
-			break;
-		}
-	}
-
 	free_pgtables(&tlb, vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
 				 next ? next->vm_start : USER_PGTABLES_CEILING);
 	tlb_finish_mmu(&tlb, start, end);
@@ -2831,8 +2807,6 @@ int __split_vma(struct mm_struct *mm, struct vm_area_struct *vma,
 			((addr - new->vm_start) >> PAGE_SHIFT), new);
 	else
 		err = vma_adjust(vma, vma->vm_start, addr, vma->vm_pgoff, new);
-
-	uksm_vma_add_new(new);
 
 	/* Success. */
 	if (!err)
@@ -3121,7 +3095,6 @@ static int do_brk_flags(unsigned long addr, unsigned long len, unsigned long fla
 	if ((flags & (~VM_EXEC)) != 0)
 		return -EINVAL;
 	flags |= VM_DATA_DEFAULT_FLAGS | VM_ACCOUNT | mm->def_flags;
-	uksm_vm_flags_mod(&flags);
 
 	error = get_unmapped_area(NULL, addr, len, 0, MAP_FIXED);
 	if (offset_in_page(error))
@@ -3178,7 +3151,6 @@ static int do_brk_flags(unsigned long addr, unsigned long len, unsigned long fla
 	vma->vm_flags = flags;
 	vma->vm_page_prot = vm_get_page_prot(flags);
 	vma_link(mm, vma, prev, rb_link, rb_parent);
-	uksm_vma_add_new(vma);
 out:
 	perf_event_mmap(vma);
 	mm->total_vm += len >> PAGE_SHIFT;
@@ -3252,9 +3224,10 @@ void exit_mmap(struct mm_struct *mm)
 		(void)__oom_reap_task_mm(mm);
 
 		set_bit(MMF_OOM_SKIP, &mm->flags);
+		down_write(&mm->mmap_sem);
+		up_write(&mm->mmap_sem);
 	}
 
-	down_write(&mm->mmap_sem);
 	if (mm->locked_vm) {
 		vma = mm->mmap;
 		while (vma) {
@@ -3267,12 +3240,8 @@ void exit_mmap(struct mm_struct *mm)
 	arch_exit_mmap(mm);
 
 	vma = mm->mmap;
-		/* Can happen if dup_mmap() received an OOM */
-	if (!vma) {
-		/* Release write lock previously taken for UKSM */
-		up_write(&mm->mmap_sem);
+	if (!vma)	/* Can happen if dup_mmap() received an OOM */
 		return;
-	}
 
 	lru_add_drain();
 	flush_cache_mm(mm);
@@ -3283,20 +3252,16 @@ void exit_mmap(struct mm_struct *mm)
 	free_pgtables(&tlb, vma, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
 	tlb_finish_mmu(&tlb, 0, -1);
 
-	/* Walk the list again, actually closing and freeing it. */
+	/*
+	 * Walk the list again, actually closing and freeing it,
+	 * with preemption enabled, without holding any MM locks.
+	 */
 	while (vma) {
 		if (vma->vm_flags & VM_ACCOUNT)
 			nr_accounted += vma_pages(vma);
 		vma = remove_vma(vma);
-		cond_resched();
 	}
-	up_write(&mm->mmap_sem);
 	vm_unacct_memory(nr_accounted);
-
-	mm->mmap = NULL;
-	mm->mm_rb = RB_ROOT;
-	vmacache_invalidate(mm);
-	up_write(&mm->mmap_sem);
 }
 
 /* Insert vm structure into process list sorted by address
@@ -3422,10 +3387,9 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 		 * that we protect it right now, and let the caller unprotect
 		 * it once the move is done.
 		 */
-		vm_write_begin(new_vma);
+		vm_raw_write_begin(new_vma);
 		vma_link(mm, new_vma, prev, rb_link, rb_parent);
 		*need_rmap_locks = false;
-		uksm_vma_add_new(new_vma);
 	}
 	return new_vma;
 
@@ -3576,7 +3540,6 @@ static struct vm_area_struct *__install_special_mapping(
 	vm_stat_account(mm, vma->vm_flags, len >> PAGE_SHIFT);
 
 	perf_event_mmap(vma);
-	uksm_vma_add_new(vma);
 
 	return vma;
 

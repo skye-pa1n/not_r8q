@@ -477,6 +477,10 @@ SkipForAbort:
 			/* Allow USB transfers to resume */
 			clear_bit(US_FLIDX_ABORTING, &us->dflags);
 			clear_bit(US_FLIDX_TIMED_OUT, &us->dflags);
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+			printk(KERN_ERR USB_STORAGE "%s clear TIMED_OUT\n",
+				__func__);
+#endif
 		}
 
 		/* finished working on this command */
@@ -613,9 +617,6 @@ void usb_stor_adjust_quirks(struct usb_device *udev, unsigned long *fflags)
 			break;
 		case 'j':
 			f |= US_FL_NO_REPORT_LUNS;
-			break;
-		case 'k':
-			f |= US_FL_NO_SAME;
 			break;
 		case 'l':
 			f |= US_FL_NOT_LOCKABLE;

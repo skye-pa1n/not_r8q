@@ -1695,15 +1695,14 @@ static int tda1997x_query_dv_timings(struct v4l2_subdev *sd,
 				     struct v4l2_dv_timings *timings)
 {
 	struct tda1997x_state *state = to_state(sd);
-	int ret;
 
 	v4l_dbg(1, debug, state->client, "%s\n", __func__);
 	memset(timings, 0, sizeof(struct v4l2_dv_timings));
 	mutex_lock(&state->lock);
-	ret = tda1997x_detect_std(state, timings);
+	tda1997x_detect_std(state, timings);
 	mutex_unlock(&state->lock);
 
-	return ret;
+	return 0;
 }
 
 static const struct v4l2_subdev_video_ops tda1997x_video_ops = {
@@ -2230,7 +2229,6 @@ static int tda1997x_core_init(struct v4l2_subdev *sd)
 	/* get initial HDMI status */
 	state->hdmi_status = io_read(sd, REG_HDMI_FLAGS);
 
-	io_write(sd, REG_EDID_ENABLE, EDID_ENABLE_A_EN | EDID_ENABLE_B_EN);
 	return 0;
 }
 

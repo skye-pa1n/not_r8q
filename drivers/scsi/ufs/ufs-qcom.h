@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -198,10 +198,10 @@ static inline void ufs_qcom_assert_reset(struct ufs_hba *hba)
 			1 << OFFSET_UFS_PHY_SOFT_RESET, REG_UFS_CFG1);
 
 	/*
-	 * Dummy read to ensure the write takes effect before doing any sort
-	 * of delay
+	 * Make sure assertion of ufs phy reset is written to
+	 * register before returning
 	 */
-	ufshcd_readl(hba, REG_UFS_CFG1);
+	mb();
 }
 
 static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
@@ -210,10 +210,10 @@ static inline void ufs_qcom_deassert_reset(struct ufs_hba *hba)
 			0 << OFFSET_UFS_PHY_SOFT_RESET, REG_UFS_CFG1);
 
 	/*
-	 * Dummy read to ensure the write takes effect before doing any sort
-	 * of delay
+	 * Make sure de-assertion of ufs phy reset is written to
+	 * register before returning
 	 */
-	ufshcd_readl(hba, REG_UFS_CFG1);
+	mb();
 }
 
 struct ufs_qcom_bus_vote {
@@ -374,10 +374,6 @@ struct ufs_qcom_host {
 	unsigned long hw_reset_outstanding_tasks;
 	unsigned long hw_reset_outstanding_reqs;
 	struct ufs_stats hw_reset_ufs_stats;
-	bool err_occurred;
-	/* FlashPVL entries */
-	atomic_t scale_up;
-	atomic_t clks_on;
 };
 
 static inline u32

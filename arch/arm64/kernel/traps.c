@@ -55,6 +55,10 @@
 
 #include <linux/sec_debug.h>
 
+#ifdef CONFIG_CFP_ROPP
+#include <linux/cfp.h>
+#endif
+
 static const char *handler[]= {
 	"Synchronous Abort",
 	"IRQ",
@@ -161,6 +165,9 @@ void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 	unsigned long cur_sp = 0;
 	unsigned long cur_fp = 0;
 
+#if (defined CONFIG_CFP_ROPP) && (defined CONFIG_CFP_TEST)
+	unsigned long value = 0x0;
+#endif
 #ifdef CONFIG_SEC_DEBUG
 	unsigned long prev_fp = 0;
 #endif
@@ -178,6 +185,11 @@ void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 
 	if (!try_get_task_stack(tsk))
 		return;
+
+#if (defined CONFIG_CFP_ROPP) && (defined CONFIG_CFP_TEST)
+	asm volatile("mrs %0, "STR(RRMK)"\n\t" : "=r" (value));
+	printk("CFP_TEST MK= %lx RRK=%lx RRK^MK=%lx\n", value, task_thread_info(tsk)->rrk, task_thread_info(tsk)->rrk ^ value);
+#endif
 
 	if (tsk == current) {
 		frame.fp = (unsigned long)__builtin_frame_address(0);
@@ -337,7 +349,7 @@ void die(const char *str, struct pt_regs *regs, int err)
 	raw_spin_unlock_irqrestore(&die_lock, flags);
 
 	if (ret != NOTIFY_STOP)
-		make_task_dead(SIGSEGV);
+		do_exit(SIGSEGV);
 }
 
 static bool show_unhandled_signals_ratelimited(void)
@@ -593,15 +605,6 @@ static void ctr_read_handler(unsigned int esr, struct pt_regs *regs)
 {
 	int rt = (esr & ESR_ELx_SYS64_ISS_RT_MASK) >> ESR_ELx_SYS64_ISS_RT_SHIFT;
 	unsigned long val = arm64_ftr_reg_user_value(&arm64_ftr_reg_ctrel0);
-
-	if (cpus_have_const_cap(ARM64_WORKAROUND_1542419)) {
-		/* Hide DIC so that we can trap the unnecessary maintenance...*/
-		val &= ~BIT(CTR_DIC_SHIFT);
-
-		/* ... and fake IminLine to reduce the number of traps. */
-		val &= ~CTR_IMINLINE_MASK;
-		val |= (PAGE_SHIFT - 2) & CTR_IMINLINE_MASK;
-	}
 
 	pt_regs_write_reg(regs, rt, val);
 

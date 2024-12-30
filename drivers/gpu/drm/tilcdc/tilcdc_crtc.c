@@ -657,6 +657,9 @@ static bool tilcdc_crtc_mode_fixup(struct drm_crtc *crtc,
 static int tilcdc_crtc_atomic_check(struct drm_crtc *crtc,
 				    struct drm_crtc_state *state)
 {
+	struct drm_display_mode *mode = &state->mode;
+	int ret;
+
 	/* If we are not active we don't care */
 	if (!state->active)
 		return 0;
@@ -665,6 +668,12 @@ static int tilcdc_crtc_atomic_check(struct drm_crtc *crtc,
 	    state->state->planes[0].state == NULL ||
 	    state->state->planes[0].state->crtc != crtc) {
 		dev_dbg(crtc->dev->dev, "CRTC primary plane must be present");
+		return -EINVAL;
+	}
+
+	ret = tilcdc_crtc_mode_valid(crtc, mode);
+	if (ret) {
+		dev_dbg(crtc->dev->dev, "Mode \"%s\" not valid", mode->name);
 		return -EINVAL;
 	}
 
@@ -719,6 +728,13 @@ static const struct drm_crtc_funcs tilcdc_crtc_funcs = {
 	.disable_vblank	= tilcdc_crtc_disable_vblank,
 };
 
+static const struct drm_crtc_helper_funcs tilcdc_crtc_helper_funcs = {
+		.mode_fixup     = tilcdc_crtc_mode_fixup,
+		.atomic_check	= tilcdc_crtc_atomic_check,
+		.atomic_enable	= tilcdc_crtc_atomic_enable,
+		.atomic_disable	= tilcdc_crtc_atomic_disable,
+};
+
 int tilcdc_crtc_max_width(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
@@ -733,9 +749,7 @@ int tilcdc_crtc_max_width(struct drm_crtc *crtc)
 	return max_width;
 }
 
-static enum drm_mode_status
-tilcdc_crtc_mode_valid(struct drm_crtc *crtc,
-		       const struct drm_display_mode *mode)
+int tilcdc_crtc_mode_valid(struct drm_crtc *crtc, struct drm_display_mode *mode)
 {
 	struct tilcdc_drm_private *priv = crtc->dev->dev_private;
 	unsigned int bandwidth;
@@ -822,14 +836,6 @@ tilcdc_crtc_mode_valid(struct drm_crtc *crtc,
 
 	return MODE_OK;
 }
-
-static const struct drm_crtc_helper_funcs tilcdc_crtc_helper_funcs = {
-	.mode_valid	= tilcdc_crtc_mode_valid,
-	.mode_fixup	= tilcdc_crtc_mode_fixup,
-	.atomic_check	= tilcdc_crtc_atomic_check,
-	.atomic_enable	= tilcdc_crtc_atomic_enable,
-	.atomic_disable	= tilcdc_crtc_atomic_disable,
-};
 
 void tilcdc_crtc_set_panel_info(struct drm_crtc *crtc,
 		const struct tilcdc_panel_info *info)

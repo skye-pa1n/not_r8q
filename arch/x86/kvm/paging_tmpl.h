@@ -93,8 +93,8 @@ struct guest_walker {
 	gpa_t pte_gpa[PT_MAX_FULL_LEVELS];
 	pt_element_t __user *ptep_user[PT_MAX_FULL_LEVELS];
 	bool pte_writable[PT_MAX_FULL_LEVELS];
-	unsigned int pt_access[PT_MAX_FULL_LEVELS];
-	unsigned int pte_access;
+	unsigned pt_access;
+	unsigned pte_access;
 	gfn_t gfn;
 	struct x86_exception fault;
 };
@@ -202,7 +202,7 @@ static inline unsigned FNAME(gpte_access)(u64 gpte)
 static int FNAME(update_accessed_dirty_bits)(struct kvm_vcpu *vcpu,
 					     struct kvm_mmu *mmu,
 					     struct guest_walker *walker,
-					     gpa_t addr, int write_fault)
+					     int write_fault)
 {
 	unsigned level, index;
 	pt_element_t pte, orig_pte;
@@ -227,7 +227,7 @@ static int FNAME(update_accessed_dirty_bits)(struct kvm_vcpu *vcpu,
 				!(pte & PT_GUEST_DIRTY_MASK)) {
 			trace_kvm_mmu_set_dirty_bit(table_gfn, index, sizeof(pte));
 #if PTTYPE == PTTYPE_EPT
-			if (kvm_arch_write_log_dirty(vcpu, addr))
+			if (kvm_arch_write_log_dirty(vcpu))
 				return -EINVAL;
 #endif
 			pte |= PT_GUEST_DIRTY_MASK;
@@ -388,15 +388,13 @@ retry_walk:
 		}
 
 		walker->ptes[walker->level - 1] = pte;
-
-		/* Convert to ACC_*_MASK flags for struct guest_walker.  */
-		walker->pt_access[walker->level - 1] = FNAME(gpte_access)(pt_access ^ walk_nx_mask);
 	} while (!is_last_gpte(mmu, walker->level, pte));
 
 	pte_pkey = FNAME(gpte_pkeys)(vcpu, pte);
 	accessed_dirty = have_ad ? pte_access & PT_GUEST_ACCESSED_MASK : 0;
 
 	/* Convert to ACC_*_MASK flags for struct guest_walker.  */
+	walker->pt_access = FNAME(gpte_access)(pt_access ^ walk_nx_mask);
 	walker->pte_access = FNAME(gpte_access)(pte_access ^ walk_nx_mask);
 	errcode = permission_fault(vcpu, mmu, walker->pte_access, pte_pkey, access);
 	if (unlikely(errcode))
@@ -426,8 +424,7 @@ retry_walk:
 			(PT_GUEST_DIRTY_SHIFT - PT_GUEST_ACCESSED_SHIFT);
 
 	if (unlikely(!accessed_dirty)) {
-		ret = FNAME(update_accessed_dirty_bits)(vcpu, mmu, walker,
-							addr, write_fault);
+		ret = FNAME(update_accessed_dirty_bits)(vcpu, mmu, walker, write_fault);
 		if (unlikely(ret < 0))
 			goto error;
 		else if (ret)
@@ -435,8 +432,7 @@ retry_walk:
 	}
 
 	pgprintk("%s: pte %llx pte_access %x pt_access %x\n",
-		 __func__, (u64)pte, walker->pte_access,
-		 walker->pt_access[walker->level - 1]);
+		 __func__, (u64)pte, walker->pte_access, walker->pt_access);
 	return 1;
 
 error:
@@ -605,7 +601,7 @@ static int FNAME(fetch)(struct kvm_vcpu *vcpu, gpa_t addr,
 {
 	struct kvm_mmu_page *sp = NULL;
 	struct kvm_shadow_walk_iterator it;
-	unsigned int direct_access, access;
+	unsigned direct_access, access = gw->pt_access;
 	int top_level, ret;
 	gfn_t gfn, base_gfn;
 
@@ -637,7 +633,6 @@ static int FNAME(fetch)(struct kvm_vcpu *vcpu, gpa_t addr,
 		sp = NULL;
 		if (!is_shadow_present_pte(*it.sptep)) {
 			table_gfn = gw->table_gfn[it.level - 2];
-			access = gw->pt_access[it.level - 2];
 			sp = kvm_mmu_get_page(vcpu, table_gfn, addr, it.level-1,
 					      false, access);
 		}

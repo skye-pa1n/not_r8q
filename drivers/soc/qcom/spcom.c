@@ -1920,8 +1920,7 @@ static inline int handle_poll(struct file *file,
 		mutex_unlock(&ch->lock);
 		break;
 	default:
-		spcom_pr_err("ch [%s] unsupported ioctl:%u\n",
-			name, op->cmd_id);
+		spcom_pr_err("ch [%s] unsupported ioctl:%u\n", name, op->cmd_id);
 		ret = -EINVAL;
 	}
 	spcom_pr_dbg("name=%s, retval=%d\n", name, op->retval);

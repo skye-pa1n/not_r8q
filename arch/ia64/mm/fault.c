@@ -302,7 +302,7 @@ retry:
 		regs = NULL;
 	bust_spinlocks(0);
 	if (regs)
-		make_task_dead(SIGKILL);
+		do_exit(SIGKILL);
 	return;
 
   out_of_memory:

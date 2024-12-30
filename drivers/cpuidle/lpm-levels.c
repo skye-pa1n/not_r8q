@@ -1431,7 +1431,7 @@ static int lpm_cpuidle_select(struct cpuidle_driver *drv,
 	return cpu_power_select(dev, cpu);
 }
 
-static void update_ipi_history(int cpu)
+void update_ipi_history(int cpu)
 {
 	struct ipi_history *history = &per_cpu(cpu_ipi_history, cpu);
 	ktime_t now = ktime_get();
@@ -1765,6 +1765,8 @@ static int lpm_suspend_prepare(void)
 	regulator_showall_enabled();
 	clock_debug_print_enabled();
 
+	debug_masterstats_show("entry");
+	debug_rpmstats_show("entry");
 #endif /* CONFIG_SEC_PM */
 
 #ifdef CONFIG_SEC_PM_DEBUG
@@ -1784,6 +1786,10 @@ static void lpm_suspend_wake(void)
 	suspend_in_progress = false;
 	lpm_stats_suspend_exit();
 
+#ifdef CONFIG_SEC_PM
+	debug_rpmstats_show("exit");
+	debug_masterstats_show("exit");
+#endif
 }
 
 static int lpm_suspend_enter(suspend_state_t state)
@@ -1895,8 +1901,6 @@ static int lpm_probe(struct platform_device *pdev)
 		pr_err("Failed to create cluster level nodes\n");
 		goto failed;
 	}
-
-	set_update_ipi_history_callback(update_ipi_history);
 
 	/* Add lpm_debug to Minidump*/
 	strlcpy(md_entry.name, "KLPMDEBUG", sizeof(md_entry.name));

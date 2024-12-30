@@ -170,7 +170,7 @@ int nla_dump_errormsg(struct nlmsghdr *nlh)
 		hlen += nlmsg_len(&err->msg);
 
 	attr = (struct nlattr *) ((void *) err + hlen);
-	alen = (void *)nlh + nlh->nlmsg_len - (void *)attr;
+	alen = nlh->nlmsg_len - hlen;
 
 	if (nla_parse(tb, NLMSGERR_ATTR_MAX, attr, alen, extack_policy) != 0) {
 		fprintf(stderr,

@@ -312,7 +312,14 @@ static void __mxs_phy_disconnect_line(struct mxs_phy *mxs_phy, bool disconnect)
 
 static bool mxs_phy_is_otg_host(struct mxs_phy *mxs_phy)
 {
-	return mxs_phy->phy.last_event == USB_EVENT_ID;
+	void __iomem *base = mxs_phy->phy.io_priv;
+	u32 phyctrl = readl(base + HW_USBPHY_CTRL);
+
+	if (IS_ENABLED(CONFIG_USB_OTG) &&
+			!(phyctrl & BM_USBPHY_CTRL_OTG_ID_VALUE))
+		return true;
+
+	return false;
 }
 
 static void mxs_phy_disconnect_line(struct mxs_phy *mxs_phy, bool on)

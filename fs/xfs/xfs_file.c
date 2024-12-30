@@ -1095,14 +1095,6 @@ __xfs_filemap_fault(
 	return ret;
 }
 
-static inline bool
-xfs_is_write_fault(
-	struct vm_fault		*vmf)
-{
-	return (vmf->flags & FAULT_FLAG_WRITE) &&
-	       (vmf->vma->vm_flags & VM_SHARED);
-}
-
 static vm_fault_t
 xfs_filemap_fault(
 	struct vm_fault		*vmf)
@@ -1110,7 +1102,7 @@ xfs_filemap_fault(
 	/* DAX can shortcut the normal fault path on write faults! */
 	return __xfs_filemap_fault(vmf, PE_SIZE_PTE,
 			IS_DAX(file_inode(vmf->vma->vm_file)) &&
-			xfs_is_write_fault(vmf));
+			(vmf->flags & FAULT_FLAG_WRITE));
 }
 
 static vm_fault_t
@@ -1123,7 +1115,7 @@ xfs_filemap_huge_fault(
 
 	/* DAX can shortcut the normal fault path on write faults! */
 	return __xfs_filemap_fault(vmf, pe_size,
-			xfs_is_write_fault(vmf));
+			(vmf->flags & FAULT_FLAG_WRITE));
 }
 
 static vm_fault_t

@@ -331,6 +331,13 @@ static struct ubi_wl_entry *find_wl_entry(struct ubi_device *ubi,
 		}
 	}
 
+	/* If no fastmap has been written and this WL entry can be used
+	 * as anchor PEB, hold it back and return the second best WL entry
+	 * such that fastmap can use the anchor PEB later. */
+	if (prev_e && !ubi->fm_disabled &&
+	    !ubi->fm && e->pnum < UBI_FM_MAX_START)
+		return prev_e;
+
 	return e;
 }
 
@@ -568,7 +575,6 @@ static int erase_worker(struct ubi_device *ubi, struct ubi_work *wl_wrk,
  * @vol_id: the volume ID that last used this PEB
  * @lnum: the last used logical eraseblock number for the PEB
  * @torture: if the physical eraseblock has to be tortured
- * @nested: denotes whether the work_sem is already held
  *
  * This function returns zero in case of success and a %-ENOMEM in case of
  * failure.
@@ -642,6 +648,9 @@ static int wear_leveling_worker(struct ubi_device *ubi, struct ubi_work *wrk,
 {
 	int err, scrubbing = 0, torture = 0, protect = 0, erroneous = 0;
 	int erase = 0, keep = 0, vol_id = -1, lnum = -1;
+#ifdef CONFIG_MTD_UBI_FASTMAP
+	int anchor = wrk->anchor;
+#endif
 	struct ubi_wl_entry *e1, *e2;
 	struct ubi_vid_io_buf *vidb;
 	struct ubi_vid_hdr *vid_hdr;
@@ -681,7 +690,11 @@ static int wear_leveling_worker(struct ubi_device *ubi, struct ubi_work *wrk,
 	}
 
 #ifdef CONFIG_MTD_UBI_FASTMAP
-	if (ubi->fm_do_produce_anchor) {
+	/* Check whether we need to produce an anchor PEB */
+	if (!anchor)
+		anchor = !anchor_pebs_available(&ubi->free);
+
+	if (anchor) {
 		e1 = find_anchor_wl_entry(&ubi->used);
 		if (!e1)
 			goto out_cancel;
@@ -692,7 +705,6 @@ static int wear_leveling_worker(struct ubi_device *ubi, struct ubi_work *wrk,
 		self_check_in_wl_tree(ubi, e1, &ubi->used);
 		rb_erase(&e1->u.rb, &ubi->used);
 		dbg_wl("anchor-move PEB %d to PEB %d", e1->pnum, e2->pnum);
-		ubi->fm_do_produce_anchor = 0;
 	} else if (!ubi->scrub.rb_node) {
 #else
 	if (!ubi->scrub.rb_node) {
@@ -810,14 +822,7 @@ static int wear_leveling_worker(struct ubi_device *ubi, struct ubi_work *wrk,
 			goto out_not_moved;
 		}
 		if (err == MOVE_RETRY) {
-			/*
-			 * For source PEB:
-			 * 1. The scrubbing is set for scrub type PEB, it will
-			 *    be put back into ubi->scrub list.
-			 * 2. Non-scrub type PEB will be put back into ubi->used
-			 *    list.
-			 */
-			keep = 1;
+			scrubbing = 1;
 			dst_leb_clean = 1;
 			goto out_not_moved;
 		}
@@ -873,11 +878,8 @@ static int wear_leveling_worker(struct ubi_device *ubi, struct ubi_work *wrk,
 
 	err = do_sync_erase(ubi, e1, vol_id, lnum, 0);
 	if (err) {
-		if (e2) {
-			spin_lock(&ubi->wl_lock);
+		if (e2)
 			wl_entry_destroy(ubi, e2);
-			spin_unlock(&ubi->wl_lock);
-		}
 		goto out_ro;
 	}
 
@@ -959,11 +961,11 @@ out_error:
 	spin_lock(&ubi->wl_lock);
 	ubi->move_from = ubi->move_to = NULL;
 	ubi->move_to_put = ubi->wl_scheduled = 0;
-	wl_entry_destroy(ubi, e1);
-	wl_entry_destroy(ubi, e2);
 	spin_unlock(&ubi->wl_lock);
 
 	ubi_free_vid_buf(vidb);
+	wl_entry_destroy(ubi, e1);
+	wl_entry_destroy(ubi, e2);
 
 out_ro:
 	ubi_ro_mode(ubi);
@@ -1035,6 +1037,7 @@ static int ensure_wear_leveling(struct ubi_device *ubi, int nested)
 		goto out_cancel;
 	}
 
+	wrk->anchor = 0;
 	wrk->func = &wear_leveling_worker;
 	if (nested)
 		__schedule_ubi_work(ubi, wrk);
@@ -1054,6 +1057,8 @@ out_unlock:
  * __erase_worker - physical eraseblock erase worker function.
  * @ubi: UBI device description object
  * @wl_wrk: the work object
+ * @shutdown: non-zero if the worker has to free memory and exit
+ * because the WL sub-system is shutting down
  *
  * This function erases a physical eraseblock and perform torture testing if
  * needed. It also takes care about marking the physical eraseblock bad if
@@ -1074,15 +1079,8 @@ static int __erase_worker(struct ubi_device *ubi, struct ubi_work *wl_wrk)
 	err = sync_erase(ubi, e, wl_wrk->torture);
 	if (!err) {
 		spin_lock(&ubi->wl_lock);
-
-		if (!ubi->fm_anchor && e->pnum < UBI_FM_MAX_START) {
-			ubi->fm_anchor = e;
-			ubi->fm_do_produce_anchor = 0;
-		} else {
-			wl_tree_add(e, &ubi->free);
-			ubi->free_count++;
-		}
-
+		wl_tree_add(e, &ubi->free);
+		ubi->free_count++;
 		spin_unlock(&ubi->wl_lock);
 
 		/*
@@ -1103,20 +1101,16 @@ static int __erase_worker(struct ubi_device *ubi, struct ubi_work *wl_wrk)
 		int err1;
 
 		/* Re-schedule the LEB for erasure */
-		err1 = schedule_erase(ubi, e, vol_id, lnum, 0, true);
+		err1 = schedule_erase(ubi, e, vol_id, lnum, 0, false);
 		if (err1) {
-			spin_lock(&ubi->wl_lock);
 			wl_entry_destroy(ubi, e);
-			spin_unlock(&ubi->wl_lock);
 			err = err1;
 			goto out_ro;
 		}
 		return err;
 	}
 
-	spin_lock(&ubi->wl_lock);
 	wl_entry_destroy(ubi, e);
-	spin_unlock(&ubi->wl_lock);
 	if (err != -EIO)
 		/*
 		 * If this is not %-EIO, we have no idea what to do. Scheduling
@@ -1232,18 +1226,6 @@ int ubi_wl_put_peb(struct ubi_device *ubi, int vol_id, int lnum,
 retry:
 	spin_lock(&ubi->wl_lock);
 	e = ubi->lookuptbl[pnum];
-	if (!e) {
-		/*
-		 * This wl entry has been removed for some errors by other
-		 * process (eg. wear leveling worker), corresponding process
-		 * (except __erase_worker, which cannot concurrent with
-		 * ubi_wl_put_peb) will set ubi ro_mode at the same time,
-		 * just ignore this wl entry.
-		 */
-		spin_unlock(&ubi->wl_lock);
-		up_read(&ubi->fm_protect);
-		return 0;
-	}
 	if (e == ubi->move_from) {
 		/*
 		 * User is putting the physical eraseblock which was selected to
@@ -1496,19 +1478,6 @@ int ubi_thread(void *u)
 		    !ubi->thread_enabled || ubi_dbg_is_bgt_disabled(ubi)) {
 			set_current_state(TASK_INTERRUPTIBLE);
 			spin_unlock(&ubi->wl_lock);
-
-			/*
-			 * Check kthread_should_stop() after we set the task
-			 * state to guarantee that we either see the stop bit
-			 * and exit or the task state is reset to runnable such
-			 * that it's not scheduled out indefinitely and detects
-			 * the stop bit at kthread_should_stop().
-			 */
-			if (kthread_should_stop()) {
-				set_current_state(TASK_RUNNING);
-				break;
-			}
-
 			schedule();
 			continue;
 		}
@@ -1755,9 +1724,6 @@ int ubi_wl_init(struct ubi_device *ubi, struct ubi_attach_info *ai)
 	if (err)
 		goto out_free;
 
-#ifdef CONFIG_MTD_UBI_FASTMAP
-	ubi_ensure_anchor_pebs(ubi);
-#endif
 	return 0;
 
 out_free:

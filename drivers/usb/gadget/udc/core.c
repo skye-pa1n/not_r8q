@@ -99,10 +99,12 @@ int usb_ep_enable(struct usb_ep *ep)
 		goto out;
 
 	/* UDC drivers can't handle endpoints with maxpacket size 0 */
-	if (!ep->desc || usb_endpoint_maxp(ep->desc) == 0) {
-		WARN_ONCE(1, "%s: ep%d (%s) has %s\n", __func__, ep->address, ep->name,
-			  (!ep->desc) ? "NULL descriptor" : "maxpacket 0");
-
+	if (usb_endpoint_maxp(ep->desc) == 0) {
+		/*
+		 * We should log an error message here, but we can't call
+		 * dev_err() because there's no way to find the gadget
+		 * given only ep.
+		 */
 		ret = -EINVAL;
 		goto out;
 	}
@@ -271,9 +273,7 @@ int usb_ep_queue(struct usb_ep *ep,
 {
 	int ret = 0;
 
-	if (!ep->enabled && ep->address) {
-		pr_debug("USB gadget: queue request to disabled ep 0x%x (%s)\n",
-				 ep->address, ep->name);
+	if (WARN_ON_ONCE(!ep->enabled && ep->address)) {
 		ret = -ESHUTDOWN;
 		goto out;
 	}
@@ -1213,10 +1213,6 @@ int usb_add_gadget_udc_release(struct device *parent, struct usb_gadget *gadget,
 	INIT_WORK(&gadget->work, usb_gadget_state_work);
 	gadget->dev.parent = parent;
 
-	dma_set_coherent_mask(&gadget->dev, parent->coherent_dma_mask);
-	gadget->dev.dma_parms = parent->dma_parms;
-	gadget->dev.dma_mask = parent->dma_mask;
-
 	if (release)
 		gadget->dev.release = release;
 	else
@@ -1338,6 +1334,7 @@ static void usb_gadget_remove_driver(struct usb_udc *udc)
 	usb_gadget_udc_stop(udc);
 
 	udc->driver = NULL;
+	udc->dev.driver = NULL;
 	udc->gadget->dev.driver = NULL;
 }
 
@@ -1386,6 +1383,7 @@ static int udc_bind_to_driver(struct usb_udc *udc, struct usb_gadget_driver *dri
 			driver->function);
 
 	udc->driver = driver;
+	udc->dev.driver = &driver->driver;
 	udc->gadget->dev.driver = &driver->driver;
 
 	usb_gadget_udc_set_speed(udc, driver->max_speed);
@@ -1407,6 +1405,7 @@ err1:
 		dev_err(&udc->dev, "failed to start %s: %d\n",
 			udc->driver->function, ret);
 	udc->driver = NULL;
+	udc->dev.driver = NULL;
 	udc->gadget->dev.driver = NULL;
 	return ret;
 }
@@ -1509,13 +1508,10 @@ static ssize_t soft_connect_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t n)
 {
 	struct usb_udc		*udc = container_of(dev, struct usb_udc, dev);
-	ssize_t			ret;
 
-	mutex_lock(&udc_lock);
 	if (!udc->driver) {
 		dev_err(dev, "soft-connect without a gadget driver\n");
-		ret = -EOPNOTSUPP;
-		goto out;
+		return -EOPNOTSUPP;
 	}
 
 	if (sysfs_streq(buf, "connect")) {
@@ -1527,14 +1523,10 @@ static ssize_t soft_connect_store(struct device *dev,
 		usb_gadget_udc_stop(udc);
 	} else {
 		dev_err(dev, "unsupported command '%s'\n", buf);
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
-	ret = n;
-out:
-	mutex_unlock(&udc_lock);
-	return ret;
+	return n;
 }
 static DEVICE_ATTR_WO(soft_connect);
 

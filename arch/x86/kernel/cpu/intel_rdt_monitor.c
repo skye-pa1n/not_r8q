@@ -233,14 +233,15 @@ static u64 mbm_overflow_count(u64 prev_msr, u64 cur_msr)
 	return chunks >>= shift;
 }
 
-static u64 __mon_event_count(u32 rmid, struct rmid_read *rr)
+static int __mon_event_count(u32 rmid, struct rmid_read *rr)
 {
 	struct mbm_state *m;
 	u64 chunks, tval;
 
 	tval = __rmid_read(rmid, rr->evtid);
 	if (tval & (RMID_VAL_ERROR | RMID_VAL_UNAVAIL)) {
-		return tval;
+		rr->val = tval;
+		return -EINVAL;
 	}
 	switch (rr->evtid) {
 	case QOS_L3_OCCUP_EVENT_ID:
@@ -254,10 +255,10 @@ static u64 __mon_event_count(u32 rmid, struct rmid_read *rr)
 		break;
 	default:
 		/*
-		 * Code would never reach here because an invalid
-		 * event id would fail the __rmid_read.
+		 * Code would never reach here because
+		 * an invalid event id would fail the __rmid_read.
 		 */
-		return RMID_VAL_ERROR;
+		return -EINVAL;
 	}
 
 	if (rr->first) {
@@ -289,6 +290,8 @@ static void mbm_bw_count(u32 rmid, struct rmid_read *rr)
 		return;
 
 	chunks = mbm_overflow_count(m->prev_bw_msr, tval);
+	m->chunks_bw += chunks;
+	m->chunks = m->chunks_bw;
 	cur_bw = (chunks * r->mon_scale) >> 20;
 
 	if (m->delta_comp)
@@ -307,29 +310,23 @@ void mon_event_count(void *info)
 	struct rdtgroup *rdtgrp, *entry;
 	struct rmid_read *rr = info;
 	struct list_head *head;
-	u64 ret_val;
 
 	rdtgrp = rr->rgrp;
 
-	ret_val = __mon_event_count(rdtgrp->mon.rmid, rr);
+	if (__mon_event_count(rdtgrp->mon.rmid, rr))
+		return;
 
 	/*
-	 * For Ctrl groups read data from child monitor groups and
-	 * add them together. Count events which are read successfully.
-	 * Discard the rmid_read's reporting errors.
+	 * For Ctrl groups read data from child monitor groups.
 	 */
 	head = &rdtgrp->mon.crdtgrp_list;
 
 	if (rdtgrp->type == RDTCTRL_GROUP) {
 		list_for_each_entry(entry, head, mon.crdtgrp_list) {
-			if (__mon_event_count(entry->mon.rmid, rr) == 0)
-				ret_val = 0;
+			if (__mon_event_count(entry->mon.rmid, rr))
+				return;
 		}
 	}
-
-	/* Report error if none of rmid_reads are successful */
-	if (ret_val)
-		rr->val = ret_val;
 }
 
 /*
@@ -464,14 +461,15 @@ static void mbm_update(struct rdt_domain *d, int rmid)
 	}
 	if (is_mbm_local_enabled()) {
 		rr.evtid = QOS_L3_MBM_LOCAL_EVENT_ID;
-		__mon_event_count(rmid, &rr);
 
 		/*
 		 * Call the MBA software controller only for the
 		 * control groups and when user has enabled
 		 * the software controller explicitly.
 		 */
-		if (is_mba_sc(NULL))
+		if (!is_mba_sc(NULL))
+			__mon_event_count(rmid, &rr);
+		else
 			mbm_bw_count(rmid, &rr);
 	}
 }

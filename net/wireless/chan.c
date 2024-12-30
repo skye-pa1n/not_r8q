@@ -6,7 +6,6 @@
  *
  * Copyright 2009	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
- * Copyright 2018-2020	Intel Corporation
  */
 
 #include <linux/export.h>
@@ -27,7 +26,6 @@ void cfg80211_chandef_create(struct cfg80211_chan_def *chandef,
 		return;
 
 	chandef->chan = chan;
-	chandef->freq1_offset = chan->freq_offset;
 	chandef->center_freq2 = 0;
 	chandef->edmg.bw_config = 0;
 	chandef->edmg.channels = 0;
@@ -154,8 +152,7 @@ bool cfg80211_chandef_valid(const struct cfg80211_chan_def *chandef)
 	case NL80211_CHAN_WIDTH_10:
 	case NL80211_CHAN_WIDTH_20:
 	case NL80211_CHAN_WIDTH_20_NOHT:
-		if (ieee80211_chandef_to_khz(chandef) !=
-		    ieee80211_channel_to_khz(chandef->chan))
+		if (chandef->center_freq1 != control_freq)
 			return false;
 		if (chandef->center_freq2)
 			return false;
@@ -383,11 +380,10 @@ static u32 cfg80211_get_start_freq(u32 center_freq,
 {
 	u32 start_freq;
 
-	bandwidth = MHZ_TO_KHZ(bandwidth);
-	if (bandwidth <= MHZ_TO_KHZ(20))
+	if (bandwidth <= 20)
 		start_freq = center_freq;
 	else
-		start_freq = center_freq - bandwidth / 2 + MHZ_TO_KHZ(10);
+		start_freq = center_freq - bandwidth/2 + 10;
 
 	return start_freq;
 }
@@ -397,11 +393,10 @@ static u32 cfg80211_get_end_freq(u32 center_freq,
 {
 	u32 end_freq;
 
-	bandwidth = MHZ_TO_KHZ(bandwidth);
-	if (bandwidth <= MHZ_TO_KHZ(20))
+	if (bandwidth <= 20)
 		end_freq = center_freq;
 	else
-		end_freq = center_freq + bandwidth / 2 - MHZ_TO_KHZ(10);
+		end_freq = center_freq + bandwidth/2 - 10;
 
 	return end_freq;
 }
@@ -416,8 +411,8 @@ static int cfg80211_get_chans_dfs_required(struct wiphy *wiphy,
 	start_freq = cfg80211_get_start_freq(center_freq, bandwidth);
 	end_freq = cfg80211_get_end_freq(center_freq, bandwidth);
 
-	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
-		c = ieee80211_get_channel_khz(wiphy, freq);
+	for (freq = start_freq; freq <= end_freq; freq += 20) {
+		c = ieee80211_get_channel(wiphy, freq);
 		if (!c)
 			return -EINVAL;
 
@@ -448,8 +443,8 @@ int cfg80211_chandef_dfs_required(struct wiphy *wiphy,
 			return -EINVAL;
 
 		ret = cfg80211_get_chans_dfs_required(wiphy,
-					ieee80211_chandef_to_khz(chandef),
-					width);
+						      chandef->center_freq1,
+						      width);
 		if (ret < 0)
 			return ret;
 		else if (ret > 0)
@@ -459,8 +454,8 @@ int cfg80211_chandef_dfs_required(struct wiphy *wiphy,
 			return 0;
 
 		ret = cfg80211_get_chans_dfs_required(wiphy,
-					MHZ_TO_KHZ(chandef->center_freq2),
-					width);
+						      chandef->center_freq2,
+						      width);
 		if (ret < 0)
 			return ret;
 		else if (ret > 0)
@@ -502,8 +497,8 @@ static int cfg80211_get_chans_dfs_usable(struct wiphy *wiphy,
 	 * DFS_AVAILABLE). Return number of usable channels
 	 * (require CAC). Allow DFS and non-DFS channel mix.
 	 */
-	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
-		c = ieee80211_get_channel_khz(wiphy, freq);
+	for (freq = start_freq; freq <= end_freq; freq += 20) {
+		c = ieee80211_get_channel(wiphy, freq);
 		if (!c)
 			return -EINVAL;
 
@@ -535,9 +530,8 @@ bool cfg80211_chandef_dfs_usable(struct wiphy *wiphy,
 	if (width < 0)
 		return false;
 
-	r1 = cfg80211_get_chans_dfs_usable(wiphy,
-					   MHZ_TO_KHZ(chandef->center_freq1),
-					   width);
+	r1 = cfg80211_get_chans_dfs_usable(wiphy, chandef->center_freq1,
+					  width);
 
 	if (r1 < 0)
 		return false;
@@ -546,8 +540,8 @@ bool cfg80211_chandef_dfs_usable(struct wiphy *wiphy,
 	case NL80211_CHAN_WIDTH_80P80:
 		WARN_ON(!chandef->center_freq2);
 		r2 = cfg80211_get_chans_dfs_usable(wiphy,
-					MHZ_TO_KHZ(chandef->center_freq2),
-					width);
+						   chandef->center_freq2,
+						   width);
 		if (r2 < 0)
 			return false;
 		break;
@@ -694,8 +688,8 @@ static bool cfg80211_get_chans_dfs_available(struct wiphy *wiphy,
 	 * If any channel in between is disabled or has not
 	 * had gone through CAC return false
 	 */
-	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
-		c = ieee80211_get_channel_khz(wiphy, freq);
+	for (freq = start_freq; freq <= end_freq; freq += 20) {
+		c = ieee80211_get_channel(wiphy, freq);
 		if (!c)
 			return false;
 
@@ -724,8 +718,7 @@ static bool cfg80211_chandef_dfs_available(struct wiphy *wiphy,
 	if (width < 0)
 		return false;
 
-	r = cfg80211_get_chans_dfs_available(wiphy,
-					     MHZ_TO_KHZ(chandef->center_freq1),
+	r = cfg80211_get_chans_dfs_available(wiphy, chandef->center_freq1,
 					     width);
 
 	/* If any of channels unavailable for cf1 just return */
@@ -736,8 +729,8 @@ static bool cfg80211_chandef_dfs_available(struct wiphy *wiphy,
 	case NL80211_CHAN_WIDTH_80P80:
 		WARN_ON(!chandef->center_freq2);
 		r = cfg80211_get_chans_dfs_available(wiphy,
-					MHZ_TO_KHZ(chandef->center_freq2),
-					width);
+						     chandef->center_freq2,
+						     width);
 		break;
 	default:
 		WARN_ON(chandef->center_freq2);
@@ -758,8 +751,8 @@ static unsigned int cfg80211_get_chans_dfs_cac_time(struct wiphy *wiphy,
 	start_freq = cfg80211_get_start_freq(center_freq, bandwidth);
 	end_freq = cfg80211_get_end_freq(center_freq, bandwidth);
 
-	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
-		c = ieee80211_get_channel_khz(wiphy, freq);
+	for (freq = start_freq; freq <= end_freq; freq += 20) {
+		c = ieee80211_get_channel(wiphy, freq);
 		if (!c)
 			return 0;
 
@@ -791,14 +784,14 @@ cfg80211_chandef_dfs_cac_time(struct wiphy *wiphy,
 		return 0;
 
 	t1 = cfg80211_get_chans_dfs_cac_time(wiphy,
-					     MHZ_TO_KHZ(chandef->center_freq1),
+					     chandef->center_freq1,
 					     width);
 
 	if (!chandef->center_freq2)
 		return t1;
 
 	t2 = cfg80211_get_chans_dfs_cac_time(wiphy,
-					     MHZ_TO_KHZ(chandef->center_freq2),
+					     chandef->center_freq2,
 					     width);
 
 	return max(t1, t2);
@@ -814,8 +807,8 @@ static bool cfg80211_secondary_chans_ok(struct wiphy *wiphy,
 	start_freq = cfg80211_get_start_freq(center_freq, bandwidth);
 	end_freq = cfg80211_get_end_freq(center_freq, bandwidth);
 
-	for (freq = start_freq; freq <= end_freq; freq += MHZ_TO_KHZ(20)) {
-		c = ieee80211_get_channel_khz(wiphy, freq);
+	for (freq = start_freq; freq <= end_freq; freq += 20) {
+		c = ieee80211_get_channel(wiphy, freq);
 		if (!c || c->flags & prohibited_flags)
 			return false;
 	}
@@ -882,8 +875,10 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 {
 	struct ieee80211_sta_ht_cap *ht_cap;
 	struct ieee80211_sta_vht_cap *vht_cap;
+	const struct ieee80211_sta_he_cap *he_cap;
 	struct ieee80211_edmg *edmg_cap;
 	u32 width, control_freq, cap;
+	bool is_6ghz_chan;
 
 	if (WARN_ON(!cfg80211_chandef_valid(chandef)))
 		return false;
@@ -891,6 +886,12 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 	ht_cap = &wiphy->bands[chandef->chan->band]->ht_cap;
 	vht_cap = &wiphy->bands[chandef->chan->band]->vht_cap;
 	edmg_cap = &wiphy->bands[chandef->chan->band]->edmg_cap;
+	//TODO: need to work on how to select correct iftype depending on the op that is invoking cfg80211_chandef_usable()
+	he_cap = ieee80211_get_he_iftype_cap(wiphy->bands[chandef->chan->band],
+					     NL80211_IFTYPE_AP);
+	is_6ghz_chan = (chandef->chan->band == NL80211_BAND_6GHZ);
+	if (is_6ghz_chan && he_cap == NULL)
+		return false;
 
 	if (edmg_cap->channels &&
 	    !cfg80211_edmg_usable(wiphy,
@@ -911,22 +912,23 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 		width = 10;
 		break;
 	case NL80211_CHAN_WIDTH_20:
-		if (!ht_cap->ht_supported &&
-		    chandef->chan->band != NL80211_BAND_6GHZ)
+		if (!ht_cap->ht_supported && !is_6ghz_chan)
 			return false;
-		/* fall through */
 	case NL80211_CHAN_WIDTH_20_NOHT:
 		prohibited_flags |= IEEE80211_CHAN_NO_20MHZ;
 		width = 20;
 		break;
 	case NL80211_CHAN_WIDTH_40:
 		width = 40;
-		if (chandef->chan->band == NL80211_BAND_6GHZ)
-			break;
-		if (!ht_cap->ht_supported)
+		if (!ht_cap->ht_supported && !is_6ghz_chan)
 			return false;
-		if (!(ht_cap->cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40) ||
-		    ht_cap->cap & IEEE80211_HT_CAP_40MHZ_INTOLERANT)
+		if (!is_6ghz_chan &&
+		    (!(ht_cap->cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40) ||
+		    ht_cap->cap & IEEE80211_HT_CAP_40MHZ_INTOLERANT))
+			return false;
+		if (is_6ghz_chan &&
+		    !(he_cap->he_cap_elem.phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G))
 			return false;
 		if (chandef->center_freq1 < control_freq &&
 		    chandef->chan->flags & IEEE80211_CHAN_NO_HT40MINUS)
@@ -937,29 +939,37 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 		break;
 	case NL80211_CHAN_WIDTH_80P80:
 		cap = vht_cap->cap & IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK;
-		if (chandef->chan->band != NL80211_BAND_6GHZ &&
+		if (!is_6ghz_chan &&
 		    cap != IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ)
 			return false;
-		/* fall through */
+		if (is_6ghz_chan &&
+		    !(he_cap->he_cap_elem.phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_80PLUS80_MHZ_IN_5G))
+			return false;
 	case NL80211_CHAN_WIDTH_80:
+		if (!vht_cap->vht_supported && !is_6ghz_chan)
+			return false;
+		if (is_6ghz_chan &&
+		    !(he_cap->he_cap_elem.phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_40MHZ_80MHZ_IN_5G))
+			return false;
 		prohibited_flags |= IEEE80211_CHAN_NO_80MHZ;
 		width = 80;
-		if (chandef->chan->band == NL80211_BAND_6GHZ)
-			break;
-		if (!vht_cap->vht_supported)
-			return false;
 		break;
 	case NL80211_CHAN_WIDTH_160:
-		prohibited_flags |= IEEE80211_CHAN_NO_160MHZ;
-		width = 160;
-		if (chandef->chan->band == NL80211_BAND_6GHZ)
-			break;
-		if (!vht_cap->vht_supported)
+		if (!vht_cap->vht_supported && !is_6ghz_chan)
 			return false;
 		cap = vht_cap->cap & IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK;
-		if (cap != IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160MHZ &&
+		if (!is_6ghz_chan &&
+		    cap != IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160MHZ &&
 		    cap != IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ)
 			return false;
+		if (is_6ghz_chan &&
+		    !(he_cap->he_cap_elem.phy_cap_info[0] &
+		    IEEE80211_HE_PHY_CAP0_CHANNEL_WIDTH_SET_160MHZ_IN_5G))
+			return false;
+		prohibited_flags |= IEEE80211_CHAN_NO_160MHZ;
+		width = 160;
 		break;
 	default:
 		WARN_ON_ONCE(1);
@@ -985,15 +995,13 @@ bool cfg80211_chandef_usable(struct wiphy *wiphy,
 		prohibited_flags |= IEEE80211_CHAN_NO_OFDM;
 
 
-	if (!cfg80211_secondary_chans_ok(wiphy,
-					 ieee80211_chandef_to_khz(chandef),
+	if (!cfg80211_secondary_chans_ok(wiphy, chandef->center_freq1,
 					 width, prohibited_flags))
 		return false;
 
 	if (!chandef->center_freq2)
 		return true;
-	return cfg80211_secondary_chans_ok(wiphy,
-					   MHZ_TO_KHZ(chandef->center_freq2),
+	return cfg80211_secondary_chans_ok(wiphy, chandef->center_freq2,
 					   width, prohibited_flags);
 }
 EXPORT_SYMBOL(cfg80211_chandef_usable);

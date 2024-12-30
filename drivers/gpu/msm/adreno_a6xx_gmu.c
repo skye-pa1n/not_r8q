@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* soc/qcom/cmd-db.h needs types.h */
@@ -389,7 +388,6 @@ static int a6xx_gmu_start(struct kgsl_device *device)
 	gmu_core_regwrite(device, A6XX_GMU_CM3_SYSRESET, 0);
 	/* Make sure the request completes before continuing */
 	wmb();
-
 	if (timed_poll_check(device,
 			A6XX_GMU_CM3_FW_INIT_RESULT,
 			val, GMU_START_TIMEOUT, mask)) {
@@ -835,9 +833,6 @@ static bool a6xx_gmu_cx_is_on(struct kgsl_device *device)
 {
 	unsigned int val;
 
-	if (ADRENO_QUIRK(ADRENO_DEVICE(device), ADRENO_QUIRK_CX_GDSC))
-		return regulator_is_enabled(KGSL_GMU_DEVICE(device)->cx_gdsc);
-
 	gmu_core_regread(device, A6XX_GPU_CC_CX_GDSCR, &val);
 	return (val & BIT(31));
 }
@@ -1171,9 +1166,10 @@ static int a6xx_gmu_load_firmware(struct kgsl_device *device)
 
 	/* GMU fw already saved and verified so do nothing new */
 	if (!gmu->fw_image) {
-
-		if (a6xx_core->gmufw_name == NULL)
+		if (a6xx_core->gmufw_name == NULL) {
+			dev_err(&gmu->pdev->dev, "Invalid gmufw_name\n");
 			return -EINVAL;
+		}
 
 		ret = request_firmware(&gmu->fw_image, a6xx_core->gmufw_name,
 				device->dev);
@@ -1204,7 +1200,7 @@ static int a6xx_gmu_load_firmware(struct kgsl_device *device)
 		offset += sizeof(*blk);
 
 		if (blk->type == GMU_BLK_TYPE_PREALLOC_REQ ||
-			blk->type == GMU_BLK_TYPE_PREALLOC_PERSIST_REQ) {
+				blk->type == GMU_BLK_TYPE_PREALLOC_PERSIST_REQ) {
 			ret = gmu_prealloc_req(device, blk);
 
 			if (ret)

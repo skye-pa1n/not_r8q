@@ -30,6 +30,12 @@ struct drm_dmi_panel_orientation_data {
 	int orientation;
 };
 
+static const struct drm_dmi_panel_orientation_data acer_s1003 = {
+	.width = 800,
+	.height = 1280,
+	.orientation = DRM_MODE_PANEL_ORIENTATION_RIGHT_UP,
+};
+
 static const struct drm_dmi_panel_orientation_data asus_t100ha = {
 	.width = 800,
 	.height = 1280,
@@ -41,14 +47,6 @@ static const struct drm_dmi_panel_orientation_data gpd_micropc = {
 	.height = 1280,
 	.bios_dates = (const char * const []){ "04/26/2019",
 		NULL },
-	.orientation = DRM_MODE_PANEL_ORIENTATION_RIGHT_UP,
-};
-
-static const struct drm_dmi_panel_orientation_data gpd_onemix2s = {
-	.width = 1200,
-	.height = 1920,
-	.bios_dates = (const char * const []){ "05/21/2018", "10/26/2018",
-		"03/04/2019", NULL },
 	.orientation = DRM_MODE_PANEL_ORIENTATION_RIGHT_UP,
 };
 
@@ -102,43 +100,13 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Acer"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "One S1003"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
-	}, {	/* Acer Switch V 10 (SW5-017) */
-		.matches = {
-		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Acer"),
-		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "SW5-017"),
-		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
-	}, {	/* Anbernic Win600 */
-		.matches = {
-		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Anbernic"),
-		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Win600"),
-		},
-		.driver_data = (void *)&lcd720x1280_rightside_up,
+		.driver_data = (void *)&acer_s1003,
 	}, {	/* Asus T100HA */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "T100HAN"),
 		},
 		.driver_data = (void *)&asus_t100ha,
-	}, {	/* Asus T101HA */
-		.matches = {
-		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "T101HA"),
-		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
-	}, {	/* Asus T103HAF */
-		.matches = {
-		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "T103HAF"),
-		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
-	}, {	/* AYA NEO 2021 */
-		.matches = {
-		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYADEVICE"),
-		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "AYA NEO 2021"),
-		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
 	}, {	/* GPD MicroPC (generic strings, also match on bios date) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Default string"),
@@ -153,12 +121,6 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MicroPC"),
 		},
 		.driver_data = (void *)&lcd720x1280_rightside_up,
-	}, {	/* GPD Win Max */
-		.matches = {
-		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "GPD"),
-		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "G1619-01"),
-		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
 	}, {	/*
 		 * GPD Pocket, note that the the DMI data is less generic then
 		 * it seems, devices with a board-vendor of "AMI Corporation"
@@ -196,13 +158,6 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "TW891"),
 		},
 		.driver_data = (void *)&itworks_tw891,
-	}, {	/* KD Kurio Smart C15200 2-in-1 */
-		.matches = {
-		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "KD Interactive"),
-		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Kurio Smart"),
-		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "KDM960BCP"),
-		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
 	}, {	/*
 		 * Lenovo Ideapad Miix 310 laptop, only some production batches
 		 * have a portrait screen, the resolution checks makes the quirk
@@ -227,14 +182,6 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "LTH17"),
 		},
 		.driver_data = (void *)&lcd800x1280_rightside_up,
-	}, {	/* One Mix 2S (generic strings, also match on bios date) */
-		.matches = {
-		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Default string"),
-		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Default string"),
-		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Default string"),
-		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "Default string"),
-		},
-		.driver_data = (void *)&gpd_onemix2s,
 	},
 	{}
 };

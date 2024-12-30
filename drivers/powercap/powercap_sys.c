@@ -379,9 +379,9 @@ static void create_power_zone_common_attributes(
 					&dev_attr_max_energy_range_uj.attr;
 	if (power_zone->ops->get_energy_uj) {
 		if (power_zone->ops->reset_energy_uj)
-			dev_attr_energy_uj.attr.mode = S_IWUSR | S_IRUSR;
+			dev_attr_energy_uj.attr.mode = S_IWUSR | S_IRUGO;
 		else
-			dev_attr_energy_uj.attr.mode = S_IRUSR;
+			dev_attr_energy_uj.attr.mode = S_IRUGO;
 		power_zone->zone_dev_attrs[count++] =
 					&dev_attr_energy_uj.attr;
 	}
@@ -542,6 +542,9 @@ struct powercap_zone *powercap_register_zone(
 	power_zone->name = kstrdup(name, GFP_KERNEL);
 	if (!power_zone->name)
 		goto err_name_alloc;
+	dev_set_name(&power_zone->dev, "%s:%x",
+					dev_name(power_zone->dev.parent),
+					power_zone->id);
 	power_zone->constraints = kcalloc(nr_constraints,
 					  sizeof(*power_zone->constraints),
 					  GFP_KERNEL);
@@ -564,16 +567,9 @@ struct powercap_zone *powercap_register_zone(
 	power_zone->dev_attr_groups[0] = &power_zone->dev_zone_attr_group;
 	power_zone->dev_attr_groups[1] = NULL;
 	power_zone->dev.groups = power_zone->dev_attr_groups;
-	dev_set_name(&power_zone->dev, "%s:%x",
-					dev_name(power_zone->dev.parent),
-					power_zone->id);
 	result = device_register(&power_zone->dev);
-	if (result) {
-		put_device(&power_zone->dev);
-		mutex_unlock(&control_type->lock);
-
-		return ERR_PTR(result);
-	}
+	if (result)
+		goto err_dev_ret;
 
 	control_type->nr_zones++;
 	mutex_unlock(&control_type->lock);

@@ -47,7 +47,6 @@
 			reg = <0x0 0x0>;
 			enable-method = "psci";
 			next-level-cache = <&l2>;
-			clocks = <&scpi_dvfs 0>;
 		};
 
 		cpu1: cpu@1 {
@@ -56,7 +55,6 @@
 			reg = <0x0 0x1>;
 			enable-method = "psci";
 			next-level-cache = <&l2>;
-			clocks = <&scpi_dvfs 0>;
 		};
 
 		cpu2: cpu@2 {
@@ -65,7 +63,6 @@
 			reg = <0x0 0x2>;
 			enable-method = "psci";
 			next-level-cache = <&l2>;
-			clocks = <&scpi_dvfs 0>;
 		};
 
 		cpu3: cpu@3 {
@@ -74,7 +71,6 @@
 			reg = <0x0 0x3>;
 			enable-method = "psci";
 			next-level-cache = <&l2>;
-			clocks = <&scpi_dvfs 0>;
 		};
 
 		l2: l2-cache0 {
@@ -155,28 +151,6 @@
 		#clock-cells = <0>;
 	};
 
-	scpi {
-		compatible = "arm,scpi-pre-1.0";
-		mboxes = <&mailbox 1 &mailbox 2>;
-		shmem = <&cpu_scp_lpri &cpu_scp_hpri>;
-
-		scpi_clocks: clocks {
-			compatible = "arm,scpi-clocks";
-
-			scpi_dvfs: clocks-0 {
-				compatible = "arm,scpi-dvfs-clocks";
-				#clock-cells = <1>;
-				clock-indices = <0>;
-				clock-output-names = "vcpu";
-			};
-		};
-
-		scpi_sensors: sensors {
-			compatible = "amlogic,meson-gxbb-scpi-sensors", "arm,scpi-sensors";
-			#thermal-sensor-cells = <1>;
-		};
-	};
-
 	soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
@@ -193,7 +167,7 @@
 			sd_emmc_b: sd@5000 {
 				compatible = "amlogic,meson-axg-mmc";
 				reg = <0x0 0x5000 0x0 0x800>;
-				interrupts = <GIC_SPI 217 IRQ_TYPE_LEVEL_HIGH>;
+				interrupts = <GIC_SPI 217 IRQ_TYPE_EDGE_RISING>;
 				status = "disabled";
 				clocks = <&clkc CLKID_SD_EMMC_B>,
 					<&clkc CLKID_SD_EMMC_B_CLK0>,
@@ -205,7 +179,7 @@
 			sd_emmc_c: mmc@7000 {
 				compatible = "amlogic,meson-axg-mmc";
 				reg = <0x0 0x7000 0x0 0x800>;
-				interrupts = <GIC_SPI 218 IRQ_TYPE_LEVEL_HIGH>;
+				interrupts = <GIC_SPI 218 IRQ_TYPE_EDGE_RISING>;
 				status = "disabled";
 				clocks = <&clkc CLKID_SD_EMMC_C>,
 					<&clkc CLKID_SD_EMMC_C_CLK0>,

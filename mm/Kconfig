@@ -127,69 +127,6 @@ config SPARSEMEM_VMEMMAP
 	 pfn_to_page and page_to_pfn operations.  This is the most
 	 efficient option when sufficient kernel resources are available.
 
-config ANON_MIN_KBYTES
-	int "Default value for vm.anon_min_kbytes"
-	depends on SYSCTL
-	range 0 4294967295
-	default 0
-	help
-	  This option sets the default value for vm.anon_min_kbytes sysctl knob.
-
-	  The vm.anon_min_kbytes sysctl knob provides *hard* protection of
-	  anonymous pages. The anonymous pages on the current node won't be
-	  reclaimed under any conditions when their amount is below
-	  vm.anon_min_kbytes. This knob may be used to prevent excessive swap
-	  thrashing when anonymous memory is low (for example, when memory is
-	  going to be overfilled by compressed data of zram module).
-
-	  Setting this value too high (close to MemTotal) can result in
-	  inability to swap and can lead to early OOM under memory pressure.
-
-config CLEAN_LOW_KBYTES
-	int "Default value for vm.clean_low_kbytes"
-	depends on SYSCTL
-	range 0 4294967295
-	default 0
-	help
-	  This option sets the default value for vm.clean_low_kbytes sysctl knob.
-
-	  The vm.clean_low_kbytes sysctl knob provides *best-effort*
-	  protection of clean file pages. The file pages on the current node
-	  won't be reclaimed under memory pressure when the amount of clean file
-	  pages is below vm.clean_low_kbytes *unless* we threaten to OOM.
-	  Protection of clean file pages using this knob may be used when
-	  swapping is still possible to
-	    - prevent disk I/O thrashing under memory pressure;
-	    - improve performance in disk cache-bound tasks under memory
-	      pressure.
-
-	  Setting it to a high value may result in a early eviction of anonymous
-	  pages into the swap space by attempting to hold the protected amount
-	  of clean file pages in memory.
-
-config CLEAN_MIN_KBYTES
-	int "Default value for vm.clean_min_kbytes"
-	depends on SYSCTL
-	range 0 4294967295
-	default 0
-	help
-	  This option sets the default value for vm.clean_min_kbytes sysctl knob.
-
-	  The vm.clean_min_kbytes sysctl knob provides *hard* protection of
-	  clean file pages. The file pages on the current node won't be
-	  reclaimed under memory pressure when the amount of clean file pages is
-	  below vm.clean_min_kbytes. Hard protection of clean file pages using
-	  this knob may be used to
-	    - prevent disk I/O thrashing under memory pressure even with no free
-	      swap space;
-	    - improve performance in disk cache-bound tasks under memory
-	      pressure;
-	    - avoid high latency and prevent livelock in near-OOM conditions.
-
-	  Setting it to a high value may result in a early out-of-memory condition
-	  due to the inability to reclaim the protected amount of clean file pages
-	  when other types of pages cannot be reclaimed.
-
 config HAVE_MEMBLOCK
 	bool
 
@@ -390,33 +327,6 @@ config KSM
 	  See Documentation/vm/ksm.rst for more information: KSM is inactive
 	  until a program has madvised that an area is MADV_MERGEABLE, and
 	  root has set /sys/kernel/mm/ksm/run to 1 (if CONFIG_SYSFS is set).
-
-choice
-	prompt "Choose UKSM/KSM strategy"
-	default UKSM
-	depends on KSM
-	help
-	  This option allows to select a UKSM/KSM stragety.
-
-config UKSM
-	bool "Ultra-KSM for page merging"
-	depends on KSM
-	help
-	UKSM is inspired by the Linux kernel project \u2014 KSM(Kernel Same
-	page Merging), but with a fundamentally rewritten core algorithm. With
-	an advanced algorithm, UKSM now can transparently scans all anonymously
-	mapped user space applications with an significantly improved scan speed
-	and CPU efficiency. Since KVM is friendly to KSM, KVM can also benefit from
-	UKSM. Now UKSM has its first stable release and first real world enterprise user.
-	For more information, please goto its project page.
-	(www.kerneldedup.org)
-
-config KSM_LEGACY
-	bool "Legacy KSM implementation"
-	depends on KSM
-	help
-	The legacy KSM implementation from Red Hat.
-endchoice
 
 config DEFAULT_MMAP_MIN_ADDR
         int "Low address space to protect from user allocation"
@@ -742,21 +652,6 @@ config VMAP_LAZY_PURGING_FACTOR
 	  single attempt. For 32-bit in order to reduce fragmentation
 	  of vmalloc space, we decrease the default value to "8".
 
-config MM_EVENT_STAT
-	bool "Track per-process MM event"
-	depends on MMU
-	help
-	  This option enables per-process mm event stat(e.g., fault, reclaim,
-	  compaction and so on ) with some interval(Default is 0.5sec).
-	  Admin can see the stat from trace file via debugfs(e.g.,
-	  /sys/kernel/debug/tracing/trace)
-
-	  It includes max/average memory allocation latency for the interval
-	  as well as event count so that admin can see what happens in VM side
-	  (how many each event happens and how much processes spent time for
-	  the MM event). If it's too large, that would be not good situation.
-
-	  System can dump the trace into bugreport when user allows the dump.
 
 config GENERIC_EARLY_IOREMAP
 	bool
@@ -1085,13 +980,3 @@ config HIGHATOMIC_PAGEBLOCKS
 	  This value limits max number of highatomic pageblocks.
 
 source "mm/sec_mm/Kconfig"
-
-config FORCE_ALLOC_FROM_DMA_ZONE
-	bool "Force certain memory allocators to always return ZONE_DMA32 memory"
-	depends on ZONE_DMA32
-	help
-	  Ensure certain memory allocators always return memory from ZONE_DMA32.
-	  This option helps ensure that clients who require ZONE_DMA32 memory are
-	  always using ZONE_DMA32 memory.
-
-	  If unsure, say "n".

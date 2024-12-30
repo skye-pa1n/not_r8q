@@ -190,8 +190,6 @@ static void smsusb_stop_streaming(struct smsusb_device_t *dev)
 
 	for (i = 0; i < MAX_URBS; i++) {
 		usb_kill_urb(&dev->surbs[i].urb);
-		if (dev->surbs[i].wq.func)
-			cancel_work_sync(&dev->surbs[i].wq);
 
 		if (dev->surbs[i].cb) {
 			smscore_putbuffer(dev->coredev, dev->surbs[i].cb);
@@ -467,7 +465,12 @@ static int smsusb_init_device(struct usb_interface *intf, int board_id)
 	rc = smscore_register_device(&params, &dev->coredev, 0, mdev);
 	if (rc < 0) {
 		pr_err("smscore_register_device(...) failed, rc %d\n", rc);
-		goto err_unregister_device;
+		smsusb_term_device(intf);
+#ifdef CONFIG_MEDIA_CONTROLLER_DVB
+		media_device_unregister(mdev);
+#endif
+		kfree(mdev);
+		return rc;
 	}
 
 	smscore_set_board_id(dev->coredev, board_id);
@@ -484,7 +487,8 @@ static int smsusb_init_device(struct usb_interface *intf, int board_id)
 	rc = smsusb_start_streaming(dev);
 	if (rc < 0) {
 		pr_err("smsusb_start_streaming(...) failed\n");
-		goto err_unregister_device;
+		smsusb_term_device(intf);
+		return rc;
 	}
 
 	dev->state = SMSUSB_ACTIVE;
@@ -492,19 +496,12 @@ static int smsusb_init_device(struct usb_interface *intf, int board_id)
 	rc = smscore_start_device(dev->coredev);
 	if (rc < 0) {
 		pr_err("smscore_start_device(...) failed\n");
-		goto err_unregister_device;
+		smsusb_term_device(intf);
+		return rc;
 	}
 
 	pr_debug("device 0x%p created\n", dev);
 
-	return rc;
-
-err_unregister_device:
-	smsusb_term_device(intf);
-#ifdef CONFIG_MEDIA_CONTROLLER_DVB
-	media_device_unregister(mdev);
-#endif
-	kfree(mdev);
 	return rc;
 }
 

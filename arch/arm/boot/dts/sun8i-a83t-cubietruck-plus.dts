@@ -168,7 +168,7 @@
 	pinctrl-0 = <&emac_rgmii_pins>;
 	phy-supply = <&reg_dldo4>;
 	phy-handle = <&rgmii_phy>;
-	phy-mode = "rgmii-id";
+	phy-mode = "rgmii";
 	status = "okay";
 };
 

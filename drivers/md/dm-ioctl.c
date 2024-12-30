@@ -17,7 +17,6 @@
 #include <linux/dm-ioctl.h>
 #include <linux/hdreg.h>
 #include <linux/compat.h>
-#include <linux/nospec.h>
 
 #include <linux/uaccess.h>
 
@@ -530,7 +529,7 @@ static int list_devices(struct file *filp, struct dm_ioctl *param, size_t param_
 	 * Grab our output buffer.
 	 */
 	nl = orig_nl = get_result_buffer(param, param_size, &len);
-	if (len < needed || len < sizeof(nl->dev)) {
+	if (len < needed) {
 		param->flags |= DM_BUFFER_FULL_FLAG;
 		goto out;
 	}
@@ -573,7 +572,7 @@ static void list_version_get_needed(struct target_type *tt, void *needed_param)
     size_t *needed = needed_param;
 
     *needed += sizeof(struct dm_target_versions);
-    *needed += strlen(tt->name) + 1;
+    *needed += strlen(tt->name);
     *needed += ALIGN_MASK;
 }
 
@@ -628,7 +627,7 @@ static int list_versions(struct file *filp, struct dm_ioctl *param, size_t param
 	iter_info.old_vers = NULL;
 	iter_info.vers = vers;
 	iter_info.flags = 0;
-	iter_info.end = (char *)vers + needed;
+	iter_info.end = (char *)vers+len;
 
 	/*
 	 * Now loop through filling out the names & versions.
@@ -1039,26 +1038,8 @@ static int do_resume(struct dm_ioctl *param)
 			suspend_flags &= ~DM_SUSPEND_LOCKFS_FLAG;
 		if (param->flags & DM_NOFLUSH_FLAG)
 			suspend_flags |= DM_SUSPEND_NOFLUSH_FLAG;
-		if (!dm_suspended_md(md)) {
-			r = dm_suspend(md, suspend_flags);
-			if (r) {
-				down_write(&_hash_lock);
-				hc = dm_get_mdptr(md);
-				if (hc && !hc->new_map) {
-					hc->new_map = new_map;
-					new_map = NULL;
-				} else {
-					r = -ENXIO;
-				}
-				up_write(&_hash_lock);
-				if (new_map) {
-					dm_sync_table(md);
-					dm_table_destroy(new_map);
-				}
-				dm_put(md);
-				return r;
-			}
-		}
+		if (!dm_suspended_md(md))
+			dm_suspend(md, suspend_flags);
 
 		old_map = dm_swap_table(md, new_map);
 		if (IS_ERR(old_map)) {
@@ -1428,12 +1409,11 @@ static int table_clear(struct file *filp, struct dm_ioctl *param, size_t param_s
 		hc->new_map = NULL;
 	}
 
+	param->flags &= ~DM_INACTIVE_PRESENT_FLAG;
+
+	__dev_status(hc->md, param);
 	md = hc->md;
 	up_write(&_hash_lock);
-
-	param->flags &= ~DM_INACTIVE_PRESENT_FLAG;
-	__dev_status(md, param);
-
 	if (old_map) {
 		dm_sync_table(md);
 		dm_table_destroy(old_map);
@@ -1595,7 +1575,6 @@ static int target_message(struct file *filp, struct dm_ioctl *param, size_t para
 
 	if (!argc) {
 		DMWARN("Empty message received.");
-		r = -EINVAL;
 		goto out_argv;
 	}
 
@@ -1690,7 +1669,6 @@ static ioctl_fn lookup_ioctl(unsigned int cmd, int *ioctl_flags)
 	if (unlikely(cmd >= ARRAY_SIZE(_ioctls)))
 		return NULL;
 
-	cmd = array_index_nospec(cmd, ARRAY_SIZE(_ioctls));
 	*ioctl_flags = _ioctls[cmd].flags;
 	return _ioctls[cmd].fn;
 }
@@ -1752,8 +1730,7 @@ static int copy_params(struct dm_ioctl __user *user, struct dm_ioctl *param_kern
 	if (copy_from_user(param_kernel, user, minimum_data_size))
 		return -EFAULT;
 
-	if (unlikely(param_kernel->data_size < minimum_data_size) ||
-	    unlikely(param_kernel->data_size > DM_MAX_TARGETS * DM_MAX_TARGET_PARAMS))
+	if (param_kernel->data_size < minimum_data_size)
 		return -EINVAL;
 
 	secure_data = param_kernel->flags & DM_SECURE_DATA_FLAG;
@@ -1841,7 +1818,7 @@ static int ctl_ioctl(struct file *file, uint command, struct dm_ioctl __user *us
 	int ioctl_flags;
 	int param_flags;
 	unsigned int cmd;
-	struct dm_ioctl *param;
+	struct dm_ioctl *uninitialized_var(param);
 	ioctl_fn fn = NULL;
 	size_t input_param_size;
 	struct dm_ioctl param_kernel;

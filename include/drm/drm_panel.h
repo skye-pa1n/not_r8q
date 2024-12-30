@@ -118,12 +118,6 @@ struct drm_panel {
 	const struct drm_panel_funcs *funcs;
 
 	struct list_head list;
-
-	/**
-	 * @nh:
-	 *
-	 * panel notifier list head
-	 */
 	struct blocking_notifier_head nh;
 };
 

@@ -1,6 +1,6 @@
 config BCM_DHD_WLAN
 	bool "Broadcom devices"
-	default n
+	default y
 	---help---
 	  If you have a wireless card belonging to this class, say Y.
 

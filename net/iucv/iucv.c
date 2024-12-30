@@ -119,7 +119,7 @@ struct iucv_irq_data {
 	u16 ippathid;
 	u8  ipflags1;
 	u8  iptype;
-	u32 res2[9];
+	u32 res2[8];
 };
 
 struct iucv_irq_list {
@@ -192,7 +192,7 @@ static char iucv_error_pathid[16] = "INVALID PATHID";
 static LIST_HEAD(iucv_handler_list);
 
 /*
- * iucv_path_table: array of pointers to iucv_path structures.
+ * iucv_path_table: an array of iucv_path structures.
  */
 static struct iucv_path **iucv_path_table;
 static unsigned long iucv_max_pathid;
@@ -578,7 +578,7 @@ static void iucv_setmask_mp(void)
  */
 static void iucv_setmask_up(void)
 {
-	static cpumask_t cpumask;
+	cpumask_t cpumask;
 	int cpu;
 
 	/* Disable all cpu but the first in cpu_irq_cpumask. */
@@ -603,7 +603,7 @@ static int iucv_enable(void)
 
 	get_online_cpus();
 	rc = -ENOMEM;
-	alloc_size = iucv_max_pathid * sizeof(*iucv_path_table);
+	alloc_size = iucv_max_pathid * sizeof(struct iucv_path);
 	iucv_path_table = kzalloc(alloc_size, GFP_KERNEL);
 	if (!iucv_path_table)
 		goto out;
@@ -686,33 +686,23 @@ static int iucv_cpu_online(unsigned int cpu)
 
 static int iucv_cpu_down_prep(unsigned int cpu)
 {
-	cpumask_var_t cpumask;
-	int ret = 0;
+	cpumask_t cpumask;
 
 	if (!iucv_path_table)
 		return 0;
 
-	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
-		return -ENOMEM;
-
-	cpumask_copy(cpumask, &iucv_buffer_cpumask);
-	cpumask_clear_cpu(cpu, cpumask);
-	if (cpumask_empty(cpumask)) {
+	cpumask_copy(&cpumask, &iucv_buffer_cpumask);
+	cpumask_clear_cpu(cpu, &cpumask);
+	if (cpumask_empty(&cpumask))
 		/* Can't offline last IUCV enabled cpu. */
-		ret = -EINVAL;
-		goto __free_cpumask;
-	}
+		return -EINVAL;
 
 	iucv_retrieve_cpu(NULL);
 	if (!cpumask_empty(&iucv_irq_cpumask))
-		goto __free_cpumask;
-
+		return 0;
 	smp_call_function_single(cpumask_first(&iucv_buffer_cpumask),
 				 iucv_allow_cpu, NULL, 1);
-
-__free_cpumask:
-	free_cpumask_var(cpumask);
-	return ret;
+	return 0;
 }
 
 /**
@@ -1149,7 +1139,8 @@ static int iucv_message_receive_iprmdata(struct iucv_path *path,
 		size = (size < 8) ? size : 8;
 		for (array = buffer; size > 0; array++) {
 			copy = min_t(size_t, size, array->length);
-			memcpy(phys_to_virt(array->address), rmmsg, copy);
+			memcpy((u8 *)(addr_t) array->address,
+				rmmsg, copy);
 			rmmsg += copy;
 			size -= copy;
 		}

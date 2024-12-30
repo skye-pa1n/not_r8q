@@ -29,7 +29,7 @@
 #include "rc-core-priv.h"
 #include <uapi/linux/lirc.h>
 
-#define LIRCBUF_SIZE	1024
+#define LIRCBUF_SIZE	256
 
 static dev_t lirc_base_dev;
 
@@ -302,11 +302,7 @@ static ssize_t ir_lirc_transmit_ir(struct file *file, const char __user *buf,
 		if (ret < 0)
 			goto out_kfree_raw;
 
-		/* drop trailing space */
-		if (!(ret % 2))
-			count = ret - 1;
-		else
-			count = ret;
+		count = ret;
 
 		txbuf = kmalloc_array(count, sizeof(unsigned int), GFP_KERNEL);
 		if (!txbuf) {

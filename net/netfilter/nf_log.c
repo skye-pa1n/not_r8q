@@ -202,12 +202,11 @@ void nf_logger_put(int pf, enum nf_log_type type)
 		return;
 	}
 
+	BUG_ON(loggers[pf][type] == NULL);
+
 	rcu_read_lock();
 	logger = rcu_dereference(loggers[pf][type]);
-	if (!logger)
-		WARN_ON_ONCE(1);
-	else
-		module_put(logger->me);
+	module_put(logger->me);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(nf_logger_put);

@@ -632,27 +632,6 @@ config DEV_RIL_BRIDGE
 	bool "Support a bridge between device and RIL"
 	default n
 
-config KINECTICS_XR_NORDIC
-	tristate "Nordic Misc driver support in XR Reference devices"
-	help
-	  This driver supports Nordic Chip in XR Reference devices.
-	  This driver interfaces with SoC to Nordic chip over SPI and contains
-	  code to power up the Nordic chip and initializes SPI interface. Also,
-	  this also parses the gpios and interrupts from device tree and sets
-	  the gpios and interrupt handler for handling the interrupt.
-	  
-config BATTERY_SAVER
-	bool "Battery saver mode for kernelspace"
-	default y
-	help
-	  This driver creates a sysfs toggle that can be enabled when
-	  battery saver mode is activated in userspace, and provides
-	  functions to check the status of battery saver and to activate
-	  it from anywhere in the kernel.
-	  The former can be used to disable features that may otherwise
-	  drain battery faster, such as CPU and DDR boosting.
-	  If in doubt, say Y.
-	  
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
@@ -668,7 +647,6 @@ source "drivers/misc/cxl/Kconfig"
 source "drivers/misc/ocxl/Kconfig"
 source "drivers/misc/cardreader/Kconfig"
 source "drivers/misc/fpr_FingerprintCard/Kconfig"
-source "drivers/misc/qrc/Kconfig"
 endmenu
 
 config OKL4_USER_VIPC

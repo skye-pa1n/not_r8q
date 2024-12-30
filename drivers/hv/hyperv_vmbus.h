@@ -26,7 +26,6 @@
 #define _HYPERV_VMBUS_H
 
 #include <linux/list.h>
-#include <linux/bitops.h>
 #include <asm/sync_bitops.h>
 #include <asm/hyperv-tlfs.h>
 #include <linux/atomic.h>
@@ -391,8 +390,6 @@ int vmbus_device_register(struct hv_device *child_device_obj);
 void vmbus_device_unregister(struct hv_device *device_obj);
 int vmbus_add_channel_kobj(struct hv_device *device_obj,
 			   struct vmbus_channel *channel);
-
-void vmbus_remove_channel_attr_group(struct vmbus_channel *channel);
 
 struct vmbus_channel *relid2channel(u32 relid);
 

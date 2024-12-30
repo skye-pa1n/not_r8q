@@ -146,21 +146,6 @@ static int btqcomsmd_setup(struct hci_dev *hdev)
 	return 0;
 }
 
-static int btqcomsmd_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
-{
-	int ret;
-
-	ret = qca_set_bdaddr_rome(hdev, bdaddr);
-	if (ret)
-		return ret;
-
-	/* The firmware stops responding for a while after setting the bdaddr,
-	 * causing timeouts for subsequent commands. Sleep a bit to avoid this.
-	 */
-	usleep_range(1000, 10000);
-	return 0;
-}
-
 static int btqcomsmd_probe(struct platform_device *pdev)
 {
 	struct btqcomsmd *btq;
@@ -181,10 +166,8 @@ static int btqcomsmd_probe(struct platform_device *pdev)
 
 	btq->cmd_channel = qcom_wcnss_open_channel(wcnss, "APPS_RIVA_BT_CMD",
 						   btqcomsmd_cmd_callback, btq);
-	if (IS_ERR(btq->cmd_channel)) {
-		ret = PTR_ERR(btq->cmd_channel);
-		goto destroy_acl_channel;
-	}
+	if (IS_ERR(btq->cmd_channel))
+		return PTR_ERR(btq->cmd_channel);
 
 	/* The local-bd-address property is usually injected by the
 	 * bootloader which has access to the allocated BD address.
@@ -196,10 +179,8 @@ static int btqcomsmd_probe(struct platform_device *pdev)
 	}
 
 	hdev = hci_alloc_dev();
-	if (!hdev) {
-		ret = -ENOMEM;
-		goto destroy_cmd_channel;
-	}
+	if (!hdev)
+		return -ENOMEM;
 
 	hci_set_drvdata(hdev, btq);
 	btq->hdev = hdev;
@@ -210,24 +191,17 @@ static int btqcomsmd_probe(struct platform_device *pdev)
 	hdev->close = btqcomsmd_close;
 	hdev->send = btqcomsmd_send;
 	hdev->setup = btqcomsmd_setup;
-	hdev->set_bdaddr = btqcomsmd_set_bdaddr;
+	hdev->set_bdaddr = qca_set_bdaddr_rome;
 
 	ret = hci_register_dev(hdev);
-	if (ret < 0)
-		goto hci_free_dev;
+	if (ret < 0) {
+		hci_free_dev(hdev);
+		return ret;
+	}
 
 	platform_set_drvdata(pdev, btq);
 
 	return 0;
-
-hci_free_dev:
-	hci_free_dev(hdev);
-destroy_cmd_channel:
-	rpmsg_destroy_ept(btq->cmd_channel);
-destroy_acl_channel:
-	rpmsg_destroy_ept(btq->acl_channel);
-
-	return ret;
 }
 
 static int btqcomsmd_remove(struct platform_device *pdev)

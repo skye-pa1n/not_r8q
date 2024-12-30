@@ -27,7 +27,6 @@
 #include <linux/mmc/slot-gpio.h>
 
 #include "core.h"
-#include "crypto.h"
 #include "host.h"
 #include "slot-gpio.h"
 #include "pwrseq.h"
@@ -92,12 +91,13 @@ void mmc_retune_enable(struct mmc_host *host)
 
 /*
  * Pause re-tuning for a small set of operations.  The pause begins after the
- * next command.
+ * next command and after first doing re-tuning.
  */
 void mmc_retune_pause(struct mmc_host *host)
 {
 	if (!host->retune_paused) {
 		host->retune_paused = 1;
+		mmc_retune_needed(host);
 		mmc_retune_hold(host);
 	}
 }
@@ -170,16 +170,6 @@ int mmc_retune(struct mmc_host *host)
 		return_to_hs400 = true;
 	}
 
-	/*
-	 * Timing should be adjusted to the HS400 target
-	 * operation frequency for tuning process.
-	 * Similar handling is also done in mmc_hs200_tuning()
-	 * This is handled properly in sdhci-msm.c from msm-5.4 onwards.
-	 */
-	if (host->card->mmc_avail_type & EXT_CSD_CARD_TYPE_HS400 &&
-		host->ios.bus_width == MMC_BUS_WIDTH_8)
-		mmc_set_timing(host, MMC_TIMING_MMC_HS400);
-
 	err = mmc_execute_tuning(host->card);
 	if (err)
 		goto out;
@@ -190,34 +180,6 @@ out:
 	host->doing_retune = 0;
 
 	return err;
-}
-
-/**
- *	mmc_host_may_gate_card - check if this card may be gated
- *	@card: card to check.
- */
-bool mmc_host_may_gate_card(struct mmc_card *card)
-{
-	/* If there is no card we may gate it */
-	if (!card)
-		return true;
-
-	/*
-	 * SDIO3.0 card allows the clock to be gated off so check if
-	 * that is the case or not
-	 */
-	if (mmc_card_sdio(card) && card->cccr.async_intr_sup)
-		return true;
-
-	/*
-	 * Don't gate SDIO cards! These need to be clocked at all times
-	 * since they may be independent systems generating interrupts
-	 * and other events. The clock requests counter from the core will
-	 * go down to zero since the core does not need it, but we will not
-	 * gate the clock, because there is somebody out there that may still
-	 * be using it.
-	 */
-	return !(card->quirks & MMC_QUIRK_BROKEN_CLK_GATING);
 }
 
 static void mmc_retune_timer(struct timer_list *t)
@@ -629,16 +591,6 @@ static struct attribute_group clk_scaling_attr_grp = {
 	.attrs = clk_scaling_attrs,
 };
 
-static int mmc_validate_host_caps(struct mmc_host *host)
-{
-	if (host->caps & MMC_CAP_SDIO_IRQ && !host->ops->enable_sdio_irq) {
-		dev_warn(host->parent, "missing ->enable_sdio_irq() ops\n");
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 /**
  *	mmc_add_host - initialise host hardware
  *	@host: mmc host
@@ -651,9 +603,8 @@ int mmc_add_host(struct mmc_host *host)
 {
 	int err;
 
-	err = mmc_validate_host_caps(host);
-	if (err)
-		return err;
+	WARN_ON((host->caps & MMC_CAP_SDIO_IRQ) &&
+		!host->ops->enable_sdio_irq);
 
 	err = device_add(&host->class_dev);
 	if (err)
@@ -730,8 +681,6 @@ EXPORT_SYMBOL(mmc_remove_host);
  */
 void mmc_free_host(struct mmc_host *host)
 {
-	cancel_delayed_work_sync(&host->detect);
-	mmc_crypto_free_host(host);
 	mmc_pwrseq_free(host);
 	wake_lock_destroy(&host->detect_wake_lock);
 	put_device(&host->class_dev);

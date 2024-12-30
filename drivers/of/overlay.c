@@ -170,7 +170,9 @@ static int overlay_notify(struct overlay_changeset *ovcs,
 
 		ret = blocking_notifier_call_chain(&overlay_notify_chain,
 						   action, &nd);
-		if (notifier_to_errno(ret)) {
+		if (ret == NOTIFY_OK || ret == NOTIFY_STOP)
+			return 0;
+		if (ret) {
 			ret = notifier_to_errno(ret);
 			pr_err("overlay changeset %s notifier error %d, target: %pOF\n",
 			       of_overlay_action_name[action], ret, nd.target);
@@ -258,8 +260,6 @@ static struct property *dup_and_fixup_symbol_prop(
 	strcpy(new_prop->value + target_path_len, path_tail);
 
 	of_property_set_flag(new_prop, OF_DYNAMIC);
-
-	kfree(target_path);
 
 	return new_prop;
 

@@ -4280,9 +4280,7 @@ enum wmi_vr_profile {
 struct wmi_set_vr_profile_cmd {
 	/* enum wmi_vr_profile */
 	u8 profile;
-	/* Set to 0 to use FW default */
-	u8 max_mcs;
-	u8 reserved[2];
+	u8 reserved[3];
 } __packed;
 
 /* WMI_SET_VR_PROFILE_EVENTID */

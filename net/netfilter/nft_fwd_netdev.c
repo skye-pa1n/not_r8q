@@ -20,7 +20,7 @@
 #include <net/ip.h>
 
 struct nft_fwd_netdev {
-	u8	sreg_dev;
+	enum nft_registers	sreg_dev:8;
 };
 
 static void nft_fwd_netdev_eval(const struct nft_expr *expr,
@@ -49,8 +49,8 @@ static int nft_fwd_netdev_init(const struct nft_ctx *ctx,
 	if (tb[NFTA_FWD_SREG_DEV] == NULL)
 		return -EINVAL;
 
-	return nft_parse_register_load(tb[NFTA_FWD_SREG_DEV], &priv->sreg_dev,
-				       sizeof(int));
+	priv->sreg_dev = nft_parse_register(tb[NFTA_FWD_SREG_DEV]);
+	return nft_validate_register_load(priv->sreg_dev, sizeof(int));
 }
 
 static const struct nft_expr_ops nft_fwd_netdev_ingress_ops;
@@ -69,8 +69,8 @@ nla_put_failure:
 }
 
 struct nft_fwd_neigh {
-	u8			sreg_dev;
-	u8			sreg_addr;
+	enum nft_registers	sreg_dev:8;
+	enum nft_registers	sreg_addr:8;
 	u8			nfproto;
 };
 
@@ -129,7 +129,6 @@ static void nft_fwd_neigh_eval(const struct nft_expr *expr,
 		return;
 
 	skb->dev = dev;
-	skb->tstamp = 0;
 	neigh_xmit(neigh_table, dev, addr, skb);
 out:
 	regs->verdict.code = verdict;
@@ -148,6 +147,8 @@ static int nft_fwd_neigh_init(const struct nft_ctx *ctx,
 	    !tb[NFTA_FWD_NFPROTO])
 		return -EINVAL;
 
+	priv->sreg_dev = nft_parse_register(tb[NFTA_FWD_SREG_DEV]);
+	priv->sreg_addr = nft_parse_register(tb[NFTA_FWD_SREG_ADDR]);
 	priv->nfproto = ntohl(nla_get_be32(tb[NFTA_FWD_NFPROTO]));
 
 	switch (priv->nfproto) {
@@ -161,13 +162,11 @@ static int nft_fwd_neigh_init(const struct nft_ctx *ctx,
 		return -EOPNOTSUPP;
 	}
 
-	err = nft_parse_register_load(tb[NFTA_FWD_SREG_DEV], &priv->sreg_dev,
-				      sizeof(int));
+	err = nft_validate_register_load(priv->sreg_dev, sizeof(int));
 	if (err < 0)
 		return err;
 
-	return nft_parse_register_load(tb[NFTA_FWD_SREG_ADDR], &priv->sreg_addr,
-				       addr_len);
+	return nft_validate_register_load(priv->sreg_addr, addr_len);
 }
 
 static const struct nft_expr_ops nft_fwd_netdev_ingress_ops;
@@ -187,13 +186,6 @@ nla_put_failure:
 	return -1;
 }
 
-static int nft_fwd_validate(const struct nft_ctx *ctx,
-			    const struct nft_expr *expr,
-			    const struct nft_data **data)
-{
-	return nft_chain_validate_hooks(ctx->chain, (1 << NF_NETDEV_INGRESS));
-}
-
 static struct nft_expr_type nft_fwd_netdev_type;
 static const struct nft_expr_ops nft_fwd_neigh_netdev_ops = {
 	.type		= &nft_fwd_netdev_type,
@@ -201,7 +193,6 @@ static const struct nft_expr_ops nft_fwd_neigh_netdev_ops = {
 	.eval		= nft_fwd_neigh_eval,
 	.init		= nft_fwd_neigh_init,
 	.dump		= nft_fwd_neigh_dump,
-	.validate	= nft_fwd_validate,
 };
 
 static const struct nft_expr_ops nft_fwd_netdev_ops = {
@@ -210,7 +201,6 @@ static const struct nft_expr_ops nft_fwd_netdev_ops = {
 	.eval		= nft_fwd_netdev_eval,
 	.init		= nft_fwd_netdev_init,
 	.dump		= nft_fwd_netdev_dump,
-	.validate	= nft_fwd_validate,
 };
 
 static const struct nft_expr_ops *

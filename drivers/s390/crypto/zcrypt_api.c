@@ -158,7 +158,6 @@ static inline struct zcrypt_queue *zcrypt_pick_queue(struct zcrypt_card *zc,
 {
 	if (!zq || !try_module_get(zq->queue->ap_dev.drv->driver.owner))
 		return NULL;
-	zcrypt_card_get(zc);
 	zcrypt_queue_get(zq);
 	get_device(&zq->queue->ap_dev.device);
 	atomic_add(weight, &zc->load);
@@ -178,7 +177,6 @@ static inline void zcrypt_drop_queue(struct zcrypt_card *zc,
 	atomic_sub(weight, &zq->load);
 	put_device(&zq->queue->ap_dev.device);
 	zcrypt_queue_put(zq);
-	zcrypt_card_put(zc);
 	module_put(mod);
 }
 
@@ -917,8 +915,7 @@ static long zcrypt_unlocked_ioctl(struct file *filp, unsigned int cmd,
 		if (!reqcnt)
 			return -ENOMEM;
 		zcrypt_perdev_reqcnt(reqcnt, AP_DEVICES);
-		if (copy_to_user((int __user *) arg, reqcnt,
-				 sizeof(u32) * AP_DEVICES))
+		if (copy_to_user((int __user *) arg, reqcnt, sizeof(reqcnt)))
 			rc = -EFAULT;
 		kfree(reqcnt);
 		return rc;

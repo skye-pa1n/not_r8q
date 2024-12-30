@@ -400,8 +400,6 @@ void rsi_core_xmit(struct rsi_common *common, struct sk_buff *skb)
 
 	info = IEEE80211_SKB_CB(skb);
 	tx_params = (struct skb_info *)info->driver_data;
-	/* info->driver_data and info->control part of union so make copy */
-	tx_params->have_key = !!info->control.hw_key;
 	wh = (struct ieee80211_hdr *)&skb->data[0];
 	tx_params->sta_id = 0;
 
@@ -466,9 +464,7 @@ void rsi_core_xmit(struct rsi_common *common, struct sk_buff *skb)
 							      tid, 0);
 			}
 		}
-
-		if (IEEE80211_SKB_CB(skb)->control.flags &
-		    IEEE80211_TX_CTRL_PORT_CTRL_PROTO) {
+		if (skb->protocol == cpu_to_be16(ETH_P_PAE)) {
 			q_num = MGMT_SOFT_Q;
 			skb->priority = q_num;
 		}

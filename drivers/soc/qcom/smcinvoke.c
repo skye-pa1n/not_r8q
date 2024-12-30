@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "smcinvoke: %s: " fmt, __func__
@@ -559,6 +558,15 @@ static struct smcinvoke_cb_txn *find_cbtxn_locked(
 }
 
 /*
+ * size_add saturates at SIZE_MAX. If integer overflow is detected,
+ * this function would return SIZE_MAX otherwise normal a+b is returned.
+ */
+static inline size_t size_add(size_t a, size_t b)
+{
+	return (b > (SIZE_MAX - a)) ? SIZE_MAX : a + b;
+}
+
+/*
  * pad_size is used along with size_align to define a buffer overflow
  * protected version of ALIGN
  */
@@ -582,13 +590,15 @@ static uint16_t get_server_id(int cb_server_fd)
 	struct smcinvoke_file_data *svr_cxt = NULL;
 	struct file *tmp_filp = fget(cb_server_fd);
 
-	if (!tmp_filp || !FILE_IS_REMOTE_OBJ(tmp_filp))
+	if (!tmp_filp)
 		return server_id;
 
 	svr_cxt = tmp_filp->private_data;
 	if (svr_cxt && svr_cxt->context_type ==  SMCINVOKE_OBJ_TYPE_SERVER)
 		server_id = svr_cxt->server_id;
-	fput(tmp_filp);
+
+	if (tmp_filp)
+		fput(tmp_filp);
 
 	return server_id;
 }

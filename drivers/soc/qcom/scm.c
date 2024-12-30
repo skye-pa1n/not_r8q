@@ -129,8 +129,13 @@ static int __scm_call_armv8_64(u64 x0, u64 x1, u64 x2, u64 x3, u64 x4, u64 x5,
 			  "=r" (r4), "=r" (r5), "=r" (r6)
 			: "r" (r0), "r" (r1), "r" (r2), "r" (r3), "r" (r4),
 			  "r" (r5), "r" (r6)
+#ifdef CONFIG_CFP_ROPP
+			: "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			  "x14", "x15", "x19", "x20");
+#else
 			: "x7", "x8", "x9", "x10", "x11", "x12", "x13",
 			  "x14", "x15", "x16", "x17");
+#endif
 	} while (r0 == SCM_INTERRUPTED);
 
 	if (ret1)
@@ -178,8 +183,13 @@ static int __scm_call_armv8_32(u32 w0, u32 w1, u32 w2, u32 w3, u32 w4, u32 w5,
 			  "=r" (r4), "=r" (r5), "=r" (r6)
 			: "r" (r0), "r" (r1), "r" (r2), "r" (r3), "r" (r4),
 			  "r" (r5), "r" (r6)
+#ifdef CONFIG_CFP_ROPP
+			: "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+			  "x14", "x15", "x19", "x20");
+#else
 			: "x7", "x8", "x9", "x10", "x11", "x12", "x13",
 			"x14", "x15", "x16", "x17");
+#endif
 
 	} while (r0 == SCM_INTERRUPTED);
 
@@ -662,40 +672,6 @@ EXPORT_SYMBOL(scm_is_secure_device);
 
 #ifdef CONFIG_ARM64
 
-#define TZ_HLOS_NOTIFY_CORE_KERNEL_BOOTUP 0x7
-int  scm_mem_protection_init_do_qrks(void)
-{
-	uint32_t pid_offset = 0;
-	uint32_t task_name_offset = 0;
-	struct scm_desc desc = {0};
-	int ret = 0, resp;
-
-	pid_offset = offsetof(struct task_struct, pid);
-	task_name_offset = offsetof(struct task_struct, comm);
-	pr_debug("offset of pid is %zu, offset of comm is %zu\n",
-		pid_offset, task_name_offset);
-	desc.args[0] = pid_offset;
-	desc.args[1] = task_name_offset;
-	desc.arginfo = 2;
-	ret = scm_call2(SCM_SIP_FNID(SCM_SVC_RTIC,
-			TZ_HLOS_NOTIFY_CORE_KERNEL_BOOTUP),
-			&desc);
-	resp = desc.ret[0];
-
-	if (ret == -1) {
-		pr_err("%s: SCM call not supported\n", __func__);
-		return ret;
-	} else if (ret || resp) {
-		pr_err("%s: SCM call failed\n", __func__);
-		if (ret)
-			return ret;
-		else
-			return resp;
-	}
-
-	return resp;
-}
-
 /*
  * SCM call command ID to protect kernel memory
  * in Hyp Stage 2 page tables.
@@ -709,7 +685,6 @@ static int __init scm_mem_protection_init(void)
 	struct scm_desc desc = {0};
 	int ret = 0, resp;
 
-	scm_mem_protection_init_do_qrks();
 	desc.args[0] = 0;
 	desc.arginfo = 0;
 	ret = scm_call2(SCM_SIP_FNID(SCM_SVC_RTIC,

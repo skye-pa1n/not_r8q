@@ -147,13 +147,7 @@ static long cec_adap_g_log_addrs(struct cec_adapter *adap,
 	struct cec_log_addrs log_addrs;
 
 	mutex_lock(&adap->lock);
-	/*
-	 * We use memcpy here instead of assignment since there is a
-	 * hole at the end of struct cec_log_addrs that an assignment
-	 * might ignore. So when we do copy_to_user() we could leak
-	 * one byte of memory.
-	 */
-	memcpy(&log_addrs, &adap->log_addrs, sizeof(log_addrs));
+	log_addrs = adap->log_addrs;
 	if (!adap->is_configured)
 		memset(log_addrs.log_addr, CEC_LOG_ADDR_INVALID,
 		       sizeof(log_addrs.log_addr));
@@ -660,8 +654,6 @@ static int cec_release(struct inode *inode, struct file *filp)
 		list_del(&data->xfer_list);
 	}
 	mutex_unlock(&adap->lock);
-
-	mutex_lock(&fh->lock);
 	while (!list_empty(&fh->msgs)) {
 		struct cec_msg_entry *entry =
 			list_first_entry(&fh->msgs, struct cec_msg_entry, list);
@@ -679,7 +671,6 @@ static int cec_release(struct inode *inode, struct file *filp)
 			kfree(entry);
 		}
 	}
-	mutex_unlock(&fh->lock);
 	kfree(fh);
 
 	cec_put_device(devnode);

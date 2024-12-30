@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2019, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _HFI_INTF_H_
@@ -32,7 +32,6 @@ struct hfi_mem {
  * @sec_heap: secondary heap hfi memory for firmware
  * @qdss: qdss mapped memory for fw
  * @io_mem: io memory info
- * @io_mem2: 2nd io memory info
  * @icp_base: icp base address
  */
 struct hfi_mem_info {
@@ -45,7 +44,6 @@ struct hfi_mem_info {
 	struct hfi_mem shmem;
 	struct hfi_mem qdss;
 	struct hfi_mem io_mem;
-	struct hfi_mem io_mem2;
 	void __iomem *icp_base;
 };
 
@@ -146,10 +144,9 @@ int hfi_cmd_ubwc_config_ext(uint32_t *ubwc_ipe_cfg,
 /**
  * hfi_cmd_ubwc_config() - UBWC configuration to firmware
  *                         for older targets
- * @ubwc_cfg:           UBWC configuration parameters
- * @disable_ubwc_comp:  Disable UBWC compression
+ * @ubwc_cfg: UBWC configuration parameters
  */
-int hfi_cmd_ubwc_config(uint32_t *ubwc_cfg, bool disable_ubwc_comp);
+int hfi_cmd_ubwc_config(uint32_t *ubwc_cfg);
 
 /**
  * cam_hfi_resume() - function to resume

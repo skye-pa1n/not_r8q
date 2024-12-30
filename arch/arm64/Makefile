@@ -18,7 +18,7 @@ ifeq ($(CONFIG_RELOCATABLE), y)
 # Pass --no-apply-dynamic-relocs to restore pre-binutils-2.27 behaviour
 # for relative relocs, since this leads to better Image compression
 # with the relocation offsets always being zero.
-LDFLAGS_vmlinux		+= -shared -Bsymbolic -z notext \
+LDFLAGS_vmlinux		+= -shared -Bsymbolic -z notext -z norelro \
 			$(call ld-option, --no-apply-dynamic-relocs)
 endif
 
@@ -49,15 +49,24 @@ $(warning Detected assembler with broken .inst; disassembly will be unreliable)
   endif
 endif
 
+KBUILD_CFLAGS	+= -mgeneral-regs-only $(lseinstr) $(brokengasinst)
+
+ifeq ($(CONFIG_ARCH_KONA), y)
 ifeq ($(cc-name),clang)
-KBUILD_CFLAGS	+= -mno-implicit-float
-else
-KBUILD_CFLAGS	+= -mgeneral-regs-only
+KBUILD_CFLAGS   += -mcpu=cortex-a55
+KBUILD_AFLAGS   += -mcpu=cortex-a55
+ifeq ($(CONFIG_LD_IS_LLD), y)
+KBUILD_LDFLAGS  += -mllvm -mcpu=cortex-a55
 endif
-KBUILD_CFLAGS	+= $(lseinstr) $(brokengasinst) $(compat_vdso)
+else
+KBUILD_CFLAGS   += -mcpu=cortex-a76.cortex-a55 -mtune=cortex-a76.cortex-a55
+KBUILD_AFLAGS   += -mcpu=cortex-a76.cortex-a55 -mtune=cortex-a76.cortex-a55
+endif
+endif
+
 KBUILD_CFLAGS	+= -fno-asynchronous-unwind-tables
 KBUILD_CFLAGS	+= $(call cc-disable-warning, psabi)
-KBUILD_AFLAGS	+= $(lseinstr) $(brokengasinst) $(compat_vdso)
+KBUILD_AFLAGS	+= $(lseinstr) $(brokengasinst)
 
 KBUILD_CFLAGS	+= $(call cc-option,-mabi=lp64)
 KBUILD_AFLAGS	+= $(call cc-option,-mabi=lp64)
@@ -66,33 +75,21 @@ ifeq ($(CONFIG_SHADOW_CALL_STACK), y)
 KBUILD_CFLAGS	+= -ffixed-x18
 endif
 
-ifeq ($(cc-name),clang)
-KBUILD_CFLAGS   += -mcpu=cortex-a77+crypto+crc+sha2+aes -mtune=kryo
-KBUILD_AFLAGS   += -mcpu=cortex-a77+crypto+crc+sha2+aes -mtune=kryo
-ifeq ($(CONFIG_LD_IS_LLD), y)
-KBUILD_LDFLAGS  += -mllvm -mcpu=kryo
-endif
-endif
-
 ifeq ($(CONFIG_CPU_BIG_ENDIAN), y)
 KBUILD_CPPFLAGS	+= -mbig-endian
 CHECKFLAGS	+= -D__AARCH64EB__
 AS		+= -EB
 # Prefer the baremetal ELF build target, but not all toolchains include
 # it so fall back to the standard linux version if needed.
-KBUILD_LDFLAGS	+= -EB $(call ld-option, -maarch64elfb, -maarch64linuxb -z norelro)
+KBUILD_LDFLAGS	+= -EB $(call ld-option, -maarch64elfb, -maarch64linuxb)
 UTS_MACHINE	:= aarch64_be
 else
 KBUILD_CPPFLAGS	+= -mlittle-endian
 CHECKFLAGS	+= -D__AARCH64EL__
 AS		+= -EL
 # Same as above, prefer ELF but fall back to linux target if needed.
-KBUILD_LDFLAGS	+= -EL $(call ld-option, -maarch64elf, -maarch64linux -z norelro)
+KBUILD_LDFLAGS	+= -EL $(call ld-option, -maarch64elf, -maarch64linux)
 UTS_MACHINE	:= aarch64
-endif
-
-ifeq ($(CONFIG_LD_IS_LLD), y)
-KBUILD_LDFLAGS	+= -z norelro
 endif
 
 CHECKFLAGS	+= -D__aarch64__
@@ -141,8 +138,8 @@ core-$(CONFIG_CRYPTO) += arch/arm64/crypto/
 libs-y		:= arch/arm64/lib/ $(libs-y)
 core-$(CONFIG_EFI_STUB) += $(objtree)/drivers/firmware/efi/libstub/lib.a
 
-ifeq ($(CONFIG_BUILD_ARM64_KERNEL_COMPRESSION_LZ4),y)
-KBUILD_IMAGE   := Image.lz4
+ifeq ($(CONFIG_BUILD_ARM64_KERNEL_COMPRESSION_GZIP),y)
+KBUILD_IMAGE   := Image.gz
 else
 KBUILD_IMAGE   := Image
 endif
@@ -159,8 +156,6 @@ KBUILD_IMAGE  := $(boot)/$(KBUILD_IMAGE)
 endif
 
 KBUILD_DTBS	:= dtbs
-
-KBUILD_DTBO_IMG := dtbo.img
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 export DTC_FLAGS := -@
@@ -193,18 +188,10 @@ Image-dtb: vmlinux scripts dtbs
 
 Image.gz-dtb: vmlinux scripts dtbs Image.gz
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-	
-ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
-$(KBUILD_DTBO_IMG): dtbs
-	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-all: $(KBUILD_DTBO_IMG)
-endif
 
 PHONY += vdso_install
 vdso_install:
 	$(Q)$(MAKE) $(build)=arch/arm64/kernel/vdso $@
-	$(if $(CONFIG_COMPAT_VDSO), \
-		$(Q)$(MAKE) $(build)=arch/arm64/kernel/vdso32 $@)
 
 # We use MRPROPER_FILES and CLEAN_FILES now
 archclean:
@@ -221,9 +208,6 @@ ifeq ($(KBUILD_EXTMOD),)
 prepare: vdso_prepare
 vdso_prepare: prepare0
 	$(Q)$(MAKE) $(build)=arch/arm64/kernel/vdso include/generated/vdso-offsets.h
-	$(if $(CONFIG_COMPAT_VDSO),$(Q)$(MAKE) \
-		$(build)=arch/arm64/kernel/vdso32  \
-		include/generated/vdso32-offsets.h)
 endif
 
 define archhelp

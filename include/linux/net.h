@@ -25,7 +25,6 @@
 #include <linux/rcupdate.h>
 #include <linux/once.h>
 #include <linux/fs.h>
-#include <linux/android_kabi.h>
 
 #include <uapi/linux/net.h>
 
@@ -84,12 +83,6 @@ enum sock_type {
 
 #endif /* ARCH_HAS_SOCKET_TYPES */
 
-/**
- * enum sock_shutdown_cmd - Shutdown types
- * @SHUT_RD: shutdown receptions
- * @SHUT_WR: shutdown transmissions
- * @SHUT_RDWR: shutdown receptions/transmissions
- */
 enum sock_shutdown_cmd {
 	SHUT_RD,
 	SHUT_WR,
@@ -205,11 +198,6 @@ struct proto_ops {
 	int		(*sendmsg_locked)(struct sock *sk, struct msghdr *msg,
 					  size_t size);
 	int		(*set_rcvlowat)(struct sock *sk, int val);
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 #define DECLARE_SOCKADDR(type, dst, src)	\

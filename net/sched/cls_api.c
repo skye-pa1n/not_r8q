@@ -31,6 +31,8 @@
 #include <net/pkt_sched.h>
 #include <net/pkt_cls.h>
 
+extern const struct nla_policy rtm_tca_policy[TCA_MAX + 1];
+
 /* The list of all installed classifier types */
 static LIST_HEAD(tcf_proto_base);
 
@@ -537,7 +539,6 @@ static struct tcf_block *tcf_block_find(struct net *net, struct Qdisc **q,
 					struct netlink_ext_ack *extack)
 {
 	struct tcf_block *block;
-	int err = 0;
 
 	if (ifindex == TCM_IFINDEX_MAGIC_BLOCK) {
 		block = tcf_block_lookup(net, block_index);
@@ -549,95 +550,55 @@ static struct tcf_block *tcf_block_find(struct net *net, struct Qdisc **q,
 		const struct Qdisc_class_ops *cops;
 		struct net_device *dev;
 
-		rcu_read_lock();
-
 		/* Find link */
-		dev = dev_get_by_index_rcu(net, ifindex);
-		if (!dev) {
-			rcu_read_unlock();
+		dev = __dev_get_by_index(net, ifindex);
+		if (!dev)
 			return ERR_PTR(-ENODEV);
-		}
 
 		/* Find qdisc */
 		if (!*parent) {
 			*q = dev->qdisc;
 			*parent = (*q)->handle;
 		} else {
-			*q = qdisc_lookup_rcu(dev, TC_H_MAJ(*parent));
+			*q = qdisc_lookup(dev, TC_H_MAJ(*parent));
 			if (!*q) {
 				NL_SET_ERR_MSG(extack, "Parent Qdisc doesn't exists");
-				err = -EINVAL;
-				goto errout_rcu;
+				return ERR_PTR(-EINVAL);
 			}
-		}
-
-		*q = qdisc_refcount_inc_nz(*q);
-		if (!*q) {
-			NL_SET_ERR_MSG(extack, "Parent Qdisc doesn't exists");
-			err = -EINVAL;
-			goto errout_rcu;
 		}
 
 		/* Is it classful? */
 		cops = (*q)->ops->cl_ops;
 		if (!cops) {
 			NL_SET_ERR_MSG(extack, "Qdisc not classful");
-			err = -EINVAL;
-			goto errout_rcu;
+			return ERR_PTR(-EINVAL);
 		}
 
 		if (!cops->tcf_block) {
 			NL_SET_ERR_MSG(extack, "Class doesn't support blocks");
-			err = -EOPNOTSUPP;
-			goto errout_rcu;
+			return ERR_PTR(-EOPNOTSUPP);
 		}
-
-		/* At this point we know that qdisc is not noop_qdisc,
-		 * which means that qdisc holds a reference to net_device
-		 * and we hold a reference to qdisc, so it is safe to release
-		 * rcu read lock.
-		 */
-		rcu_read_unlock();
 
 		/* Do we search for filter, attached to class? */
 		if (TC_H_MIN(*parent)) {
 			*cl = cops->find(*q, *parent);
 			if (*cl == 0) {
 				NL_SET_ERR_MSG(extack, "Specified class doesn't exist");
-				err = -ENOENT;
-				goto errout_qdisc;
+				return ERR_PTR(-ENOENT);
 			}
 		}
 
 		/* And the last stroke */
 		block = cops->tcf_block(*q, *cl, extack);
-		if (!block) {
-			err = -EINVAL;
-			goto errout_qdisc;
-		}
+		if (!block)
+			return ERR_PTR(-EINVAL);
 		if (tcf_block_shared(block)) {
 			NL_SET_ERR_MSG(extack, "This filter block is shared. Please use the block index to manipulate the filters");
-			err = -EOPNOTSUPP;
-			goto errout_qdisc;
+			return ERR_PTR(-EOPNOTSUPP);
 		}
 	}
 
 	return block;
-
-errout_rcu:
-	rcu_read_unlock();
-errout_qdisc:
-	if (*q) {
-		qdisc_put(*q);
-		*q = NULL;
-	}
-	return ERR_PTR(err);
-}
-
-static void tcf_block_release(struct Qdisc *q, struct tcf_block *block)
-{
-	if (q)
-		qdisc_put(q);
 }
 
 struct tcf_block_owner_item {
@@ -1008,7 +969,7 @@ int tcf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 reclassify:
 #endif
 	for (; tp; tp = rcu_dereference_bh(tp->next)) {
-		__be16 protocol = skb_protocol(skb, false);
+		__be16 protocol = tc_skb_protocol(skb);
 		int err;
 
 		if (tp->protocol != protocol &&
@@ -1375,7 +1336,6 @@ replay:
 errout:
 	if (chain)
 		tcf_chain_put(chain);
-	tcf_block_release(q, block);
 	if (err == -EAGAIN)
 		/* Replay the request. */
 		goto replay;
@@ -1497,7 +1457,6 @@ static int tc_del_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 errout:
 	if (chain)
 		tcf_chain_put(chain);
-	tcf_block_release(q, block);
 	return err;
 }
 
@@ -1583,7 +1542,6 @@ static int tc_get_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 errout:
 	if (chain)
 		tcf_chain_put(chain);
-	tcf_block_release(q, block);
 	return err;
 }
 
@@ -1838,7 +1796,6 @@ static int tc_chain_tmplt_add(struct tcf_chain *chain, struct net *net,
 		return PTR_ERR(ops);
 	if (!ops->tmplt_create || !ops->tmplt_destroy || !ops->tmplt_dump) {
 		NL_SET_ERR_MSG(extack, "Chain templates are not supported with specified classifier");
-		module_put(ops->owner);
 		return -EOPNOTSUPP;
 	}
 
@@ -1901,8 +1858,7 @@ replay:
 	chain_index = tca[TCA_CHAIN] ? nla_get_u32(tca[TCA_CHAIN]) : 0;
 	if (chain_index > TC_ACT_EXT_VAL_MASK) {
 		NL_SET_ERR_MSG(extack, "Specified chain index exceeds upper limit");
-		err = -EINVAL;
-		goto errout_block;
+		return -EINVAL;
 	}
 	chain = tcf_chain_lookup(block, chain_index);
 	if (n->nlmsg_type == RTM_NEWCHAIN) {
@@ -1914,27 +1870,23 @@ replay:
 				tcf_chain_hold(chain);
 			} else {
 				NL_SET_ERR_MSG(extack, "Filter chain already exists");
-				err = -EEXIST;
-				goto errout_block;
+				return -EEXIST;
 			}
 		} else {
 			if (!(n->nlmsg_flags & NLM_F_CREATE)) {
 				NL_SET_ERR_MSG(extack, "Need both RTM_NEWCHAIN and NLM_F_CREATE to create a new chain");
-				err = -ENOENT;
-				goto errout_block;
+				return -ENOENT;
 			}
 			chain = tcf_chain_create(block, chain_index);
 			if (!chain) {
 				NL_SET_ERR_MSG(extack, "Failed to create filter chain");
-				err = -ENOMEM;
-				goto errout_block;
+				return -ENOMEM;
 			}
 		}
 	} else {
 		if (!chain || tcf_chain_held_by_acts_only(chain)) {
 			NL_SET_ERR_MSG(extack, "Cannot find specified filter chain");
-			err = -EINVAL;
-			goto errout_block;
+			return -EINVAL;
 		}
 		tcf_chain_hold(chain);
 	}
@@ -1966,7 +1918,7 @@ replay:
 		break;
 	case RTM_GETCHAIN:
 		err = tc_chain_notify(chain, skb, n->nlmsg_seq,
-				      n->nlmsg_flags, n->nlmsg_type, true);
+				      n->nlmsg_seq, n->nlmsg_type, true);
 		if (err < 0)
 			NL_SET_ERR_MSG(extack, "Failed to send chain notify message");
 		break;
@@ -1978,8 +1930,6 @@ replay:
 
 errout:
 	tcf_chain_put(chain);
-errout_block:
-	tcf_block_release(q, block);
 	if (err == -EAGAIN)
 		/* Replay the request. */
 		goto replay;

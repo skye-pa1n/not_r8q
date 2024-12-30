@@ -108,9 +108,6 @@ struct Qdisc {
 
 	spinlock_t		busylock ____cacheline_aligned_in_smp;
 	spinlock_t		seqlock;
-#ifndef __GENKSYMS__
-	struct rcu_head		rcu;
-#endif
 };
 
 static inline void qdisc_refcount_inc(struct Qdisc *qdisc)
@@ -118,19 +115,6 @@ static inline void qdisc_refcount_inc(struct Qdisc *qdisc)
 	if (qdisc->flags & TCQ_F_BUILTIN)
 		return;
 	refcount_inc(&qdisc->refcnt);
-}
-
-/* Intended to be used by unlocked users, when concurrent qdisc release is
- * possible.
- */
-
-static inline struct Qdisc *qdisc_refcount_inc_nz(struct Qdisc *qdisc)
-{
-	if (qdisc->flags & TCQ_F_BUILTIN)
-		return qdisc;
-	if (refcount_inc_not_zero(&qdisc->refcnt))
-		return qdisc;
-	return NULL;
 }
 
 static inline bool qdisc_is_running(struct Qdisc *qdisc)
@@ -571,8 +555,7 @@ void dev_deactivate_many(struct list_head *head);
 struct Qdisc *dev_graft_qdisc(struct netdev_queue *dev_queue,
 			      struct Qdisc *qdisc);
 void qdisc_reset(struct Qdisc *qdisc);
-void qdisc_put(struct Qdisc *qdisc);
-void qdisc_put_unlocked(struct Qdisc *qdisc);
+void qdisc_destroy(struct Qdisc *qdisc);
 void qdisc_tree_reduce_backlog(struct Qdisc *qdisc, unsigned int n,
 			       unsigned int len);
 struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
@@ -1075,7 +1058,6 @@ struct psched_ratecfg {
 	u64	rate_bytes_ps; /* bytes per second */
 	u32	mult;
 	u16	overhead;
-	u16	mpu;
 	u8	linklayer;
 	u8	shift;
 };
@@ -1084,9 +1066,6 @@ static inline u64 psched_l2t_ns(const struct psched_ratecfg *r,
 				unsigned int len)
 {
 	len += r->overhead;
-
-	if (len < r->mpu)
-		len = r->mpu;
 
 	if (unlikely(r->linklayer == TC_LINKLAYER_ATM))
 		return ((u64)(DIV_ROUND_UP(len,48)*53) * r->mult) >> r->shift;
@@ -1110,7 +1089,6 @@ static inline void psched_ratecfg_getrate(struct tc_ratespec *res,
 	res->rate = min_t(u64, r->rate_bytes_ps, ~0U);
 
 	res->overhead = r->overhead;
-	res->mpu = r->mpu;
 	res->linklayer = (r->linklayer & TC_LINKLAYER_MASK);
 }
 

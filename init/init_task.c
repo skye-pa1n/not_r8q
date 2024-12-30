@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/task_integrity.h>
 #include <linux/audit.h>
 #include <linux/scs.h>
 
@@ -50,6 +51,11 @@ static struct sighand_struct init_sighand = {
 	.siglock	= __SPIN_LOCK_UNLOCKED(init_sighand.siglock),
 	.signalfd_wqh	= __WAIT_QUEUE_HEAD_INITIALIZER(init_sighand.signalfd_wqh),
 };
+
+#ifdef CONFIG_FIVE
+static struct task_integrity init_integrity =
+					INIT_TASK_INTEGRITY(init_integrity);
+#endif
 
 /*
  * Set up the first task table, touch at your own risk!. Base=0,
@@ -173,8 +179,7 @@ struct task_struct init_task
 	.lockdep_recursion = 0,
 #endif
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
-	.ret_stack		= NULL,
-	.tracing_graph_pause	= ATOMIC_INIT(0),
+	.ret_stack	= NULL,
 #endif
 #if defined(CONFIG_TRACING) && defined(CONFIG_PREEMPT)
 	.trace_recursion = 0,
@@ -184,6 +189,9 @@ struct task_struct init_task
 #endif
 #ifdef CONFIG_SECURITY
 	.security	= NULL,
+#endif
+#ifdef CONFIG_FIVE
+	INIT_INTEGRITY(init_task)
 #endif
 };
 EXPORT_SYMBOL(init_task);

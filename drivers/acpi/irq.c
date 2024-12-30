@@ -55,7 +55,6 @@ int acpi_register_gsi(struct device *dev, u32 gsi, int trigger,
 		      int polarity)
 {
 	struct irq_fwspec fwspec;
-	unsigned int irq;
 
 	if (WARN_ON(!acpi_gsi_domain_id)) {
 		pr_warn("GSI: No registered irqchip, giving up\n");
@@ -67,11 +66,7 @@ int acpi_register_gsi(struct device *dev, u32 gsi, int trigger,
 	fwspec.param[1] = acpi_dev_get_irq_type(trigger, polarity);
 	fwspec.param_count = 2;
 
-	irq = irq_create_fwspec_mapping(&fwspec);
-	if (!irq)
-		return -EINVAL;
-
-	return irq;
+	return irq_create_fwspec_mapping(&fwspec);
 }
 EXPORT_SYMBOL_GPL(acpi_register_gsi);
 

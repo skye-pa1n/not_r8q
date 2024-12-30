@@ -413,20 +413,28 @@ static __always_inline void __speculation_ctrl_update(unsigned long tifp,
 
 	lockdep_assert_irqs_disabled();
 
-	/* Handle change of TIF_SSBD depending on the mitigation method. */
-	if (static_cpu_has(X86_FEATURE_VIRT_SSBD)) {
-		if (tif_diff & _TIF_SSBD)
+	/*
+	 * If TIF_SSBD is different, select the proper mitigation
+	 * method. Note that if SSBD mitigation is disabled or permanentely
+	 * enabled this branch can't be taken because nothing can set
+	 * TIF_SSBD.
+	 */
+	if (tif_diff & _TIF_SSBD) {
+		if (static_cpu_has(X86_FEATURE_VIRT_SSBD)) {
 			amd_set_ssb_virt_state(tifn);
-	} else if (static_cpu_has(X86_FEATURE_LS_CFG_SSBD)) {
-		if (tif_diff & _TIF_SSBD)
+		} else if (static_cpu_has(X86_FEATURE_LS_CFG_SSBD)) {
 			amd_set_core_ssb_state(tifn);
-	} else if (static_cpu_has(X86_FEATURE_SPEC_CTRL_SSBD) ||
-		   static_cpu_has(X86_FEATURE_AMD_SSBD)) {
-		updmsr |= !!(tif_diff & _TIF_SSBD);
-		msr |= ssbd_tif_to_spec_ctrl(tifn);
+		} else if (static_cpu_has(X86_FEATURE_SPEC_CTRL_SSBD) ||
+			   static_cpu_has(X86_FEATURE_AMD_SSBD)) {
+			msr |= ssbd_tif_to_spec_ctrl(tifn);
+			updmsr  = true;
+		}
 	}
 
-	/* Only evaluate TIF_SPEC_IB if conditional STIBP is enabled. */
+	/*
+	 * Only evaluate TIF_SPEC_IB if conditional STIBP is enabled,
+	 * otherwise avoid the MSR write.
+	 */
 	if (IS_ENABLED(CONFIG_SMP) &&
 	    static_branch_unlikely(&switch_to_cond_stibp)) {
 		updmsr |= !!(tif_diff & _TIF_SPEC_IB);
@@ -434,7 +442,7 @@ static __always_inline void __speculation_ctrl_update(unsigned long tifp,
 	}
 
 	if (updmsr)
-		update_spec_ctrl_cond(msr);
+		wrmsrl(MSR_IA32_SPEC_CTRL, msr);
 }
 
 static unsigned long speculation_ctrl_update_tif(struct task_struct *tsk)

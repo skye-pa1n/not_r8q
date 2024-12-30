@@ -85,7 +85,7 @@ struct ad2s1210_state {
 static const int ad2s1210_mode_vals[4][2] = {
 	[MOD_POS] = { 0, 0 },
 	[MOD_VEL] = { 0, 1 },
-	[MOD_CONFIG] = { 1, 1 },
+	[MOD_CONFIG] = { 1, 0 },
 };
 
 static inline void ad2s1210_set_mode(enum ad2s1210_mode mode,
@@ -114,24 +114,17 @@ static int ad2s1210_config_write(struct ad2s1210_state *st, u8 data)
 static int ad2s1210_config_read(struct ad2s1210_state *st,
 				unsigned char address)
 {
-	struct spi_transfer xfers[] = {
-		{
-			.len = 1,
-			.rx_buf = &st->rx[0],
-			.tx_buf = &st->tx[0],
-			.cs_change = 1,
-		}, {
-			.len = 1,
-			.rx_buf = &st->rx[1],
-			.tx_buf = &st->tx[1],
-		},
+	struct spi_transfer xfer = {
+		.len = 2,
+		.rx_buf = st->rx,
+		.tx_buf = st->tx,
 	};
 	int ret = 0;
 
 	ad2s1210_set_mode(MOD_CONFIG, st);
 	st->tx[0] = address | AD2S1210_MSB_IS_HIGH;
 	st->tx[1] = AD2S1210_REG_FAULT;
-	ret = spi_sync_transfer(st->sdev, xfers, 2);
+	ret = spi_sync_transfer(st->sdev, &xfer, 1);
 	if (ret < 0)
 		return ret;
 

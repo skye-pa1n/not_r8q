@@ -350,7 +350,6 @@ static struct vmbus_channel *alloc_channel(void)
 static void free_channel(struct vmbus_channel *channel)
 {
 	tasklet_kill(&channel->callback_event);
-	vmbus_remove_channel_attr_group(channel);
 
 	kobject_put(&channel->kobj);
 }
@@ -508,17 +507,13 @@ static void vmbus_add_channel_work(struct work_struct *work)
 	 * Add the new device to the bus. This will kick off device-driver
 	 * binding which eventually invokes the device driver's AddDevice()
 	 * method.
-	 *
-	 * If vmbus_device_register() fails, the 'device_obj' is freed in
-	 * vmbus_device_release() as called by device_unregister() in the
-	 * error path of vmbus_device_register(). In the outside error
-	 * path, there's no need to free it.
 	 */
 	ret = vmbus_device_register(newchannel->device_obj);
 
 	if (ret != 0) {
 		pr_err("unable to add child device object (relid %d)\n",
 			newchannel->offermsg.child_relid);
+		kfree(newchannel->device_obj);
 		goto err_deq_chan;
 	}
 
@@ -778,19 +773,13 @@ static void init_vp_index(struct vmbus_channel *channel, u16 dev_type)
 	free_cpumask_var(available_mask);
 }
 
-#define UNLOAD_DELAY_UNIT_MS	10		/* 10 milliseconds */
-#define UNLOAD_WAIT_MS		(100*1000)	/* 100 seconds */
-#define UNLOAD_WAIT_LOOPS	(UNLOAD_WAIT_MS/UNLOAD_DELAY_UNIT_MS)
-#define UNLOAD_MSG_MS		(5*1000)	/* Every 5 seconds */
-#define UNLOAD_MSG_LOOPS	(UNLOAD_MSG_MS/UNLOAD_DELAY_UNIT_MS)
-
 static void vmbus_wait_for_unload(void)
 {
 	int cpu;
 	void *page_addr;
 	struct hv_message *msg;
 	struct vmbus_channel_message_header *hdr;
-	u32 message_type, i;
+	u32 message_type;
 
 	/*
 	 * CHANNELMSG_UNLOAD_RESPONSE is always delivered to the CPU which was
@@ -800,35 +789,16 @@ static void vmbus_wait_for_unload(void)
 	 * functional and vmbus_unload_response() will complete
 	 * vmbus_connection.unload_event. If not, the last thing we can do is
 	 * read message pages for all CPUs directly.
-	 *
-	 * Wait up to 100 seconds since an Azure host must writeback any dirty
-	 * data in its disk cache before the VMbus UNLOAD request will
-	 * complete. This flushing has been empirically observed to take up
-	 * to 50 seconds in cases with a lot of dirty data, so allow additional
-	 * leeway and for inaccuracies in mdelay(). But eventually time out so
-	 * that the panic path can't get hung forever in case the response
-	 * message isn't seen.
 	 */
-	for (i = 1; i <= UNLOAD_WAIT_LOOPS; i++) {
+	while (1) {
 		if (completion_done(&vmbus_connection.unload_event))
-			goto completed;
+			break;
 
-		for_each_present_cpu(cpu) {
+		for_each_online_cpu(cpu) {
 			struct hv_per_cpu_context *hv_cpu
 				= per_cpu_ptr(hv_context.cpu_context, cpu);
 
-			/*
-			 * In a CoCo VM the synic_message_page is not allocated
-			 * in hv_synic_alloc(). Instead it is set/cleared in
-			 * hv_synic_enable_regs() and hv_synic_disable_regs()
-			 * such that it is set only when the CPU is online. If
-			 * not all present CPUs are online, the message page
-			 * might be NULL, so skip such CPUs.
-			 */
 			page_addr = hv_cpu->synic_message_page;
-			if (!page_addr)
-				continue;
-
 			msg = (struct hv_message *)page_addr
 				+ VMBUS_MESSAGE_SINT;
 
@@ -845,31 +815,19 @@ static void vmbus_wait_for_unload(void)
 			vmbus_signal_eom(msg, message_type);
 		}
 
-		/*
-		 * Give a notice periodically so someone watching the
-		 * serial output won't think it is completely hung.
-		 */
-		if (!(i % UNLOAD_MSG_LOOPS))
-			pr_notice("Waiting for VMBus UNLOAD to complete\n");
-
-		mdelay(UNLOAD_DELAY_UNIT_MS);
+		mdelay(10);
 	}
-	pr_err("Continuing even though VMBus UNLOAD did not complete\n");
 
-completed:
 	/*
 	 * We're crashing and already got the UNLOAD_RESPONSE, cleanup all
 	 * maybe-pending messages on all CPUs to be able to receive new
 	 * messages after we reconnect.
 	 */
-	for_each_present_cpu(cpu) {
+	for_each_online_cpu(cpu) {
 		struct hv_per_cpu_context *hv_cpu
 			= per_cpu_ptr(hv_context.cpu_context, cpu);
 
 		page_addr = hv_cpu->synic_message_page;
-		if (!page_addr)
-			continue;
-
 		msg = (struct hv_message *)page_addr + VMBUS_MESSAGE_SINT;
 		msg->header.message_type = HVMSG_NONE;
 	}
@@ -890,9 +848,6 @@ static void vmbus_unload_response(struct vmbus_channel_message_header *hdr)
 void vmbus_initiate_unload(bool crash)
 {
 	struct vmbus_channel_message_header hdr;
-
-	if (xchg(&vmbus_connection.conn_state, DISCONNECTED) == DISCONNECTED)
-		return;
 
 	/* Pre-Win2012R2 hosts don't support reconnect */
 	if (vmbus_proto_version < VERSION_WIN8_1)
@@ -1040,7 +995,8 @@ static void vmbus_onoffer_rescind(struct vmbus_channel_message_header *hdr)
 			vmbus_device_unregister(channel->device_obj);
 			put_device(dev);
 		}
-	} else if (channel->primary_channel != NULL) {
+	}
+	if (channel->primary_channel != NULL) {
 		/*
 		 * Sub-channel is being rescinded. Following is the channel
 		 * close sequence when initiated from the driveri (refer to
@@ -1290,8 +1246,6 @@ channel_message_table[CHANNELMSG_COUNT] = {
 	{ CHANNELMSG_19,			0, NULL },
 	{ CHANNELMSG_20,			0, NULL },
 	{ CHANNELMSG_TL_CONNECT_REQUEST,	0, NULL },
-	{ CHANNELMSG_22,			0, NULL },
-	{ CHANNELMSG_TL_CONNECT_RESULT,		0, NULL },
 };
 
 /*
@@ -1303,16 +1257,25 @@ void vmbus_onmessage(void *context)
 {
 	struct hv_message *msg = context;
 	struct vmbus_channel_message_header *hdr;
+	int size;
 
 	hdr = (struct vmbus_channel_message_header *)msg->u.payload;
+	size = msg->header.payload_size;
 
 	trace_vmbus_on_message(hdr);
 
-	/*
-	 * vmbus_on_msg_dpc() makes sure the hdr->msgtype here can not go
-	 * out of bound and the message_handler pointer can not be NULL.
-	 */
-	channel_message_table[hdr->msgtype].message_handler(hdr);
+	if (hdr->msgtype >= CHANNELMSG_COUNT) {
+		pr_err("Received invalid channel message type %d size %d\n",
+			   hdr->msgtype, size);
+		print_hex_dump_bytes("", DUMP_PREFIX_NONE,
+				     (unsigned char *)msg->u.payload, size);
+		return;
+	}
+
+	if (channel_message_table[hdr->msgtype].message_handler)
+		channel_message_table[hdr->msgtype].message_handler(hdr);
+	else
+		pr_err("Unhandled channel message type %d\n", hdr->msgtype);
 }
 
 /*

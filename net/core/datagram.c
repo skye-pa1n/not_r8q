@@ -837,21 +837,18 @@ __poll_t datagram_poll(struct file *file, struct socket *sock,
 {
 	struct sock *sk = sock->sk;
 	__poll_t mask;
-	u8 shutdown;
 
 	sock_poll_wait(file, sock, wait);
 	mask = 0;
 
 	/* exceptional events? */
-	if (READ_ONCE(sk->sk_err) ||
-	    !skb_queue_empty_lockless(&sk->sk_error_queue))
+	if (sk->sk_err || !skb_queue_empty_lockless(&sk->sk_error_queue))
 		mask |= EPOLLERR |
 			(sock_flag(sk, SOCK_SELECT_ERR_QUEUE) ? EPOLLPRI : 0);
 
-	shutdown = READ_ONCE(sk->sk_shutdown);
-	if (shutdown & RCV_SHUTDOWN)
+	if (sk->sk_shutdown & RCV_SHUTDOWN)
 		mask |= EPOLLRDHUP | EPOLLIN | EPOLLRDNORM;
-	if (shutdown == SHUTDOWN_MASK)
+	if (sk->sk_shutdown == SHUTDOWN_MASK)
 		mask |= EPOLLHUP;
 
 	/* readable? */
@@ -860,12 +857,10 @@ __poll_t datagram_poll(struct file *file, struct socket *sock,
 
 	/* Connection-based need to check for termination and startup */
 	if (connection_based(sk)) {
-		int state = READ_ONCE(sk->sk_state);
-
-		if (state == TCP_CLOSE)
+		if (sk->sk_state == TCP_CLOSE)
 			mask |= EPOLLHUP;
 		/* connection hasn't started yet? */
-		if (state == TCP_SYN_SENT)
+		if (sk->sk_state == TCP_SYN_SENT)
 			return mask;
 	}
 

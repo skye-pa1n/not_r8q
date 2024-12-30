@@ -194,6 +194,170 @@
 		scsi_prot_op_name(SCSI_PROT_READ_PASS),		\
 		scsi_prot_op_name(SCSI_PROT_WRITE_PASS))
 
+const char *scsi_trace_parse_cdb(struct trace_seq*, unsigned char*, int);
+#define __parse_cdb(cdb, len) scsi_trace_parse_cdb(p, cdb, len)
+
+TRACE_EVENT(scsi_dispatch_cmd_start,
+
+	TP_PROTO(struct scsi_cmnd *cmd),
+
+	TP_ARGS(cmd),
+
+	TP_STRUCT__entry(
+		__field( unsigned int,	host_no	)
+		__field( unsigned int,	channel	)
+		__field( unsigned int,	id	)
+		__field( unsigned int,	lun	)
+		__field( unsigned int,	opcode	)
+		__field( unsigned int,	cmd_len )
+		__field( unsigned int,	data_sglen )
+		__field( unsigned int,	prot_sglen )
+		__field( unsigned char,	prot_op )
+		__dynamic_array(unsigned char,	cmnd, cmd->cmd_len)
+	),
+
+	TP_fast_assign(
+		__entry->host_no	= cmd->device->host->host_no;
+		__entry->channel	= cmd->device->channel;
+		__entry->id		= cmd->device->id;
+		__entry->lun		= cmd->device->lun;
+		__entry->opcode		= cmd->cmnd[0];
+		__entry->cmd_len	= cmd->cmd_len;
+		__entry->data_sglen	= scsi_sg_count(cmd);
+		__entry->prot_sglen	= scsi_prot_sg_count(cmd);
+		__entry->prot_op	= scsi_get_prot_op(cmd);
+		memcpy(__get_dynamic_array(cmnd), cmd->cmnd, cmd->cmd_len);
+	),
+
+	TP_printk("host_no=%u channel=%u id=%u lun=%u data_sgl=%u prot_sgl=%u" \
+		  " prot_op=%s cmnd=(%s %s raw=%s)",
+		  __entry->host_no, __entry->channel, __entry->id,
+		  __entry->lun, __entry->data_sglen, __entry->prot_sglen,
+		  show_prot_op_name(__entry->prot_op),
+		  show_opcode_name(__entry->opcode),
+		  __parse_cdb(__get_dynamic_array(cmnd), __entry->cmd_len),
+		  __print_hex(__get_dynamic_array(cmnd), __entry->cmd_len))
+);
+
+TRACE_EVENT(scsi_dispatch_cmd_error,
+
+	TP_PROTO(struct scsi_cmnd *cmd, int rtn),
+
+	TP_ARGS(cmd, rtn),
+
+	TP_STRUCT__entry(
+		__field( unsigned int,	host_no	)
+		__field( unsigned int,	channel	)
+		__field( unsigned int,	id	)
+		__field( unsigned int,	lun	)
+		__field( int,		rtn	)
+		__field( unsigned int,	opcode	)
+		__field( unsigned int,	cmd_len )
+		__field( unsigned int,	data_sglen )
+		__field( unsigned int,	prot_sglen )
+		__field( unsigned char,	prot_op )
+		__dynamic_array(unsigned char,	cmnd, cmd->cmd_len)
+	),
+
+	TP_fast_assign(
+		__entry->host_no	= cmd->device->host->host_no;
+		__entry->channel	= cmd->device->channel;
+		__entry->id		= cmd->device->id;
+		__entry->lun		= cmd->device->lun;
+		__entry->rtn		= rtn;
+		__entry->opcode		= cmd->cmnd[0];
+		__entry->cmd_len	= cmd->cmd_len;
+		__entry->data_sglen	= scsi_sg_count(cmd);
+		__entry->prot_sglen	= scsi_prot_sg_count(cmd);
+		__entry->prot_op	= scsi_get_prot_op(cmd);
+		memcpy(__get_dynamic_array(cmnd), cmd->cmnd, cmd->cmd_len);
+	),
+
+	TP_printk("host_no=%u channel=%u id=%u lun=%u data_sgl=%u prot_sgl=%u" \
+		  " prot_op=%s cmnd=(%s %s raw=%s) rtn=%d",
+		  __entry->host_no, __entry->channel, __entry->id,
+		  __entry->lun, __entry->data_sglen, __entry->prot_sglen,
+		  show_prot_op_name(__entry->prot_op),
+		  show_opcode_name(__entry->opcode),
+		  __parse_cdb(__get_dynamic_array(cmnd), __entry->cmd_len),
+		  __print_hex(__get_dynamic_array(cmnd), __entry->cmd_len),
+		  __entry->rtn)
+);
+
+DECLARE_EVENT_CLASS(scsi_cmd_done_timeout_template,
+
+	TP_PROTO(struct scsi_cmnd *cmd),
+
+	TP_ARGS(cmd),
+
+	TP_STRUCT__entry(
+		__field( unsigned int,	host_no	)
+		__field( unsigned int,	channel	)
+		__field( unsigned int,	id	)
+		__field( unsigned int,	lun	)
+		__field( int,		result	)
+		__field( unsigned int,	opcode	)
+		__field( unsigned int,	cmd_len )
+		__field( unsigned int,	data_sglen )
+		__field( unsigned int,	prot_sglen )
+		__field( unsigned char,	prot_op )
+		__dynamic_array(unsigned char,	cmnd, cmd->cmd_len)
+	),
+
+	TP_fast_assign(
+		__entry->host_no	= cmd->device->host->host_no;
+		__entry->channel	= cmd->device->channel;
+		__entry->id		= cmd->device->id;
+		__entry->lun		= cmd->device->lun;
+		__entry->result		= cmd->result;
+		__entry->opcode		= cmd->cmnd[0];
+		__entry->cmd_len	= cmd->cmd_len;
+		__entry->data_sglen	= scsi_sg_count(cmd);
+		__entry->prot_sglen	= scsi_prot_sg_count(cmd);
+		__entry->prot_op	= scsi_get_prot_op(cmd);
+		memcpy(__get_dynamic_array(cmnd), cmd->cmnd, cmd->cmd_len);
+	),
+
+	TP_printk("host_no=%u channel=%u id=%u lun=%u data_sgl=%u " \
+		  "prot_sgl=%u prot_op=%s cmnd=(%s %s raw=%s) result=(driver=" \
+		  "%s host=%s message=%s status=%s)",
+		  __entry->host_no, __entry->channel, __entry->id,
+		  __entry->lun, __entry->data_sglen, __entry->prot_sglen,
+		  show_prot_op_name(__entry->prot_op),
+		  show_opcode_name(__entry->opcode),
+		  __parse_cdb(__get_dynamic_array(cmnd), __entry->cmd_len),
+		  __print_hex(__get_dynamic_array(cmnd), __entry->cmd_len),
+		  show_driverbyte_name(((__entry->result) >> 24) & 0xff),
+		  show_hostbyte_name(((__entry->result) >> 16) & 0xff),
+		  show_msgbyte_name(((__entry->result) >> 8) & 0xff),
+		  show_statusbyte_name(__entry->result & 0xff))
+);
+
+DEFINE_EVENT(scsi_cmd_done_timeout_template, scsi_dispatch_cmd_done,
+	     TP_PROTO(struct scsi_cmnd *cmd),
+	     TP_ARGS(cmd));
+
+DEFINE_EVENT(scsi_cmd_done_timeout_template, scsi_dispatch_cmd_timeout,
+	     TP_PROTO(struct scsi_cmnd *cmd),
+	     TP_ARGS(cmd));
+
+TRACE_EVENT(scsi_eh_wakeup,
+
+	TP_PROTO(struct Scsi_Host *shost),
+
+	TP_ARGS(shost),
+
+	TP_STRUCT__entry(
+		__field( unsigned int,	host_no	)
+	),
+
+	TP_fast_assign(
+		__entry->host_no	= shost->host_no;
+	),
+
+	TP_printk("host_no=%u", __entry->host_no)
+);
+
 #endif /*  _TRACE_SCSI_H */
 
 /* This part must be outside protection */

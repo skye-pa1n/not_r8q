@@ -651,10 +651,10 @@ static int rocker_dma_rings_init(struct rocker *rocker)
 err_dma_event_ring_bufs_alloc:
 	rocker_dma_ring_destroy(rocker, &rocker->event_ring);
 err_dma_event_ring_create:
-	rocker_dma_cmd_ring_waits_free(rocker);
-err_dma_cmd_ring_waits_alloc:
 	rocker_dma_ring_bufs_free(rocker, &rocker->cmd_ring,
 				  PCI_DMA_BIDIRECTIONAL);
+err_dma_cmd_ring_waits_alloc:
+	rocker_dma_cmd_ring_waits_free(rocker);
 err_dma_cmd_ring_bufs_alloc:
 	rocker_dma_ring_destroy(rocker, &rocker->cmd_ring);
 	return err;
@@ -2728,7 +2728,6 @@ rocker_fdb_offload_notify(struct rocker_port *rocker_port,
 
 	info.addr = recv_info->addr;
 	info.vid = recv_info->vid;
-	info.offloaded = true;
 	call_switchdev_notifiers(SWITCHDEV_FDB_OFFLOADED,
 				 rocker_port->dev, &info.info);
 }

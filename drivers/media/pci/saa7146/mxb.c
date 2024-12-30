@@ -653,17 +653,16 @@ static int vidioc_s_audio(struct file *file, void *fh, const struct v4l2_audio *
 	struct mxb *mxb = (struct mxb *)dev->ext_priv;
 
 	DEB_D("VIDIOC_S_AUDIO %d\n", a->index);
-	if (a->index >= 32 ||
-	    !(mxb_inputs[mxb->cur_input].audioset & (1 << a->index)))
-		return -EINVAL;
-
-	if (mxb->cur_audinput != a->index) {
-		mxb->cur_audinput = a->index;
-		tea6420_route(mxb, a->index);
-		if (mxb->cur_audinput == 0)
-			mxb_update_audmode(mxb);
+	if (mxb_inputs[mxb->cur_input].audioset & (1 << a->index)) {
+		if (mxb->cur_audinput != a->index) {
+			mxb->cur_audinput = a->index;
+			tea6420_route(mxb, a->index);
+			if (mxb->cur_audinput == 0)
+				mxb_update_audmode(mxb);
+		}
+		return 0;
 	}
-	return 0;
+	return -EINVAL;
 }
 
 #ifdef CONFIG_VIDEO_ADV_DEBUG
@@ -695,16 +694,10 @@ static struct saa7146_ext_vv vv_data;
 static int mxb_attach(struct saa7146_dev *dev, struct saa7146_pci_extension_data *info)
 {
 	struct mxb *mxb;
-	int ret;
 
 	DEB_EE("dev:%p\n", dev);
 
-	ret = saa7146_vv_init(dev, &vv_data);
-	if (ret) {
-		ERR("Error in saa7146_vv_init()");
-		return ret;
-	}
-
+	saa7146_vv_init(dev, &vv_data);
 	if (mxb_probe(dev)) {
 		saa7146_vv_release(dev);
 		return -1;

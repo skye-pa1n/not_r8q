@@ -938,7 +938,6 @@ struct rndis_params *rndis_register(void (*resp_avail)(void *v), void *v,
 	params->flow_ctrl_enable = flow_ctrl_enable;
 	params->v = v;
 	INIT_LIST_HEAD(&params->resp_queue);
-	spin_lock_init(&params->resp_lock);
 	pr_debug("%s: configNr = %d\n", __func__, i);
 
 	return params;
@@ -1013,18 +1012,6 @@ int rndis_set_param_medium(struct rndis_params *params, u32 medium, u32 speed)
 }
 EXPORT_SYMBOL_GPL(rndis_set_param_medium);
 
-u32 rndis_get_dl_max_xfer_size(struct rndis_params *params)
-{
-	pr_debug("%s:\n", __func__);
-	return params->dl_max_xfer_size;
-}
-
-u32 rndis_get_ul_max_xfer_size(struct rndis_params *params)
-{
-	pr_debug("%s:\n", __func__);
-	return params->ul_max_xfer_size;
-}
-
 void rndis_set_max_pkt_xfer(struct rndis_params *params, u8 max_pkt_per_xfer)
 {
 	pr_debug("%s:\n", __func__);
@@ -1094,14 +1081,12 @@ void rndis_free_response(struct rndis_params *params, u8 *buf)
 {
 	rndis_resp_t *r, *n;
 
-	spin_lock(&params->resp_lock);
 	list_for_each_entry_safe(r, n, &params->resp_queue, list) {
 		if (r->buf == buf) {
 			list_del(&r->list);
 			kfree(r);
 		}
 	}
-	spin_unlock(&params->resp_lock);
 }
 EXPORT_SYMBOL_GPL(rndis_free_response);
 
@@ -1111,17 +1096,14 @@ u8 *rndis_get_next_response(struct rndis_params *params, u32 *length)
 
 	if (!length) return NULL;
 
-	spin_lock(&params->resp_lock);
 	list_for_each_entry_safe(r, n, &params->resp_queue, list) {
 		if (!r->send) {
 			r->send = 1;
 			*length = r->length;
-			spin_unlock(&params->resp_lock);
 			return r->buf;
 		}
 	}
 
-	spin_unlock(&params->resp_lock);
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(rndis_get_next_response);
@@ -1138,9 +1120,7 @@ static rndis_resp_t *rndis_add_response(struct rndis_params *params, u32 length)
 	r->length = length;
 	r->send = 0;
 
-	spin_lock(&params->resp_lock);
 	list_add_tail(&r->list, &params->resp_queue);
-	spin_unlock(&params->resp_lock);
 	return r;
 }
 

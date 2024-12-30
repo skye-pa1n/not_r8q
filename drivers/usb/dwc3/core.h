@@ -262,6 +262,9 @@
 #define DWC3_GCTL_GBLHIBERNATIONEN	BIT(1)
 #define DWC3_GCTL_DSBLCLKGTNG		BIT(0)
 
+/* Global User Control Register */
+#define DWC3_GUCTL_HSTINAUTORETRY	BIT(14)
+
 /* Global User Control 1 Register */
 #define DWC3_GUCTL1_TX_IPGAP_LINECHECK_DIS	BIT(28)
 #define DWC3_GUCTL1_DEV_L1_EXIT_BY_HW	BIT(24)
@@ -302,7 +305,6 @@
 
 /* Global USB2 PHY Vendor Control Register */
 #define DWC3_GUSB2PHYACC_NEWREGREQ	BIT(25)
-#define DWC3_GUSB2PHYACC_DONE		BIT(24)
 #define DWC3_GUSB2PHYACC_BUSY		BIT(23)
 #define DWC3_GUSB2PHYACC_WRITE		BIT(22)
 #define DWC3_GUSB2PHYACC_ADDR(n)	(n << 16)
@@ -723,7 +725,6 @@ struct dwc3_ep_events {
  * @desc: usb_endpoint_descriptor pointer
  * @dwc: pointer to DWC controller
  * @saved_state: ep state saved during hibernation
- * @missed_isoc_packets: counter for missed packets sent
  * @flags: endpoint flags (wedged, stalled, ...)
  * @number: endpoint number (1 - 15)
  * @type: set to bmAttributes & USB_ENDPOINT_XFERTYPE_MASK
@@ -754,7 +755,6 @@ struct dwc3_ep {
 	struct dwc3		*dwc;
 
 	u32			saved_state;
-	u32			missed_isoc_packets;
 	unsigned		flags;
 #define DWC3_EP_ENABLED		BIT(0)
 #define DWC3_EP_STALL		BIT(1)
@@ -1373,7 +1373,7 @@ struct dwc3 {
 	 * and core will power collapse. This also leads to reset-resume of
 	 * connected devices on PM resume.
 	 */
-	bool			ignore_wakeup_src_in_hostmode;
+	bool			host_poweroff_in_pm_suspend;
 	int			retries_on_error;
 	/*  If true, GDSC collapse will happen in HOST mode bus suspend */
 	bool			gdsc_collapse_in_host_suspend;

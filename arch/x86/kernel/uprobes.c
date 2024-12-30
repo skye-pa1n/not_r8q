@@ -268,13 +268,12 @@ static volatile u32 good_2byte_insns[256 / 32] = {
 
 static bool is_prefix_bad(struct insn *insn)
 {
-	insn_byte_t p;
 	int i;
 
-	for_each_insn_prefix(insn, i, p) {
+	for (i = 0; i < insn->prefixes.nbytes; i++) {
 		insn_attr_t attr;
 
-		attr = inat_get_opcode_attribute(p);
+		attr = inat_get_opcode_attribute(insn->prefixes.bytes[i]);
 		switch (attr) {
 		case INAT_MAKE_PREFIX(INAT_PFX_ES):
 		case INAT_MAKE_PREFIX(INAT_PFX_CS):
@@ -729,15 +728,13 @@ static const struct uprobe_xol_ops push_xol_ops = {
 static int branch_setup_xol_ops(struct arch_uprobe *auprobe, struct insn *insn)
 {
 	u8 opc1 = OPCODE1(insn);
-	insn_byte_t p;
 	int i;
 
 	switch (opc1) {
 	case 0xeb:	/* jmp 8 */
 	case 0xe9:	/* jmp 32 */
-		break;
 	case 0x90:	/* prefix* + nop; same as jmp with .offs = 0 */
-		goto setup;
+		break;
 
 	case 0xe8:	/* call relative */
 		branch_clear_offset(auprobe, insn);
@@ -761,12 +758,11 @@ static int branch_setup_xol_ops(struct arch_uprobe *auprobe, struct insn *insn)
 	 * Intel and AMD behavior differ in 64-bit mode: Intel ignores 66 prefix.
 	 * No one uses these insns, reject any branch insns with such prefix.
 	 */
-	for_each_insn_prefix(insn, i, p) {
-		if (p == 0x66)
+	for (i = 0; i < insn->prefixes.nbytes; i++) {
+		if (insn->prefixes.bytes[i] == 0x66)
 			return -ENOTSUPP;
 	}
 
-setup:
 	auprobe->branch.opc1 = opc1;
 	auprobe->branch.ilen = insn->length;
 	auprobe->branch.offs = insn->immediate.value;

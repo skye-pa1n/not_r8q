@@ -340,9 +340,10 @@ static int jffs2_block_check_erase(struct jffs2_sb_info *c, struct jffs2_erasebl
 		} while(--retlen);
 		mtd_unpoint(c->mtd, jeb->offset, c->sector_size);
 		if (retlen) {
-			*bad_offset = jeb->offset + c->sector_size - retlen * sizeof(*wordebuf);
-			pr_warn("Newly-erased block contained word 0x%lx at offset 0x%08x\n",
-				*wordebuf, *bad_offset);
+			pr_warn("Newly-erased block contained word 0x%lx at offset 0x%08tx\n",
+				*wordebuf,
+				jeb->offset +
+				c->sector_size-retlen * sizeof(*wordebuf));
 			return -EIO;
 		}
 		return 0;
@@ -400,7 +401,7 @@ static void jffs2_mark_erased_block(struct jffs2_sb_info *c, struct jffs2_eraseb
 {
 	size_t retlen;
 	int ret;
-	uint32_t bad_offset;
+	uint32_t uninitialized_var(bad_offset);
 
 	switch (jffs2_block_check_erase(c, jeb, &bad_offset)) {
 	case -EAGAIN:	goto refile;

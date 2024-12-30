@@ -1,5 +1,4 @@
 #include <linux/netlink.h>
-#include <linux/nospec.h>
 #include <linux/rtnetlink.h>
 #include <linux/types.h>
 #include <net/ip.h>
@@ -25,7 +24,6 @@ int ip_metrics_convert(struct net *net, struct nlattr *fc_mx, int fc_mx_len,
 		if (type > RTAX_MAX)
 			return -EINVAL;
 
-		type = array_index_nospec(type, RTAX_MAX + 1);
 		if (type == RTAX_CC_ALGO) {
 			char tmp[TCP_CA_NAME_MAX];
 

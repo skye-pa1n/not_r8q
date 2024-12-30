@@ -46,11 +46,11 @@
 struct convert_context {
 	struct completion restart;
 	struct bio *bio_in;
-	struct bvec_iter iter_in;
 	struct bio *bio_out;
+	struct bvec_iter iter_in;
 	struct bvec_iter iter_out;
-	atomic_t cc_pending;
 	u64 cc_sector;
+	atomic_t cc_pending;
 	union {
 		struct skcipher_request *req;
 		struct aead_request *req_aead;
@@ -1661,7 +1661,6 @@ pop_from_list:
 			io = crypt_io_from_node(rb_first(&write_tree));
 			rb_erase(&io->rb_node, &write_tree);
 			kcryptd_io_write(io);
-			cond_resched();
 		} while (!RB_EMPTY_ROOT(&write_tree));
 		blk_finish_plug(&plug);
 	}
@@ -1733,12 +1732,6 @@ static void kcryptd_crypt_write_convert(struct dm_crypt_io *io)
 
 	io->ctx.bio_out = clone;
 	io->ctx.iter_out = clone->bi_iter;
-
-	if (crypt_integrity_aead(cc)) {
-		bio_copy_data(clone, io->base_bio);
-		io->ctx.bio_in = clone;
-		io->ctx.iter_in = clone->bi_iter;
-	}
 
 	sector += bio_sectors(clone);
 
@@ -2123,7 +2116,7 @@ static int crypt_set_keyring_key(struct crypt_config *cc, const char *key_string
 
 static int get_key_size(char **key_string)
 {
-	return (*key_string[0] == ':') ? -EINVAL : (int)(strlen(*key_string) >> 1);
+	return (*key_string[0] == ':') ? -EINVAL : strlen(*key_string) >> 1;
 }
 
 #endif
@@ -2197,12 +2190,7 @@ static void *crypt_page_alloc(gfp_t gfp_mask, void *pool_data)
 	struct crypt_config *cc = pool_data;
 	struct page *page;
 
-	/*
-	 * Note, percpu_counter_read_positive() may over (and under) estimate
-	 * the current usage by at most (batch - 1) * num_online_cpus() pages,
-	 * but avoids potential spinlock contention of an exact result.
-	 */
-	if (unlikely(percpu_counter_read_positive(&cc->n_allocated_pages) >= dm_crypt_pages_per_client) &&
+	if (unlikely(percpu_counter_compare(&cc->n_allocated_pages, dm_crypt_pages_per_client) >= 0) &&
 	    likely(gfp_mask & __GFP_NORETRY))
 		return NULL;
 
@@ -2892,8 +2880,7 @@ static int crypt_map(struct dm_target *ti, struct bio *bio)
 	 * - for REQ_OP_DISCARD caller must use flush if IO ordering matters
 	 */
 	if (unlikely(bio->bi_opf & REQ_PREFLUSH ||
-	    bio_op(bio) == REQ_OP_DISCARD ||
-	    bio_should_skip_dm_default_key(bio))) {
+	    bio_op(bio) == REQ_OP_DISCARD)) {
 		bio_set_dev(bio, cc->dev->bdev);
 		if (bio_sectors(bio))
 			bio->bi_iter.bi_sector = cc->start +
@@ -2948,11 +2935,6 @@ static int crypt_map(struct dm_target *ti, struct bio *bio)
 	return DM_MAPIO_SUBMITTED;
 }
 
-static char hex2asc(unsigned char c)
-{
-	return c + '0' + ((unsigned)(9 - c) >> 4 & 0x27);
-}
-
 static void crypt_status(struct dm_target *ti, status_type_t type,
 			 unsigned status_flags, char *result, unsigned maxlen)
 {
@@ -2971,12 +2953,9 @@ static void crypt_status(struct dm_target *ti, status_type_t type,
 		if (cc->key_size > 0) {
 			if (cc->key_string)
 				DMEMIT(":%u:%s", cc->key_size, cc->key_string);
-			else {
-				for (i = 0; i < cc->key_size; i++) {
-					DMEMIT("%c%c", hex2asc(cc->key[i] >> 4),
-					       hex2asc(cc->key[i] & 0xf));
-				}
-			}
+			else
+				for (i = 0; i < cc->key_size; i++)
+					DMEMIT("%02x", cc->key[i]);
 		} else
 			DMEMIT("-");
 
@@ -3108,7 +3087,7 @@ static void crypt_io_hints(struct dm_target *ti, struct queue_limits *limits)
 	limits->max_segment_size = PAGE_SIZE;
 
 	limits->logical_block_size =
-		max_t(unsigned, limits->logical_block_size, cc->sector_size);
+		max_t(unsigned short, limits->logical_block_size, cc->sector_size);
 	limits->physical_block_size =
 		max_t(unsigned, limits->physical_block_size, cc->sector_size);
 	limits->io_min = max_t(unsigned, limits->io_min, cc->sector_size);

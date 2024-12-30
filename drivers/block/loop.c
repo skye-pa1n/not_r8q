@@ -85,7 +85,7 @@
 static DEFINE_IDR(loop_index_idr);
 static DEFINE_MUTEX(loop_ctl_mutex);
 
-static int max_part;
+static int max_part = 7;
 static int part_shift;
 
 static int transfer_xor(struct loop_device *lo, int cmd,
@@ -213,8 +213,7 @@ static void __loop_update_dio(struct loop_device *lo, bool dio)
 	 * LO_FLAGS_READ_ONLY, both are set from kernel, and losetup
 	 * will get updated by ioctl(LOOP_GET_STATUS)
 	 */
-	if (lo->lo_state == Lo_bound)
-		blk_mq_freeze_queue(lo->lo_queue);
+	blk_mq_freeze_queue(lo->lo_queue);
 	lo->use_dio = use_dio;
 	if (use_dio) {
 		blk_queue_flag_clear(QUEUE_FLAG_NOMERGES, lo->lo_queue);
@@ -223,8 +222,7 @@ static void __loop_update_dio(struct loop_device *lo, bool dio)
 		blk_queue_flag_set(QUEUE_FLAG_NOMERGES, lo->lo_queue);
 		lo->lo_flags &= ~LO_FLAGS_DIRECT_IO;
 	}
-	if (lo->lo_state == Lo_bound)
-		blk_mq_unfreeze_queue(lo->lo_queue);
+	blk_mq_unfreeze_queue(lo->lo_queue);
 }
 
 /**
@@ -258,19 +256,6 @@ static void loop_set_size(struct loop_device *lo, loff_t size)
 	kobject_uevent(&disk_to_dev(bdev->bd_disk)->kobj, KOBJ_CHANGE);
 }
 
-static int
-figure_loop_size(struct loop_device *lo, loff_t offset, loff_t sizelimit)
-{
-	loff_t size = get_size(offset, sizelimit, lo->lo_backing_file);
-
-	sector_t x = (sector_t)size;
- 
-	if (unlikely((loff_t)x != size))
-		return -EFBIG;
- 	loop_set_size(lo, size);
-	return 0;
-}
- 
 static inline int
 lo_do_transfer(struct loop_device *lo, int cmd,
 	       struct page *rpage, unsigned roffs,
@@ -452,12 +437,11 @@ static int lo_fallocate(struct loop_device *lo, struct request *rq, loff_t pos,
 	 * information.
 	 */
 	struct file *file = lo->lo_backing_file;
-	struct request_queue *q = lo->lo_queue;
 	int ret;
 
 	mode |= FALLOC_FL_KEEP_SIZE;
 
-	if (!blk_queue_discard(q)) {
+	if ((!file->f_op->fallocate) || lo->lo_encrypt_key_size) {
 		ret = -EOPNOTSUPP;
 		goto out;
 	}
@@ -821,33 +805,33 @@ static ssize_t loop_attr_backing_file_show(struct loop_device *lo, char *buf)
 
 static ssize_t loop_attr_offset_show(struct loop_device *lo, char *buf)
 {
-	return sysfs_emit(buf, "%llu\n", (unsigned long long)lo->lo_offset);
+	return sprintf(buf, "%llu\n", (unsigned long long)lo->lo_offset);
 }
 
 static ssize_t loop_attr_sizelimit_show(struct loop_device *lo, char *buf)
 {
-	return sysfs_emit(buf, "%llu\n", (unsigned long long)lo->lo_sizelimit);
+	return sprintf(buf, "%llu\n", (unsigned long long)lo->lo_sizelimit);
 }
 
 static ssize_t loop_attr_autoclear_show(struct loop_device *lo, char *buf)
 {
 	int autoclear = (lo->lo_flags & LO_FLAGS_AUTOCLEAR);
 
-	return sysfs_emit(buf, "%s\n", autoclear ? "1" : "0");
+	return sprintf(buf, "%s\n", autoclear ? "1" : "0");
 }
 
 static ssize_t loop_attr_partscan_show(struct loop_device *lo, char *buf)
 {
 	int partscan = (lo->lo_flags & LO_FLAGS_PARTSCAN);
 
-	return sysfs_emit(buf, "%s\n", partscan ? "1" : "0");
+	return sprintf(buf, "%s\n", partscan ? "1" : "0");
 }
 
 static ssize_t loop_attr_dio_show(struct loop_device *lo, char *buf)
 {
 	int dio = (lo->lo_flags & LO_FLAGS_DIRECT_IO);
 
-	return sysfs_emit(buf, "%s\n", dio ? "1" : "0");
+	return sprintf(buf, "%s\n", dio ? "1" : "0");
 }
 
 LOOP_ATTR_RO(backing_file);
@@ -890,23 +874,6 @@ static void loop_config_discard(struct loop_device *lo)
 	struct file *file = lo->lo_backing_file;
 	struct inode *inode = file->f_mapping->host;
 	struct request_queue *q = lo->lo_queue;
-	u32 granularity, max_discard_sectors;
-
-	/*
-	 * If the backing device is a block device, mirror its zeroing
-	 * capability. Set the discard sectors to the block device's zeroing
-	 * capabilities because loop discards result in blkdev_issue_zeroout(),
-	 * not blkdev_issue_discard(). This maintains consistent behavior with
-	 * file-backed loop devices: discarded regions read back as zero.
-	 */
-	if (S_ISBLK(inode->i_mode) && !lo->lo_encrypt_key_size) {
-		struct request_queue *backingq;
-
-		backingq = bdev_get_queue(inode->i_bdev);
-
-		max_discard_sectors = backingq->limits.max_write_zeroes_sectors;
-		granularity = backingq->limits.discard_granularity ?:
-			queue_physical_block_size(backingq);
 
 	/*
 	 * We use punch hole to reclaim the free space used by the
@@ -914,27 +881,22 @@ static void loop_config_discard(struct loop_device *lo)
 	 * encryption is enabled, because it may give an attacker
 	 * useful information.
 	 */
-	} else if (!file->f_op->fallocate || lo->lo_encrypt_key_size) {
-		max_discard_sectors = 0;
-		granularity = 0;
-
-	} else {
-		max_discard_sectors = UINT_MAX >> 9;
-		granularity = inode->i_sb->s_blocksize;
-	}
-
-	if (max_discard_sectors) {
-		q->limits.discard_granularity = granularity;
-		blk_queue_max_discard_sectors(q, max_discard_sectors);
-		blk_queue_max_write_zeroes_sectors(q, max_discard_sectors);
-		blk_queue_flag_set(QUEUE_FLAG_DISCARD, q);
-	} else {
+	if ((!file->f_op->fallocate) ||
+	    lo->lo_encrypt_key_size) {
 		q->limits.discard_granularity = 0;
+		q->limits.discard_alignment = 0;
 		blk_queue_max_discard_sectors(q, 0);
 		blk_queue_max_write_zeroes_sectors(q, 0);
 		blk_queue_flag_clear(QUEUE_FLAG_DISCARD, q);
+		return;
 	}
+
+	q->limits.discard_granularity = inode->i_sb->s_blocksize;
 	q->limits.discard_alignment = 0;
+
+	blk_queue_max_discard_sectors(q, UINT_MAX >> 9);
+	blk_queue_max_write_zeroes_sectors(q, UINT_MAX >> 9);
+	blk_queue_flag_set(QUEUE_FLAG_DISCARD, q);
 }
 
 static void loop_unprepare_queue(struct loop_device *lo)
@@ -958,24 +920,6 @@ static int loop_prepare_queue(struct loop_device *lo)
 		return -ENOMEM;
 	set_user_nice(lo->worker_task, MIN_NICE);
 	return 0;
-}
-
-static void loop_update_rotational(struct loop_device *lo)
-{
-	struct file *file = lo->lo_backing_file;
-	struct inode *file_inode = file->f_mapping->host;
-	struct block_device *file_bdev = file_inode->i_sb->s_bdev;
-	struct request_queue *q = lo->lo_queue;
-	bool nonrot = true;
-
-	/* not all filesystems (e.g. tmpfs) have a sb->s_bdev */
-	if (file_bdev)
-		nonrot = blk_queue_nonrot(bdev_get_queue(file_bdev));
-
-	if (nonrot)
-		blk_queue_flag_set(QUEUE_FLAG_NONROT, q);
-	else
-		blk_queue_flag_clear(QUEUE_FLAG_NONROT, q);
 }
 
 static int
@@ -1030,7 +974,6 @@ loop_set_status_from_info(struct loop_device *lo,
 	int err;
 	struct loop_func_table *xfer;
 	kuid_t uid = current_uid();
-	loff_t new_size;
 
 	if ((unsigned int) info->lo_encrypt_key_size > LO_KEY_SIZE)
 		return -EINVAL;
@@ -1115,6 +1058,8 @@ static int loop_configure(struct loop_device *lo, fmode_t mode,
 	mapping = file->f_mapping;
 	inode = mapping->host;
 
+	size = get_loop_size(lo, file);
+
 	if ((config->info.lo_flags & ~LOOP_CONFIGURE_SETTABLE_FLAGS) != 0) {
 		error = -EINVAL;
 		goto out_unlock;
@@ -1163,11 +1108,8 @@ static int loop_configure(struct loop_device *lo, fmode_t mode,
 	blk_queue_physical_block_size(lo->lo_queue, bsize);
 	blk_queue_io_min(lo->lo_queue, bsize);
 
-	loop_config_discard(lo);
 	loop_update_dio(lo);
 	loop_sysfs_init(lo);
-
-	size = get_loop_size(lo, file);
 	loop_set_size(lo, size);
 
 	set_blocksize(bdev, S_ISBLK(inode->i_mode) ?
@@ -1177,8 +1119,6 @@ static int loop_configure(struct loop_device *lo, fmode_t mode,
 	if (part_shift)
 		lo->lo_flags |= LO_FLAGS_PARTSCAN;
 	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
-	if (partscan)
-		lo->lo_disk->flags &= ~GENHD_FL_NO_PART_SCAN;
 
 	/* Grab the block_device to prevent its destruction after we
 	 * put /dev/loopXX inode. Later in __loop_clr_fd() we bdput(bdev).
@@ -1613,16 +1553,16 @@ static int loop_set_block_size(struct loop_device *lo, unsigned long arg)
 	if (err)
 		return err;
 
-	if (lo->lo_queue->limits.logical_block_size == arg)
-		return 0;
-
-	sync_blockdev(lo->lo_device);
-	invalidate_bdev(lo->lo_device);
+	if (lo->lo_queue->limits.logical_block_size != arg) {
+		sync_blockdev(lo->lo_device);
+		invalidate_bdev(lo->lo_device);
+	}
 
 	blk_mq_freeze_queue(lo->lo_queue);
 
 	/* invalidate_bdev should have truncated all the pages */
-	if (lo->lo_device->bd_inode->i_mapping->nrpages) {
+	if (lo->lo_queue->limits.logical_block_size != arg &&
+			lo->lo_device->bd_inode->i_mapping->nrpages) {
 		err = -EAGAIN;
 		pr_warn("%s: loop%d (%s) has still dirty pages (nrpages=%lu)\n",
 			__func__, lo->lo_number, lo->lo_file_name,
@@ -2106,7 +2046,7 @@ static int loop_add(struct loop_device **l, int i)
 	lo->tag_set.numa_node = NUMA_NO_NODE;
 	lo->tag_set.cmd_size = sizeof(struct loop_cmd);
 	lo->tag_set.flags = BLK_MQ_F_SHOULD_MERGE | BLK_MQ_F_SG_MERGE |
-		BLK_MQ_F_NO_SCHED;
+		BLK_MQ_F_NO_SCHED_BY_DEFAULT;
 	lo->tag_set.driver_data = lo;
 
 	err = blk_mq_alloc_tag_set(&lo->tag_set);
@@ -2402,8 +2342,6 @@ static void __exit loop_exit(void)
 
 	range = max_loop ? max_loop << part_shift : 1UL << MINORBITS;
 
-	mutex_lock(&loop_ctl_mutex);
-
 	idr_for_each(&loop_index_idr, &loop_exit_cb, NULL);
 	idr_destroy(&loop_index_idr);
 
@@ -2411,8 +2349,6 @@ static void __exit loop_exit(void)
 	unregister_blkdev(LOOP_MAJOR, "loop");
 
 	misc_deregister(&loop_misc);
-
-	mutex_unlock(&loop_ctl_mutex);
 }
 
 module_init(loop_init);

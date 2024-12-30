@@ -21,11 +21,7 @@ config IOSCHED_DEADLINE
 	  CSCAN service with FIFO expiration of requests, switching to
 	  a new point in the service tree and doing a batch of IO from there
 	  in case of expiry.
-	  
-config IOSCHED_MAPLE
-	tristate "Maple I/O scheduler"
-	default y
-	
+
 config IOSCHED_CFQ
 	tristate "CFQ I/O scheduler"
 	default y
@@ -43,11 +39,11 @@ config CFQ_GROUP_IOSCHED
 	default n
 	---help---
 	  Enable group IO scheduling in CFQ.
-	  
+
 choice
 
 	prompt "Default I/O scheduler"
-	default DEFAULT_NOOP
+	default DEFAULT_CFQ
 	help
 	  Select the I/O scheduler which will be used by default for all
 	  block devices.
@@ -60,9 +56,6 @@ choice
 
 	config DEFAULT_NOOP
 		bool "No-op"
-	
-	config DEFAULT_MAPLE
-		bool "Maple" if IOSCHED_MAPLE=y	
 
 endchoice
 
@@ -71,14 +64,13 @@ config DEFAULT_IOSCHED
 	default "deadline" if DEFAULT_DEADLINE
 	default "cfq" if DEFAULT_CFQ
 	default "noop" if DEFAULT_NOOP
-	default "maple" if DEFAULT_MAPLE
 
 config MQ_IOSCHED_DEADLINE
 	tristate "MQ deadline I/O scheduler"
 	default y
 	---help---
 	  MQ version of the deadline IO scheduler.
-	  
+
 config MQ_IOSCHED_KYBER
 	tristate "Kyber I/O scheduler"
 	default y
@@ -87,7 +79,7 @@ config MQ_IOSCHED_KYBER
 	  multiqueue and other fast devices. Given target latencies for reads and
 	  synchronous writes, it will self-tune queue depths to achieve that
 	  goal.
-	  
+
 config IOSCHED_BFQ
 	tristate "BFQ I/O scheduler"
 	default n

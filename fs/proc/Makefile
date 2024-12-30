@@ -5,10 +5,7 @@
 
 obj-y   += proc.o
 
-ccflags-y += -Wno-declaration-after-statement -Wno-incompatible-pointer-types
-
 CFLAGS_task_mmu.o	+= $(call cc-option,-Wno-override-init,)
-
 proc-y			:= nommu.o task_nommu.o
 proc-$(CONFIG_MMU)	:= task_mmu.o
 
@@ -38,3 +35,4 @@ proc-$(CONFIG_PROC_KCORE)	+= kcore.o
 proc-$(CONFIG_PROC_VMCORE)	+= vmcore.o
 proc-$(CONFIG_PRINTK)	+= kmsg.o
 proc-$(CONFIG_PROC_PAGE_MONITOR)	+= page.o
+proc-$(CONFIG_PROC_AVC) += proc_avc.o

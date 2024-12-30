@@ -70,15 +70,14 @@ static int get_seg_reg_override_idx(struct insn *insn)
 {
 	int idx = INAT_SEG_REG_DEFAULT;
 	int num_overrides = 0, i;
-	insn_byte_t p;
 
 	insn_get_prefixes(insn);
 
 	/* Look for any segment override prefixes. */
-	for_each_insn_prefix(insn, i, p) {
+	for (i = 0; i < insn->prefixes.nbytes; i++) {
 		insn_attr_t attr;
 
-		attr = inat_get_opcode_attribute(p);
+		attr = inat_get_opcode_attribute(insn->prefixes.bytes[i]);
 		switch (attr) {
 		case INAT_MAKE_PREFIX(INAT_PFX_CS):
 			idx = INAT_SEG_REG_CS;

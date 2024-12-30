@@ -1173,13 +1173,6 @@ const char * const vmstat_text[] = {
 	"nr_kernel_misc_reclaimable",
 	"nr_unreclaimable_pages",
 
-
-	"nr_ion_heap",
-	"nr_ion_heap_pool",
-	"nr_gpu_heap",
-#ifdef CONFIG_UKSM
-	"nr_uksm_zero_pages",
-#endif
 	/* enum writeback_stat_item counters */
 	"nr_dirty_threshold",
 	"nr_dirty_background_threshold",
@@ -1415,9 +1408,6 @@ static void pagetypeinfo_showfree_print(struct seq_file *m,
 			list_for_each(curr, &area->free_list[mtype])
 				freecount++;
 			seq_printf(m, "%6lu ", freecount);
-			spin_unlock_irq(&zone->lock);
-			cond_resched();
-			spin_lock_irq(&zone->lock);
 		}
 		seq_putc(m, '\n');
 	}
@@ -1729,9 +1719,6 @@ static void *vmstat_start(struct seq_file *m, loff_t *pos)
 static void *vmstat_next(struct seq_file *m, void *arg, loff_t *pos)
 {
 	(*pos)++;
-	//nr_gpu_heap is out-of-tree now so we don't want to export it.
-	if (*pos == NR_VM_ZONE_STAT_ITEMS + NR_VM_NUMA_STAT_ITEMS + NR_GPU_HEAP)
-		(*pos)++;
 	if (*pos >= ARRAY_SIZE(vmstat_text))
 		return NULL;
 	return (unsigned long *)m->private + *pos;
@@ -1764,7 +1751,7 @@ static const struct seq_operations vmstat_op = {
 
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct delayed_work, vmstat_work);
-int sysctl_stat_interval __read_mostly = 10 * HZ;
+int sysctl_stat_interval __read_mostly = HZ;
 
 #ifdef CONFIG_PROC_FS
 static void refresh_vm_stats(struct work_struct *work)

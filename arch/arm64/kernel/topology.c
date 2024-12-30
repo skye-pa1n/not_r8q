@@ -31,16 +31,6 @@
 #include <asm/cputype.h>
 #include <asm/topology.h>
 
-/*
- * This function returns the logic cpu number of the node.
- * There are basically three kinds of return values:
- * (1) logic cpu number which is > 0.
- * (2) -ENODEV when the device tree(DT) node is valid and found in the DT but
- * there is no possible logical CPU in the kernel to match. This happens
- * when CONFIG_NR_CPUS is configure to be smaller than the number of
- * CPU nodes in DT. We need to just ignore this case.
- * (3) -1 if the node does not exist in the device tree
- */
 static int __init get_cpu_for_node(struct device_node *node)
 {
 	struct device_node *cpu_node;
@@ -54,8 +44,8 @@ static int __init get_cpu_for_node(struct device_node *node)
 	if (cpu >= 0)
 		topology_parse_cpu_capacity(cpu_node, cpu);
 	else
-		pr_info("CPU node for %pOF exist but the possible cpu range is :%*pbl\n",
-			cpu_node, cpumask_pr_args(cpu_possible_mask));
+		pr_crit("Unable to find CPU node for %pOF\n", cpu_node);
+
 	of_node_put(cpu_node);
 	return cpu;
 }
@@ -79,7 +69,7 @@ static int __init parse_core(struct device_node *core, int package_id,
 				cpu_topology[cpu].package_id = package_id;
 				cpu_topology[cpu].core_id = core_id;
 				cpu_topology[cpu].thread_id = i;
-			} else if (cpu != -ENODEV) {
+			} else {
 				pr_err("%pOF: Can't get CPU for thread\n",
 				       t);
 				of_node_put(t);
@@ -100,7 +90,7 @@ static int __init parse_core(struct device_node *core, int package_id,
 
 		cpu_topology[cpu].package_id = package_id;
 		cpu_topology[cpu].core_id = core_id;
-	} else if (leaf && cpu != -ENODEV) {
+	} else if (leaf) {
 		pr_err("%pOF: Can't get CPU for leaf core\n", core);
 		return -EINVAL;
 	}
@@ -300,23 +290,21 @@ void store_cpu_topology(unsigned int cpuid)
 	if (mpidr & MPIDR_UP_BITMASK)
 		return;
 
-	/*
-	 * This would be the place to create cpu topology based on MPIDR.
-	 *
-	 * However, it cannot be trusted to depict the actual topology; some
-	 * pieces of the architecture enforce an artificial cap on Aff0 values
-	 * (e.g. GICv3's ICC_SGI1R_EL1 limits it to 15), leading to an
-	 * artificial cycling of Aff1, Aff2 and Aff3 values. IOW, these end up
-	 * having absolutely no relationship to the actual underlying system
-	 * topology, and cannot be reasonably used as core / package ID.
-	 *
-	 * If the MT bit is set, Aff0 *could* be used to define a thread ID, but
-	 * we still wouldn't be able to obtain a sane core ID. This means we
-	 * need to entirely ignore MPIDR for any topology deduction.
-	 */
-	cpuid_topo->thread_id  = -1;
-	cpuid_topo->core_id    = cpuid;
-	cpuid_topo->package_id = cpu_to_node(cpuid);
+	/* Create cpu topology mapping based on MPIDR. */
+	if (mpidr & MPIDR_MT_BITMASK) {
+		/* Multiprocessor system : Multi-threads per core */
+		cpuid_topo->thread_id  = MPIDR_AFFINITY_LEVEL(mpidr, 0);
+		cpuid_topo->core_id    = MPIDR_AFFINITY_LEVEL(mpidr, 1);
+		cpuid_topo->package_id = MPIDR_AFFINITY_LEVEL(mpidr, 2) |
+					 MPIDR_AFFINITY_LEVEL(mpidr, 3) << 8;
+	} else {
+		/* Multiprocessor system : Single-thread per core */
+		cpuid_topo->thread_id  = -1;
+		cpuid_topo->core_id    = MPIDR_AFFINITY_LEVEL(mpidr, 0);
+		cpuid_topo->package_id = MPIDR_AFFINITY_LEVEL(mpidr, 1) |
+					 MPIDR_AFFINITY_LEVEL(mpidr, 2) << 8 |
+					 MPIDR_AFFINITY_LEVEL(mpidr, 3) << 16;
+	}
 
 	pr_debug("CPU%u: cluster %d core %d thread %d mpidr %#016llx\n",
 		 cpuid, cpuid_topo->package_id, cpuid_topo->core_id,

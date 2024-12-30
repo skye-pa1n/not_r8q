@@ -1081,20 +1081,28 @@ void acpi_ec_dispatch_gpe(void)
                                 Event Management
    -------------------------------------------------------------------------- */
 static struct acpi_ec_query_handler *
+acpi_ec_get_query_handler(struct acpi_ec_query_handler *handler)
+{
+	if (handler)
+		kref_get(&handler->kref);
+	return handler;
+}
+
+static struct acpi_ec_query_handler *
 acpi_ec_get_query_handler_by_value(struct acpi_ec *ec, u8 value)
 {
 	struct acpi_ec_query_handler *handler;
+	bool found = false;
 
 	mutex_lock(&ec->mutex);
 	list_for_each_entry(handler, &ec->list, node) {
 		if (value == handler->query_bit) {
-			kref_get(&handler->kref);
-			mutex_unlock(&ec->mutex);
-			return handler;
+			found = true;
+			break;
 		}
 	}
 	mutex_unlock(&ec->mutex);
-	return NULL;
+	return found ? acpi_ec_get_query_handler(handler) : NULL;
 }
 
 static void acpi_ec_query_handler_release(struct kref *kref)
@@ -1153,7 +1161,6 @@ static void acpi_ec_remove_query_handlers(struct acpi_ec *ec,
 void acpi_ec_remove_query_handler(struct acpi_ec *ec, u8 query_bit)
 {
 	acpi_ec_remove_query_handlers(ec, false, query_bit);
-	flush_workqueue(ec_query_wq);
 }
 EXPORT_SYMBOL_GPL(acpi_ec_remove_query_handler);
 
@@ -1330,13 +1337,10 @@ acpi_ec_space_handler(u32 function, acpi_physical_address address,
 	if (ec->busy_polling || bits > 8)
 		acpi_ec_burst_enable(ec);
 
-	for (i = 0; i < bytes; ++i, ++address, ++value) {
+	for (i = 0; i < bytes; ++i, ++address, ++value)
 		result = (function == ACPI_READ) ?
 			acpi_ec_read(ec, address, value) :
 			acpi_ec_write(ec, address, *value);
-		if (result < 0)
-			break;
-	}
 
 	if (ec->busy_polling || bits > 8)
 		acpi_ec_burst_disable(ec);
@@ -1348,10 +1352,8 @@ acpi_ec_space_handler(u32 function, acpi_physical_address address,
 		return AE_NOT_FOUND;
 	case -ETIME:
 		return AE_TIME;
-	case 0:
-		return AE_OK;
 	default:
-		return AE_ERROR;
+		return AE_OK;
 	}
 }
 
@@ -1910,22 +1912,6 @@ static const struct dmi_system_id ec_dmi_table[] __initconst = {
 	DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
 	DMI_MATCH(DMI_PRODUCT_NAME, "GL702VMK"),}, NULL},
 	{
-	ec_honor_ecdt_gpe, "ASUSTeK COMPUTER INC. X505BA", {
-	DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-	DMI_MATCH(DMI_PRODUCT_NAME, "X505BA"),}, NULL},
-	{
-	ec_honor_ecdt_gpe, "ASUSTeK COMPUTER INC. X505BP", {
-	DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-	DMI_MATCH(DMI_PRODUCT_NAME, "X505BP"),}, NULL},
-	{
-	ec_honor_ecdt_gpe, "ASUSTeK COMPUTER INC. X542BA", {
-	DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-	DMI_MATCH(DMI_PRODUCT_NAME, "X542BA"),}, NULL},
-	{
-	ec_honor_ecdt_gpe, "ASUSTeK COMPUTER INC. X542BP", {
-	DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-	DMI_MATCH(DMI_PRODUCT_NAME, "X542BP"),}, NULL},
-	{
 	ec_honor_ecdt_gpe, "ASUS X550VXK", {
 	DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
 	DMI_MATCH(DMI_PRODUCT_NAME, "X550VXK"),}, NULL},
@@ -2122,6 +2108,13 @@ static const struct dmi_system_id acpi_ec_no_wakeup[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 			DMI_MATCH(DMI_PRODUCT_FAMILY, "Thinkpad X1 Carbon 6th"),
+		},
+	},
+	{
+		.ident = "ThinkPad X1 Carbon 6th",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+			DMI_MATCH(DMI_PRODUCT_FAMILY, "ThinkPad X1 Carbon 6th"),
 		},
 	},
 	{

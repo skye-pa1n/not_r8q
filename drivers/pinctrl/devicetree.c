@@ -235,16 +235,12 @@ int pinctrl_dt_to_map(struct pinctrl *p, struct pinctrl_dev *pctldev)
 	for (state = 0; ; state++) {
 		/* Retrieve the pinctrl-* property */
 		propname = kasprintf(GFP_KERNEL, "pinctrl-%d", state);
-		if (!propname) {
-			ret = -ENOMEM;
-			goto err;
-		}
 		prop = of_find_property(np, propname, &size);
 		kfree(propname);
 		if (!prop) {
 			if (state == 0) {
-				ret = -ENODEV;
-				goto err;
+				of_node_put(np);
+				return -ENODEV;
 			}
 			break;
 		}

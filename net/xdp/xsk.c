@@ -233,8 +233,10 @@ static int xsk_generic_xmit(struct sock *sk, struct msghdr *m,
 
 		len = desc.len;
 		skb = sock_alloc_send_skb(sk, len, 1, &err);
-		if (unlikely(!skb))
+		if (unlikely(!skb)) {
+			err = -EAGAIN;
 			goto out;
+		}
 
 		skb_put(skb, len);
 		addr = desc.addr;
@@ -289,17 +291,17 @@ static int xsk_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len)
 	return (xs->zc) ? xsk_zc_xmit(sk) : xsk_generic_xmit(sk, m, total_len);
 }
 
-static __poll_t xsk_poll(struct file *file, struct socket *sock,
+static unsigned int xsk_poll(struct file *file, struct socket *sock,
 			     struct poll_table_struct *wait)
 {
-	__poll_t mask = datagram_poll(file, sock, wait);
+	unsigned int mask = datagram_poll(file, sock, wait);
 	struct sock *sk = sock->sk;
 	struct xdp_sock *xs = xdp_sk(sk);
 
 	if (xs->rx && !xskq_empty_desc(xs->rx))
-		mask |= EPOLLIN | EPOLLRDNORM;
+		mask |= POLLIN | POLLRDNORM;
 	if (xs->tx && !xskq_full_desc(xs->tx))
-		mask |= EPOLLOUT | EPOLLWRNORM;
+		mask |= POLLOUT | POLLWRNORM;
 
 	return mask;
 }
@@ -515,8 +517,6 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		struct xdp_umem_reg mr;
 		struct xdp_umem *umem;
 
-		if (optlen < sizeof(mr))
-			return -EINVAL;
 		if (copy_from_user(&mr, optval, sizeof(mr)))
 			return -EFAULT;
 
@@ -544,8 +544,6 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		struct xsk_queue **q;
 		int entries;
 
-		if (optlen < sizeof(entries))
-			return -EINVAL;
 		if (copy_from_user(&entries, optval, sizeof(entries)))
 			return -EFAULT;
 

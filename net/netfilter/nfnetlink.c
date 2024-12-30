@@ -148,15 +148,10 @@ int nfnetlink_set_err(struct net *net, u32 portid, u32 group, int error)
 }
 EXPORT_SYMBOL_GPL(nfnetlink_set_err);
 
-int nfnetlink_unicast(struct sk_buff *skb, struct net *net, u32 portid)
+int nfnetlink_unicast(struct sk_buff *skb, struct net *net, u32 portid,
+		      int flags)
 {
-	int err;
-
-	err = nlmsg_unicast(net->nfnl, skb, portid);
-	if (err == -EAGAIN)
-		err = -ENOBUFS;
-
-	return err;
+	return netlink_unicast(net->nfnl, skb, portid, flags);
 }
 EXPORT_SYMBOL_GPL(nfnetlink_unicast);
 
@@ -452,8 +447,7 @@ ack:
 			 * processed, this avoids that the same error is
 			 * reported several times when replaying the batch.
 			 */
-			if (err == -ENOMEM ||
-			    nfnl_err_add(&err_list, nlh, err, &extack) < 0) {
+			if (nfnl_err_add(&err_list, nlh, err, &extack) < 0) {
 				/* We failed to enqueue an error, reset the
 				 * list of errors and send OOM to userspace
 				 * pointing to the batch header.
@@ -496,6 +490,8 @@ done:
 	} else {
 		ss->abort(net, oskb);
 	}
+	if (ss->cleanup)
+		ss->cleanup(net);
 
 	nfnl_err_deliver(&err_list, oskb);
 	kfree_skb(skb);

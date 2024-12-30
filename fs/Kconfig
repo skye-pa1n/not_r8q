@@ -8,6 +8,9 @@ menu "File systems"
 config DCACHE_WORD_ACCESS
        bool
 
+config INTERRUPTIBLE_SYNC
+        bool "Support interruptible sync for Samsung Mobile Device"
+
 if BLOCK
 
 config FS_IOMAP
@@ -133,10 +136,9 @@ endmenu
 endif # BLOCK
 
 if BLOCK
-menu "DOS/FAT/EXFAT/SDFAT/NT Filesystems"
+menu "DOS/FAT/NT Filesystems"
 
 source "fs/fat/Kconfig"
-source "fs/exfat/Kconfig"
 source "fs/sdfat/Kconfig"
 source "fs/ntfs/Kconfig"
 
@@ -261,7 +263,6 @@ source "fs/pstore/Kconfig"
 source "fs/sysv/Kconfig"
 source "fs/ufs/Kconfig"
 source "fs/exofs/Kconfig"
-source "fs/erofs/Kconfig"
 
 endif # MISC_FILESYSTEMS
 

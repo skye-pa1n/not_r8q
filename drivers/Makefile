@@ -211,16 +211,35 @@ ifeq ($(CONFIG_BATTERY_SAMSUNG_V2), y)
 	obj-$(CONFIG_BATTERY_SAMSUNG)	+= battery_v2/
 endif
 
+# COMBO REDRIVER
+obj-$(CONFIG_REDRIVER)	        += redriver/
+
 # Motor
 obj-y				+= motor/
 
+# FIVE TEE driver
+obj-$(CONFIG_FIVE_TEE_DRIVER)	+= security/samsung/five_tee_driver/
+obj-$(CONFIG_ICD)		+= security/samsung/icdrv/
+
+# uH
+obj-$(CONFIG_UH)        += uh/
+
+# streamline
+ifeq ($(CONFIG_GATOR), y)
+	obj-$(CONFIG_GATOR)				+= gator/
+endif
+ifeq ($(CONFIG_PERF_MGR), y)
+	obj-$(CONFIG_PERF_MGR)	+= perf_mgr/
+endif
+
 #TZIC
 obj-$(CONFIG_TZIC)  += security/samsung/tzic/
+
+# KUnit
+obj-y				+= kunit/
 
 # GNSS
 obj-$(CONFIG_GPS_BCM4753)	+= gps/
 
 # SPU signature verify
 obj-$(CONFIG_SPU_VERIFY) += spu_verify/
-
-obj-$(CONFIG_KSU) += kernelsu/

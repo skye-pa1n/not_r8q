@@ -445,9 +445,7 @@ int cpts_register(struct cpts *cpts)
 	for (i = 0; i < CPTS_MAX_EVENTS; i++)
 		list_add(&cpts->pool_data[i].list, &cpts->pool);
 
-	err = clk_enable(cpts->refclk);
-	if (err)
-		return err;
+	clk_enable(cpts->refclk);
 
 	cpts_write32(cpts, CPTS_EN, control);
 	cpts_write32(cpts, TS_PEND_EN, int_enable);
@@ -478,7 +476,6 @@ void cpts_unregister(struct cpts *cpts)
 
 	ptp_clock_unregister(cpts->clock);
 	cpts->clock = NULL;
-	cpts->phc_index = -1;
 
 	cpts_write32(cpts, 0, int_enable);
 	cpts_write32(cpts, 0, control);
@@ -580,7 +577,6 @@ struct cpts *cpts_create(struct device *dev, void __iomem *regs,
 	cpts->cc.read = cpts_systim_read;
 	cpts->cc.mask = CLOCKSOURCE_MASK(32);
 	cpts->info = cpts_info;
-	cpts->phc_index = -1;
 
 	cpts_calc_mult_shift(cpts);
 	/* save cc.mult original value as it can be modified

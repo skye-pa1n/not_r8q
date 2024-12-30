@@ -115,14 +115,14 @@ struct f2fs_super_block {
 	__u8 hot_ext_count;		/* # of hot file extension */
 	__le16  s_encoding;		/* Filename charset encoding */
 	__le16  s_encoding_flags;	/* Filename charset encoding flags */
-	__u8 reserved[306];		/* valid reserved region */
+	__u8 reserved[242];		/* valid reserved region */
+	__u8 mount_opts[64];            /* default mount option for SEC */
 	__le32 crc;			/* checksum of superblock */
 } __packed;
 
 /*
  * For checkpoint
  */
-#define CP_RESIZEFS_FLAG		0x00004000
 #define CP_DISABLED_QUICK_FLAG		0x00002000
 #define CP_DISABLED_FLAG		0x00001000
 #define CP_QUOTA_NEED_FSCK_FLAG		0x00000800
@@ -558,5 +558,18 @@ enum {
 #define S_SHIFT 12
 
 #define	F2FS_DEF_PROJID		0	/* default project ID */
+
+#define	F2FS_SEC_EXTRA_FSCK_MAGIC	0xF5CE45EC
+struct f2fs_sb_extra_flag_blk {
+	__le32 need_fsck;
+	__le32 spo_counter;
+	__le64 fsck_read_bytes;
+	__le64 fsck_written_bytes;
+	__le64 fsck_elapsed_time;
+	__le32 fsck_exit_code;
+	__le32 valid_node_count;
+	__le32 valid_inode_count;
+	__u8   rsvd[4052];
+} __packed;
 
 #endif  /* _LINUX_F2FS_FS_H */

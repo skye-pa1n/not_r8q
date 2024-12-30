@@ -312,7 +312,6 @@ unbind_all:
 	component_unbind_all(dev, drm);
 gem_destroy:
 	vc4_gem_destroy(drm);
-	drm_mode_config_cleanup(drm);
 	vc4_bo_cache_destroy(drm);
 dev_put:
 	drm_dev_put(drm);
@@ -394,12 +393,7 @@ static int __init vc4_drm_register(void)
 	if (ret)
 		return ret;
 
-	ret = platform_driver_register(&vc4_platform_driver);
-	if (ret)
-		platform_unregister_drivers(component_drivers,
-					    ARRAY_SIZE(component_drivers));
-
-	return ret;
+	return platform_driver_register(&vc4_platform_driver);
 }
 
 static void __exit vc4_drm_unregister(void)

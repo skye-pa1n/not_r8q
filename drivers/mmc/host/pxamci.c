@@ -653,7 +653,7 @@ static int pxamci_probe(struct platform_device *pdev)
 
 	ret = pxamci_of_init(pdev, mmc);
 	if (ret)
-		goto out;
+		return ret;
 
 	host = mmc_priv(mmc);
 	host->mmc = mmc;
@@ -677,7 +677,7 @@ static int pxamci_probe(struct platform_device *pdev)
 
 	ret = pxamci_init_ocr(host);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	mmc->caps = 0;
 	host->cmdat = 0;

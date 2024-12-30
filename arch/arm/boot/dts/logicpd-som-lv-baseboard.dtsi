@@ -55,8 +55,6 @@
 
 &mcbsp2 {
 	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&mcbsp2_pins>;
 };
 
 &charger {

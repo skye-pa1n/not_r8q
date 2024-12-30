@@ -46,7 +46,7 @@
 /* from BKL pushdown */
 DEFINE_MUTEX(drm_global_mutex);
 
-#define MAX_DRM_OPEN_COUNT		128
+#define MAX_DRM_OPEN_COUNT		20
 
 /**
  * DOC: file operations
@@ -313,7 +313,7 @@ int drm_open(struct inode *inode, struct file *filp)
 {
 	struct drm_device *dev;
 	struct drm_minor *minor;
-	int retcode = 0;
+	int retcode;
 	int need_setup = 0;
 
 	minor = drm_minor_acquire(iminor(inode));

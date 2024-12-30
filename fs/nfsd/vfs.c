@@ -1206,9 +1206,6 @@ nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		iap->ia_mode = 0;
 	iap->ia_mode = (iap->ia_mode & S_IALLUGO) | type;
 
-	if (!IS_POSIXACL(dirp))
-		iap->ia_mode &= ~current_umask();
-
 	err = 0;
 	host_err = 0;
 	switch (type) {
@@ -1441,9 +1438,6 @@ do_nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		fh_drop_write(fhp);
 		goto out;
 	}
-
-	if (!IS_POSIXACL(dirp))
-		iap->ia_mode &= ~current_umask();
 
 	host_err = vfs_create(dirp, dchild, iap->ia_mode, true);
 	if (host_err < 0) {
@@ -1691,12 +1685,6 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	if (!flen || isdotent(fname, flen) || !tlen || isdotent(tname, tlen))
 		goto out;
 
-	err = (rqstp->rq_vers == 2) ? nfserr_acces : nfserr_xdev;
-	if (ffhp->fh_export->ex_path.mnt != tfhp->fh_export->ex_path.mnt)
-		goto out;
-	if (ffhp->fh_export->ex_path.dentry != tfhp->fh_export->ex_path.dentry)
-		goto out;
-
 	host_err = fh_want_write(ffhp);
 	if (host_err) {
 		err = nfserrno(host_err);
@@ -1728,6 +1716,12 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 		goto out_dput_old;
 	host_err = -ENOTEMPTY;
 	if (ndentry == trap)
+		goto out_dput_new;
+
+	host_err = -EXDEV;
+	if (ffhp->fh_export->ex_path.mnt != tfhp->fh_export->ex_path.mnt)
+		goto out_dput_new;
+	if (ffhp->fh_export->ex_path.dentry != tfhp->fh_export->ex_path.dentry)
 		goto out_dput_new;
 
 	host_err = vfs_rename(fdir, odentry, tdir, ndentry, NULL, 0);

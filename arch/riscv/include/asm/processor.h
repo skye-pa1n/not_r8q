@@ -30,8 +30,6 @@
 
 #ifndef __ASSEMBLY__
 
-#include <asm/barrier.h>
-
 struct task_struct;
 struct pt_regs;
 

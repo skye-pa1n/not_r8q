@@ -382,7 +382,7 @@ static int spi_gpio_probe(struct platform_device *pdev)
 		return -ENODEV;
 #endif
 
-	master = devm_spi_alloc_master(&pdev->dev, sizeof(*spi_gpio));
+	master = spi_alloc_master(&pdev->dev, sizeof(*spi_gpio));
 	if (!master)
 		return -ENOMEM;
 
@@ -438,7 +438,11 @@ static int spi_gpio_probe(struct platform_device *pdev)
 	}
 	spi_gpio->bitbang.setup_transfer = spi_bitbang_setup_transfer;
 
-	return spi_bitbang_start(&spi_gpio->bitbang);
+	status = spi_bitbang_start(&spi_gpio->bitbang);
+	if (status)
+		spi_master_put(master);
+
+	return status;
 }
 
 static int spi_gpio_remove(struct platform_device *pdev)

@@ -23,7 +23,6 @@
 #include <linux/ioprio.h>
 #include <linux/bug.h>
 #include <linux/bio-crypt-ctx.h>
-#include <linux/android_kabi.h>
 
 #ifdef CONFIG_BLOCK
 
@@ -358,10 +357,6 @@ struct bio_integrity_payload {
 	struct work_struct	bip_work;	/* I/O completion */
 
 	struct bio_vec		*bip_vec;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-
 	struct bio_vec		bip_inline_vecs[0];/* embedded bvec array */
 };
 
@@ -432,6 +427,7 @@ extern int bioset_init_from_src(struct bio_set *bs, struct bio_set *src);
 
 extern struct bio *bio_alloc_bioset(gfp_t, unsigned int, struct bio_set *);
 extern void bio_put(struct bio *);
+extern void bio_clone_crypt_key(struct bio *dst, const struct bio *src);
 
 extern void bio_clone_crypt_key(struct bio *dst, const struct bio *src);
 extern void __bio_clone_fast(struct bio *, struct bio *);
@@ -768,11 +764,6 @@ struct bio_set {
 	struct bio_list		rescue_list;
 	struct work_struct	rescue_work;
 	struct workqueue_struct	*rescue_workqueue;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 };
 
 struct biovec_slab {

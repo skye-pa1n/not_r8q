@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __ADRENO_H
@@ -203,7 +203,6 @@ enum adreno_gpurev {
 	ADRENO_REV_A418 = 418,
 	ADRENO_REV_A420 = 420,
 	ADRENO_REV_A430 = 430,
-	ADRENO_REV_A504 = 504,
 	ADRENO_REV_A505 = 505,
 	ADRENO_REV_A506 = 506,
 	ADRENO_REV_A508 = 508,
@@ -566,7 +565,7 @@ struct adreno_device {
 	 * @perfcounter: Flag to clear perfcounters across contexts and
 	 * controls perfcounter ioctl read
 	 */
-	bool perfcounter;
+	bool perfcounter;	
 };
 
 /**
@@ -1051,6 +1050,8 @@ extern unsigned int *adreno_ft_regs;
 extern unsigned int adreno_ft_regs_num;
 extern unsigned int *adreno_ft_regs_val;
 
+extern struct adreno_gpudev adreno_a3xx_gpudev;
+extern struct adreno_gpudev adreno_a5xx_gpudev;
 extern struct adreno_gpudev adreno_a6xx_gpudev;
 
 extern int adreno_wake_nice;
@@ -1065,6 +1066,8 @@ long adreno_ioctl_helper(struct kgsl_device_private *dev_priv,
 		unsigned int cmd, unsigned long arg,
 		const struct kgsl_ioctl *cmds, int len);
 
+int a5xx_critical_packet_submit(struct adreno_device *adreno_dev,
+		struct adreno_ringbuffer *rb);
 int adreno_set_unsecured_mode(struct adreno_device *adreno_dev,
 		struct adreno_ringbuffer *rb);
 void adreno_spin_idle_debug(struct adreno_device *adreno_dev, const char *str);
@@ -1116,7 +1119,6 @@ int adreno_efuse_map(struct adreno_device *adreno_dev);
 int adreno_efuse_read_u32(struct adreno_device *adreno_dev, unsigned int offset,
 		unsigned int *val);
 void adreno_efuse_unmap(struct adreno_device *adreno_dev);
-void adreno_efuse_speed_bin_array(struct adreno_device *adreno_dev);
 
 bool adreno_is_cx_dbgc_register(struct kgsl_device *device,
 		unsigned int offset);
@@ -1160,7 +1162,6 @@ static inline int adreno_is_a5xx(struct adreno_device *adreno_dev)
 			ADRENO_GPUREV(adreno_dev) < 600;
 }
 
-ADRENO_TARGET(a504, ADRENO_REV_A504)
 ADRENO_TARGET(a505, ADRENO_REV_A505)
 ADRENO_TARGET(a506, ADRENO_REV_A506)
 ADRENO_TARGET(a508, ADRENO_REV_A508)
@@ -1181,9 +1182,9 @@ static inline int adreno_is_a530v3(struct adreno_device *adreno_dev)
 		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 2);
 }
 
-static inline int adreno_is_a504_to_a506(struct adreno_device *adreno_dev)
+static inline int adreno_is_a505_or_a506(struct adreno_device *adreno_dev)
 {
-	return ADRENO_GPUREV(adreno_dev) >= 504 &&
+	return ADRENO_GPUREV(adreno_dev) >= 505 &&
 			ADRENO_GPUREV(adreno_dev) <= 506;
 }
 

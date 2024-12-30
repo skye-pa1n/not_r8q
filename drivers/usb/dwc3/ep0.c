@@ -258,10 +258,7 @@ void dwc3_ep0_stall_and_restart(struct dwc3 *dwc)
 		struct dwc3_request	*req;
 
 		req = next_request(&dep->pending_list);
-		if (!dwc->connected)
-			dwc3_gadget_giveback(dep, req, -ESHUTDOWN);
-		else
-			dwc3_gadget_giveback(dep, req, -ECONNRESET);
+		dwc3_gadget_giveback(dep, req, -ECONNRESET);
 	}
 
 	dwc->ep0state = EP0_SETUP_PHASE;
@@ -322,9 +319,6 @@ static struct dwc3_ep *dwc3_wIndex_to_dep(struct dwc3 *dwc, __le16 wIndex_le)
 		epnum |= 1;
 
 	dep = dwc->eps[epnum];
-	if (dep == NULL)
-		return NULL;
-
 	if (dep->flags & DWC3_EP_ENABLED)
 		return dep;
 
@@ -1083,16 +1077,12 @@ static void dwc3_ep0_xfer_complete(struct dwc3 *dwc,
 static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 		struct dwc3_ep *dep, struct dwc3_request *req)
 {
-	unsigned int		trb_length = 0;
 	int			ret;
 
 	req->direction = !!dep->number;
 
 	if (req->request.length == 0) {
-		if (!req->direction)
-			trb_length = dep->endpoint.maxpacket;
-
-		dwc3_ep0_prepare_one_trb(dep, dwc->bounce_addr, trb_length,
+		dwc3_ep0_prepare_one_trb(dep, dwc->ep0_trb_addr, 0,
 				DWC3_TRBCTL_CONTROL_DATA, false);
 		ret = dwc3_ep0_start_trans(dep);
 	} else if (!IS_ALIGNED(req->request.length, dep->endpoint.maxpacket)
@@ -1142,12 +1132,9 @@ static void __dwc3_ep0_do_control_data(struct dwc3 *dwc,
 
 		req->trb = &dwc->ep0_trb[dep->trb_enqueue - 1];
 
-		if (!req->direction)
-			trb_length = dep->endpoint.maxpacket;
-
 		/* Now prepare one extra TRB to align transfer size */
 		dwc3_ep0_prepare_one_trb(dep, dwc->bounce_addr,
-					 trb_length, DWC3_TRBCTL_CONTROL_DATA,
+					 0, DWC3_TRBCTL_CONTROL_DATA,
 					 false);
 		ret = dwc3_ep0_start_trans(dep);
 	} else {

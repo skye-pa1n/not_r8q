@@ -26,10 +26,6 @@ config CLANG_VERSION
 	int
 	default $(shell,$(srctree)/scripts/clang-version.sh $(CC))
 
-config LLD_VERSION
-	int
-	default $(shell,$(srctree)/scripts/lld-version.sh $(LD))
-
 config CC_HAS_ASM_GOTO
 	def_bool $(success,$(srctree)/scripts/gcc-goto.sh $(CC))
 
@@ -76,7 +72,8 @@ config INIT_ENV_ARG_LIMIT
 
 config COMPILE_TEST
 	bool "Compile also drivers which will not load"
-	depends on HAS_IOMEM
+	depends on !UML
+	default n
 	help
 	  Some drivers can be compiled on a different platform than they are
 	  intended to be run on. Despite they cannot be loaded there (or even
@@ -127,17 +124,7 @@ config BUILD_SALT
           this option will use the value in the calculation of the build id.
           This is mostly useful for distributions which want to ensure the
           build is unique between builds. It's safe to leave the default.
-          
-config POLLY_CLANG
-	bool "Use Clang Polly optimizations"
-	help
-	  This option enables Clang's polyhedral loop optimizer known as
-	  Polly. Polly is able to optimize various loops throughout the
-	  kernel for cache locality. This requires a Clang toolchain
-	  compiled with support for Polly. More information can be found
-	  from Polly's website:
-	  https://polly.llvm.org
-	  
+
 config HAVE_KERNEL_GZIP
 	bool
 
@@ -451,6 +438,24 @@ config SCHED_WALT
 	used to guide task placement as well as task frequency requirements
 	for cpufreq governors.
 
+config WALT_POWER_FEATURE
+	bool "Power enhance feature in WALT scheduler"
+	depends on SCHED_WALT
+	default n
+	help
+	  This feature save power by adjust start cpu
+
+config SCHED_SEC_TASK_BOOST
+	bool "Enable Task Priority Boost"
+	depends on SCHED_WALT
+	default n
+	help
+	  This feature will boost task based on priority(=nice) value.
+	  If task has higher priority than "/proc/perf_reserve",
+	  give a chance to migrate to prime cluster more and
+	  advantage of preemption.
+
+
 config HAVE_SCHED_AVG_IRQ
 	def_bool y
 	depends on IRQ_TIME_ACCOUNTING || PARAVIRT_TIME_ACCOUNTING
@@ -626,8 +631,7 @@ config IKHEADERS
 
 config LOG_BUF_SHIFT
 	int "Kernel log buffer size (16 => 64KB, 17 => 128KB)"
-	range 12 25 if !H8300
-	range 12 19 if H8300
+	range 12 25
 	default 17
 	depends on PRINTK
 	help
@@ -1167,21 +1171,6 @@ config NET_NS
 
 endif # NAMESPACES
 
-config SCHED_BORE
-	bool "Burst-Oriented Response Enhancer"
-	default y
-	help
-	  In Desktop and Mobile computing, one might prefer interactive
-	  tasks to keep responsive no matter what they run in the background.
-	  Enabling this kernel feature modifies the scheduler to discriminate
-	  tasks by their burst time (runtime since it last went sleeping or
-	  yielding state) and prioritize those that run less bursty.
-	  Such tasks usually include window compositor, widgets backend,
-	  terminal emulator, video playback, games and so on.
-	  With a little impact to scheduling fairness, it may improve
-	  responsiveness especially under heavy background workload.
-	  If unsure, say Y here.
-
 config CHECKPOINT_RESTORE
 	bool "Checkpoint/restore support"
 	select PROC_CHILDREN
@@ -1193,30 +1182,7 @@ config CHECKPOINT_RESTORE
 	  entries.
 
 	  If unsure, say N here.
-	  
-config SCHED_CASS
-	bool "Capacity Aware Superset Scheduler"
-	depends on SMP
-	help
-	  This enables the Capacity Aware Superset Scheduler (CASS), which
-	  optimizes runqueue selection of CFS tasks. By using CPU capacity as a
-	  basis for comparing the relative utilization between different CPUs,
-	  CASS fairly balances load across CPUs of varying capacities. This
-	  results in improved multi-core performance, especially when CPUs are
-	  overutilized because CASS doesn't clip a CPU's utilization when it
-	  eclipses the CPU's capacity.
-	  As a superset of capacity aware scheduling, CASS implements a
-	  hierarchy of criteria to determine the better CPU to wake a task upon
-	  between CPUs that have the same relative utilization. This way,
-	  single-core performance, latency, and cache affinity are all optimized
-	  where possible.
-	  CASS doesn't feature explicit energy awareness but its basic load
-	  balancing principle results in decreased overall energy, often better
-	  than what is possible with explicit energy awareness. By fairly
-	  balancing load based on relative utilization, all CPUs are kept at
-	  their lowest P-state necessary to satisfy the overall load at any
-	  given moment.
-	  
+
 config SCHED_AUTOGROUP
 	bool "Automatic process group scheduling"
 	select CGROUPS
@@ -1719,16 +1685,6 @@ config BPF_JIT_ALWAYS_ON
 	help
 	  Enables BPF JIT and removes BPF interpreter to avoid
 	  speculative execution of BPF instructions by the interpreter
-
-config BPF_UNPRIV_DEFAULT_OFF
-	bool "Disable unprivileged BPF by default"
-	depends on BPF_SYSCALL
-	help
-	  Disables unprivileged BPF by default by setting the corresponding
-	  /proc/sys/kernel/unprivileged_bpf_disabled knob to 2. An admin can
-	  still reenable it by setting it to 0 later on, or permanently
-	  disable it by setting it to 1 (from which no other transition to
-	  0 is possible anymore).
 
 config USERFAULTFD
 	bool "Enable userfaultfd() system call"
@@ -2308,3 +2264,5 @@ config ARCH_HAS_SYSCALL_WRAPPER
 	def_bool n
 
 source "init/Kconfig.gki"
+source "kernel/Kconfig.intelligence"
+source "kernel/ftt/Kconfig"

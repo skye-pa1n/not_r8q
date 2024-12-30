@@ -1928,10 +1928,6 @@ static netdev_tx_t mpi_start_xmit(struct sk_buff *skb,
 		airo_print_err(dev->name, "%s: skb == NULL!",__func__);
 		return NETDEV_TX_OK;
 	}
-	if (skb_padto(skb, ETH_ZLEN)) {
-		dev->stats.tx_dropped++;
-		return NETDEV_TX_OK;
-	}
 	npacks = skb_queue_len (&ai->txq);
 
 	if (npacks >= MAXTXQ - 1) {
@@ -2134,10 +2130,6 @@ static netdev_tx_t airo_start_xmit(struct sk_buff *skb,
 		airo_print_err(dev->name, "%s: skb == NULL!", __func__);
 		return NETDEV_TX_OK;
 	}
-	if (skb_padto(skb, ETH_ZLEN)) {
-		dev->stats.tx_dropped++;
-		return NETDEV_TX_OK;
-	}
 
 	/* Find a vacant FID */
 	for( i = 0; i < MAX_FIDS / 2 && (fids[i] & 0xffff0000); i++ );
@@ -2210,10 +2202,6 @@ static netdev_tx_t airo_start_xmit11(struct sk_buff *skb,
 
 	if ( skb == NULL ) {
 		airo_print_err(dev->name, "%s: skb == NULL!", __func__);
-		return NETDEV_TX_OK;
-	}
-	if (skb_padto(skb, ETH_ZLEN)) {
-		dev->stats.tx_dropped++;
 		return NETDEV_TX_OK;
 	}
 
@@ -6100,11 +6088,8 @@ static int airo_get_rate(struct net_device *dev,
 {
 	struct airo_info *local = dev->ml_priv;
 	StatusRid status_rid;		/* Card status info */
-	int ret;
 
-	ret = readStatusRid(local, &status_rid, 1);
-	if (ret)
-		return -EBUSY;
+	readStatusRid(local, &status_rid, 1);
 
 	vwrq->value = le16_to_cpu(status_rid.currentXmitRate) * 500000;
 	/* If more than one rate, set auto */

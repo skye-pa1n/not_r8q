@@ -17,6 +17,7 @@
 #include <linux/security.h>
 #include <linux/evm.h>
 #include <linux/ima.h>
+#include <linux/task_integrity.h>
 
 static bool chown_ok(const struct inode *inode, kuid_t uid)
 {
@@ -134,8 +135,6 @@ EXPORT_SYMBOL(setattr_prepare);
  */
 int inode_newsize_ok(const struct inode *inode, loff_t offset)
 {
-	if (offset < 0)
-		return -EINVAL;
 	if (inode->i_size < offset) {
 		unsigned long limit;
 
@@ -256,25 +255,9 @@ int notify_change2(struct vfsmount *mnt, struct dentry * dentry, struct iattr * 
 	}
 
 	if ((ia_valid & ATTR_MODE)) {
-		/*
-		 * Don't allow changing the mode of symlinks:
-		 *
-		 * (1) The vfs doesn't take the mode of symlinks into account
-		 *     during permission checking.
-		 * (2) This has never worked correctly. Most major filesystems
-		 *     did return EOPNOTSUPP due to interactions with POSIX ACLs
-		 *     but did still updated the mode of the symlink.
-		 *     This inconsistency led system call wrapper providers such
-		 *     as libc to block changing the mode of symlinks with
-		 *     EOPNOTSUPP already.
-		 * (3) To even do this in the first place one would have to use
-		 *     specific file descriptors and quite some effort.
-		 */
-		if (S_ISLNK(inode->i_mode))
-			return -EOPNOTSUPP;
-
+		umode_t amode = attr->ia_mode;
 		/* Flag setting protected by i_mutex */
-		if (is_sxid(attr->ia_mode))
+		if (is_sxid(amode))
 			inode->i_flags &= ~S_NOSEC;
 	}
 
@@ -357,13 +340,14 @@ int notify_change2(struct vfsmount *mnt, struct dentry * dentry, struct iattr * 
 
 	if (!error) {
 		fsnotify_change(dentry, ia_valid);
+		five_inode_post_setattr(current, dentry);
 		ima_inode_post_setattr(dentry);
 		evm_inode_post_setattr(dentry, ia_valid);
 	}
 
 	return error;
 }
-EXPORT_SYMBOL_GPL(notify_change2);
+EXPORT_SYMBOL(notify_change2);
 
 int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **delegated_inode)
 {

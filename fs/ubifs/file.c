@@ -234,7 +234,7 @@ static int write_begin_slow(struct address_space *mapping,
 	struct ubifs_info *c = inode->i_sb->s_fs_info;
 	pgoff_t index = pos >> PAGE_SHIFT;
 	struct ubifs_budget_req req = { .new_page = 1 };
-	int err, appending = !!(pos + len > inode->i_size);
+	int uninitialized_var(err), appending = !!(pos + len > inode->i_size);
 	struct page *page;
 
 	dbg_gen("ino %lu, pos %llu, len %u, i_size %lld",
@@ -274,6 +274,9 @@ static int write_begin_slow(struct address_space *mapping,
 				return err;
 			}
 		}
+
+		SetPageUptodate(page);
+		ClearPageError(page);
 	}
 
 	if (PagePrivate(page))
@@ -435,7 +438,7 @@ static int ubifs_write_begin(struct file *file, struct address_space *mapping,
 	struct ubifs_info *c = inode->i_sb->s_fs_info;
 	struct ubifs_inode *ui = ubifs_inode(inode);
 	pgoff_t index = pos >> PAGE_SHIFT;
-	int err, appending = !!(pos + len > inode->i_size);
+	int uninitialized_var(err), appending = !!(pos + len > inode->i_size);
 	int skipped_read = 0;
 	struct page *page;
 
@@ -472,6 +475,9 @@ static int ubifs_write_begin(struct file *file, struct address_space *mapping,
 				return err;
 			}
 		}
+
+		SetPageUptodate(page);
+		ClearPageError(page);
 	}
 
 	err = allocate_budget(c, page, ui, appending);
@@ -481,8 +487,10 @@ static int ubifs_write_begin(struct file *file, struct address_space *mapping,
 		 * If we skipped reading the page because we were going to
 		 * write all of it, then it is not up to date.
 		 */
-		if (skipped_read)
+		if (skipped_read) {
 			ClearPageChecked(page);
+			ClearPageUptodate(page);
+		}
 		/*
 		 * Budgeting failed which means it would have to force
 		 * write-back but didn't, because we set the @fast flag in the
@@ -572,9 +580,6 @@ static int ubifs_write_end(struct file *file, struct address_space *mapping,
 		copied = do_readpage(page);
 		goto out;
 	}
-
-	if (len == PAGE_SIZE)
-		SetPageUptodate(page);
 
 	if (!PagePrivate(page)) {
 		SetPagePrivate(page);
@@ -1038,7 +1043,7 @@ static int ubifs_writepage(struct page *page, struct writeback_control *wbc)
 		if (page->index >= synced_i_size >> PAGE_SHIFT) {
 			err = inode->i_sb->s_op->write_inode(inode, NULL);
 			if (err)
-				goto out_redirty;
+				goto out_unlock;
 			/*
 			 * The inode has been written, but the write-buffer has
 			 * not been synchronized, so in case of an unclean
@@ -1066,17 +1071,11 @@ static int ubifs_writepage(struct page *page, struct writeback_control *wbc)
 	if (i_size > synced_i_size) {
 		err = inode->i_sb->s_op->write_inode(inode, NULL);
 		if (err)
-			goto out_redirty;
+			goto out_unlock;
 	}
 
 	return do_writepage(page, len);
-out_redirty:
-	/*
-	 * redirty_page_for_writepage() won't call ubifs_dirty_inode() because
-	 * it passes I_DIRTY_PAGES flag while calling __mark_inode_dirty(), so
-	 * there is no need to do space budget for dirty inode.
-	 */
-	redirty_page_for_writepage(wbc, page);
+
 out_unlock:
 	unlock_page(page);
 	return err;
@@ -1392,6 +1391,7 @@ int ubifs_update_time(struct inode *inode, struct timespec64 *time,
 	struct ubifs_info *c = inode->i_sb->s_fs_info;
 	struct ubifs_budget_req req = { .dirtied_ino = 1,
 			.dirtied_ino_d = ALIGN(ui->data_len, 8) };
+	int iflags = I_DIRTY_TIME;
 	int err, release;
 
 	err = ubifs_budget_space(c, &req);
@@ -1406,8 +1406,11 @@ int ubifs_update_time(struct inode *inode, struct timespec64 *time,
 	if (flags & S_MTIME)
 		inode->i_mtime = *time;
 
+	if (!(inode->i_sb->s_flags & SB_LAZYTIME))
+		iflags |= I_DIRTY_SYNC;
+
 	release = ui->dirty;
-	__mark_inode_dirty(inode, I_DIRTY_SYNC);
+	__mark_inode_dirty(inode, iflags);
 	mutex_unlock(&ui->ui_mutex);
 	if (release)
 		ubifs_release_budget(c, &req);
@@ -1643,16 +1646,6 @@ static const char *ubifs_get_link(struct dentry *dentry,
 	return fscrypt_get_symlink(inode, ui->data, ui->data_len, done);
 }
 
-static int ubifs_symlink_getattr(const struct path *path, struct kstat *stat,
-				 u32 request_mask, unsigned int query_flags)
-{
-	ubifs_getattr(path, stat, request_mask, query_flags);
-
-	if (IS_ENCRYPTED(d_inode(path->dentry)))
-		return fscrypt_symlink_getattr(path, stat);
-	return 0;
-}
-
 const struct address_space_operations ubifs_file_address_operations = {
 	.readpage       = ubifs_readpage,
 	.writepage      = ubifs_writepage,
@@ -1680,7 +1673,7 @@ const struct inode_operations ubifs_file_inode_operations = {
 const struct inode_operations ubifs_symlink_inode_operations = {
 	.get_link    = ubifs_get_link,
 	.setattr     = ubifs_setattr,
-	.getattr     = ubifs_symlink_getattr,
+	.getattr     = ubifs_getattr,
 #ifdef CONFIG_UBIFS_FS_XATTR
 	.listxattr   = ubifs_listxattr,
 #endif

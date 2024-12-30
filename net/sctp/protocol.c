@@ -163,8 +163,7 @@ int sctp_copy_local_addr_list(struct net *net, struct sctp_bind_addr *bp,
 		 * sock as well as the remote peer.
 		 */
 		if (addr->a.sa.sa_family == AF_INET &&
-		    (!(copy_flags & SCTP_ADDR4_ALLOWED) ||
-		     !(copy_flags & SCTP_ADDR4_PEERSUPP)))
+		    !(copy_flags & SCTP_ADDR4_PEERSUPP))
 			continue;
 		if (addr->a.sa.sa_family == AF_INET6 &&
 		    (!(copy_flags & SCTP_ADDR6_ALLOWED) ||
@@ -373,7 +372,7 @@ static int sctp_v4_available(union sctp_addr *addr, struct sctp_sock *sp)
 	if (addr->v4.sin_addr.s_addr != htonl(INADDR_ANY) &&
 	   ret != RTN_LOCAL &&
 	   !sp->inet.freebind &&
-	    !READ_ONCE(net->ipv4.sysctl_ip_nonlocal_bind))
+	   !net->ipv4.sysctl_ip_nonlocal_bind)
 		return 0;
 
 	if (ipv6_only_sock(sctp_opt2sk(sp)))
@@ -412,8 +411,7 @@ static enum sctp_scope sctp_v4_scope(union sctp_addr *addr)
 		retval = SCTP_SCOPE_LINK;
 	} else if (ipv4_is_private_10(addr->v4.sin_addr.s_addr) ||
 		   ipv4_is_private_172(addr->v4.sin_addr.s_addr) ||
-		   ipv4_is_private_192(addr->v4.sin_addr.s_addr) ||
-		   ipv4_is_test_198(addr->v4.sin_addr.s_addr)) {
+		   ipv4_is_private_192(addr->v4.sin_addr.s_addr)) {
 		retval = SCTP_SCOPE_PRIVATE;
 	} else {
 		retval = SCTP_SCOPE_GLOBAL;
@@ -431,8 +429,7 @@ static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 {
 	struct sctp_association *asoc = t->asoc;
 	struct rtable *rt;
-	struct flowi _fl;
-	struct flowi4 *fl4 = &_fl.u.ip4;
+	struct flowi4 *fl4 = &fl->u.ip4;
 	struct sctp_bind_addr *bp;
 	struct sctp_sockaddr_entry *laddr;
 	struct dst_entry *dst = NULL;
@@ -442,7 +439,7 @@ static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 
 	if (t->dscp & SCTP_DSCP_SET_MASK)
 		tos = t->dscp & SCTP_DSCP_VAL_MASK;
-	memset(&_fl, 0x0, sizeof(_fl));
+	memset(fl4, 0x0, sizeof(struct flowi4));
 	fl4->daddr  = daddr->v4.sin_addr.s_addr;
 	fl4->fl4_dport = daddr->v4.sin_port;
 	fl4->flowi4_proto = IPPROTO_SCTP;
@@ -461,11 +458,8 @@ static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 		 &fl4->saddr);
 
 	rt = ip_route_output_key(sock_net(sk), fl4);
-	if (!IS_ERR(rt)) {
+	if (!IS_ERR(rt))
 		dst = &rt->dst;
-		t->dst = dst;
-		memcpy(fl, &_fl, sizeof(_fl));
-	}
 
 	/* If there is no association or if a source address is passed, no
 	 * more validation is required.
@@ -528,33 +522,27 @@ static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 		odev = __ip_dev_find(sock_net(sk), laddr->a.v4.sin_addr.s_addr,
 				     false);
 		if (!odev || odev->ifindex != fl4->flowi4_oif) {
-			if (!dst) {
+			if (!dst)
 				dst = &rt->dst;
-				t->dst = dst;
-				memcpy(fl, &_fl, sizeof(_fl));
-			} else {
+			else
 				dst_release(&rt->dst);
-			}
 			continue;
 		}
 
 		dst_release(dst);
 		dst = &rt->dst;
-		t->dst = dst;
-		memcpy(fl, &_fl, sizeof(_fl));
 		break;
 	}
 
 out_unlock:
 	rcu_read_unlock();
 out:
-	if (dst) {
+	t->dst = dst;
+	if (dst)
 		pr_debug("rt_dst:%pI4, rt_src:%pI4\n",
-			 &fl->u.ip4.daddr, &fl->u.ip4.saddr);
-	} else {
-		t->dst = NULL;
+			 &fl4->daddr, &fl4->saddr);
+	else
 		pr_debug("no route\n");
-	}
 }
 
 /* For v4, the source address is cached in the route entry(dst). So no need

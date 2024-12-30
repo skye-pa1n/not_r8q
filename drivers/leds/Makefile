@@ -11,7 +11,6 @@ obj-$(CONFIG_LEDS_88PM860X)		+= leds-88pm860x.o
 obj-$(CONFIG_LEDS_AAT1290)		+= leds-aat1290.o
 obj-$(CONFIG_LEDS_APU)			+= leds-apu.o
 obj-$(CONFIG_LEDS_AS3645A)		+= leds-as3645a.o
-obj-$(CONFIG_LEDS_AW2016)		+= leds-aw2016.o
 obj-$(CONFIG_LEDS_BCM6328)		+= leds-bcm6328.o
 obj-$(CONFIG_LEDS_BCM6358)		+= leds-bcm6358.o
 obj-$(CONFIG_LEDS_BD2802)		+= leds-bd2802.o
@@ -68,7 +67,6 @@ obj-$(CONFIG_LEDS_LM355x)		+= leds-lm355x.o
 obj-$(CONFIG_LEDS_BLINKM)		+= leds-blinkm.o
 obj-$(CONFIG_LEDS_SYSCON)		+= leds-syscon.o
 obj-$(CONFIG_LEDS_MENF21BMC)		+= leds-menf21bmc.o
-obj-$(CONFIG_LEDS_KTD2692)		+= leds-ktd2692.o
 obj-$(CONFIG_LEDS_POWERNV)		+= leds-powernv.o
 obj-$(CONFIG_LEDS_IS31FL319X)		+= leds-is31fl319x.o
 obj-$(CONFIG_LEDS_IS31FL32XX)		+= leds-is31fl32xx.o
@@ -86,7 +84,6 @@ obj-$(CONFIG_LEDS_QPNP_VIBRATOR_LDO)	+= leds-qpnp-vibrator-ldo.o
 obj-$(CONFIG_LEDS_S2MPB02)		+= leds-s2mpb02.o
 obj-$(CONFIG_LEDS_RT8547)		+= leds-rt8547.o
 obj-$(CONFIG_LEDS_KTD2692)		+= leds-ktd2692.o
-obj-$(CONFIG_LEDS_QPNP_VIBRATOR)	+= leds-qpnp-vibrator.o
 
 # LED SPI Drivers
 obj-$(CONFIG_LEDS_CR0014114)		+= leds-cr0014114.o

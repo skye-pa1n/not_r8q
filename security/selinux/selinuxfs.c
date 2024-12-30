@@ -160,7 +160,7 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 	new_value = !!new_value;
 
 	old_value = enforcing_enabled(state);
-	if (new_value != old_value) {
+	if (new_value != selinux_enforcing) { // SEC_SELINUX_PORTING_COMMON Change to use RKP 
 		length = avc_has_perm(&selinux_state,
 				      current_sid(), SECINITSID_SECURITY,
 				      SECCLASS_SECURITY, SECURITY__SETENFORCE,
@@ -170,7 +170,7 @@ static ssize_t sel_write_enforce(struct file *file, const char __user *buf,
 		audit_log(audit_context(), GFP_KERNEL, AUDIT_MAC_STATUS,
 			"enforcing=%d old_enforcing=%d auid=%u ses=%u"
 			" enabled=%d old-enabled=%d lsm=selinux res=1",
-			new_value, old_value,
+			new_value, selinux_enforcing, // SEC_SELINUX_PORTING_COMMON Change to use RKP 
 			from_kuid(&init_user_ns, audit_get_loginuid(current)),
 			audit_get_sessionid(current),
 			selinux_enabled, selinux_enabled);
@@ -1535,7 +1535,6 @@ static struct avc_cache_stats *sel_avc_get_stat_idx(loff_t *idx)
 		*idx = cpu + 1;
 		return &per_cpu(avc_cache_stats, cpu);
 	}
-	(*idx)++;
 	return NULL;
 }
 
@@ -2026,8 +2025,6 @@ static int sel_fill_super(struct super_block *sb, void *data, int silent)
 	}
 
 	ret = sel_make_avc_files(dentry);
-	if (ret)
-		goto err;
 
 	dentry = sel_make_dir(sb->s_root, "ss", &fsi->last_ino);
 	if (IS_ERR(dentry)) {

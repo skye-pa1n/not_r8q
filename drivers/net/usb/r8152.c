@@ -1346,9 +1346,7 @@ static void intr_callback(struct urb *urb)
 			   "Stop submitting intr, status %d\n", status);
 		return;
 	case -EOVERFLOW:
-		if (net_ratelimit())
-			netif_info(tp, intr, tp->netdev,
-				   "intr status -EOVERFLOW\n");
+		netif_info(tp, intr, tp->netdev, "intr status -EOVERFLOW\n");
 		goto resubmit;
 	/* -EPIPE:  should clear the halt */
 	default:
@@ -5743,13 +5741,12 @@ static int rtl8152_close(struct net_device *netdev)
 		res = rtl_s5_wol(tp);
 #endif
 		mutex_unlock(&tp->control);
+
+		usb_autopm_put_interface(tp->intf);
 	}
 	timeleft = wait_event_interruptible_timeout(tp->bottom_half_wait_q,
 					tp->bottom_half_event, (tp->bottom_half_wait_time)*HZ);
 	pr_info("%s : wait for end of rx_bottom , timeleft = %d\n", __func__, timeleft);
-
-	if (!res)
-		usb_autopm_put_interface(tp->intf);
 
 	free_all_mem(tp);
 
@@ -6526,7 +6523,7 @@ static void rtl8152_get_strings(struct net_device *dev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, rtl8152_gstrings, sizeof(rtl8152_gstrings));
+		memcpy(data, *rtl8152_gstrings, sizeof(rtl8152_gstrings));
 		break;
 	}
 }

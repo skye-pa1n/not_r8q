@@ -611,7 +611,7 @@
 			status = "disabled";
 
 			hdmi_i2c_phy: hdmiphy@38 {
-				compatible = "samsung,exynos4210-hdmiphy";
+				compatible = "exynos4210-hdmiphy";
 				reg = <0x38>;
 			};
 		};

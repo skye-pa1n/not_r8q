@@ -91,8 +91,10 @@
 #include <linux/cache.h>
 #include <linux/rodata_test.h>
 #include <linux/jump_label.h>
+#include <linux/mem_encrypt.h>
 
 #include <asm/io.h>
+#include <asm/bugs.h>
 #include <asm/setup.h>
 #include <asm/sections.h>
 #include <asm/cacheflush.h>
@@ -104,12 +106,31 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/initcall.h>
 
+#ifdef CONFIG_UH
+#include <linux/uh.h>
+#ifdef CONFIG_UH_RKP
+#include <linux/rkp.h>
+#ifdef CONFIG_KDP_CRED
+#include <linux/kdp.h>
+#endif
+#endif
+#endif
+
 #ifdef CONFIG_KUNIT
 #include <kunit/test.h>
 #endif
 
+#ifdef CONFIG_CFP
+#include <linux/cfp.h>
+#endif
+
 #include <linux/sec_debug.h>
 #include <linux/sec_bootstat.h>
+
+#ifdef CONFIG_SECURITY_DEFEX
+#include <linux/defex.h>
+void __init __weak defex_load_rules(void) { }
+#endif
 
 static int kernel_init(void *);
 
@@ -141,6 +162,9 @@ static void __ref do_deferred_initcalls(struct work_struct *work)
 	ftrace_free_init_mem();
 	jump_label_invalidate_initmem();
 	free_initmem();
+#ifdef CONFIG_UH_RKP
+	rkp_deferred_init();
+#endif
 }
 
 static DECLARE_WORK(deferred_initcall_work, do_deferred_initcalls);
@@ -172,7 +196,6 @@ void (*__initdata late_time_init)(void);
 char __initdata boot_command_line[COMMAND_LINE_SIZE];
 /* Untouched saved command line (eg. for /proc) */
 char *saved_command_line;
-EXPORT_SYMBOL_GPL(saved_command_line);
 /* Command line for parameter parsing */
 static char *static_command_line;
 /* Command line for per-initcall parameter parsing */
@@ -511,6 +534,10 @@ static noinline void __ref rest_init(void)
 	cpu_startup_entry(CPUHP_ONLINE);
 }
 
+#ifdef CONFIG_KDP_CRED
+int is_recovery __kdp_ro = 0;
+#endif
+
 /* Check for early params. */
 static int __init do_early_param(char *param, char *val,
 				 const char *unused, void *arg)
@@ -527,6 +554,14 @@ static int __init do_early_param(char *param, char *val,
 				pr_warn("Malformed early option '%s'\n", param);
 		}
 	}
+#ifdef CONFIG_KDP_CRED
+	if ((strncmp(param, "bootmode", 9) == 0)) {
+			//printk("\n [KDP] In Recovery Mode= %d\n",*val);
+			if ((strncmp(val, "2", 2) == 0)) {
+				is_recovery = 1;
+			}
+	}
+#endif
 	/* We accept everything at this stage. */
 	unset_memsize_reserved_name();
 	return 0;
@@ -565,6 +600,8 @@ void __init __weak thread_stack_cache_init(void)
 }
 #endif
 
+void __init __weak mem_encrypt_init(void) { }
+
 bool initcall_debug;
 core_param(initcall_debug, initcall_debug, bool, 0644);
 
@@ -581,16 +618,14 @@ static void __init report_meminit(void)
 {
 	const char *stack;
 
-	if (IS_ENABLED(CONFIG_INIT_STACK_ALL_PATTERN))
-		stack = "all(pattern)";
-	else if (IS_ENABLED(CONFIG_INIT_STACK_ALL_ZERO))
-		stack = "all(zero)";
+	if (IS_ENABLED(CONFIG_INIT_STACK_ALL))
+		stack = "all";
 	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_BYREF_ALL))
-		stack = "byref_all(zero)";
+		stack = "byref_all";
 	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_BYREF))
-		stack = "byref(zero)";
+		stack = "byref";
 	else if (IS_ENABLED(CONFIG_GCC_PLUGIN_STRUCTLEAK_USER))
-		stack = "__user(zero)";
+		stack = "__user";
 	else
 		stack = "off";
 
@@ -615,8 +650,6 @@ static void __init mm_init(void)
 	report_meminit();
 	mem_init();
 	set_memsize_kernel_type(MEMSIZE_KERNEL_STOP);
-	/* page_owner must be initialized after buddy is ready */
-	page_ext_init_flatmem_late();
 	kmem_cache_init();
 	pgtable_init();
 	vmalloc_init();
@@ -626,6 +659,158 @@ static void __init mm_init(void)
 	/* Should be run after espfix64 is set up. */
 	pti_init();
 }
+
+#ifdef CONFIG_CFP_ROPP
+/*
+ * init swapper per-thread-key and master key
+ * the encryption key is changed, so need to be inlined
+ */
+static inline void ropp_primary_init(void)
+{
+	unsigned long ropp_swapper_key = 0x0;
+#ifdef CONFIG_CFP_ROPP_SYSREGKEY
+#ifdef SYSREG_DEBUG
+	ropp_swapper_key = ropp_fixed_key;
+#else
+	ropp_master_key = get_random_long();
+	ropp_swapper_key = get_random_long();
+#endif
+	asm volatile(
+			"msr "STR(RRMK)", %0\n\t"
+			"mov x17, %1"
+			::"r" (ropp_master_key), "r" (ropp_swapper_key));
+	// This is necessary as some bits are clear
+	asm volatile("mrs %0, "STR(RRMK)"\n\t" : "=r" (ropp_master_key));
+	ropp_swapper_key = ropp_swapper_key ^ ropp_master_key;
+#elif defined CONFIG_CFP_ROPP_RANDKEY
+	ropp_swapper_key = get_random_long();
+	asm volatile("mov x17, %0" :: "r" (ropp_swapper_key));
+#elif defined CONFIG_CFP_ROPP_FIXKEY
+	ropp_swapper_key = ropp_fixed_key;
+	asm volatile("mov x17, %0" :: "r" (ropp_swapper_key));
+#endif
+	current_thread_info()->rrk = ropp_swapper_key;
+}
+
+static inline void ropp_primary_init_finish(void)
+{
+#ifdef CONFIG_CFP_ROPP_SYSREGKEY
+struct ropp_init ropp_value = {
+		.ropp_magic = ROPP_MAGIC,
+		.ropp_master_key = ropp_master_key,
+		.ti_rrk = offsetof(struct thread_info, rrk),
+		.ts_stack = offsetof(struct task_struct, stack),
+		.ts_tasks = offsetof(struct task_struct, tasks),
+		.ts_pid = offsetof(struct task_struct, pid),
+		.ts_thread_group = offsetof(struct task_struct, thread_group),
+		.ts_comm = offsetof(struct task_struct, comm),
+		.ts_thread = offsetof(struct task_struct, thread),
+		.cpu_fp = offsetof(struct cpu_context, fp)
+	};
+#ifdef CONFIG_UH
+	uh_call(UH_APP_CFP, ROPP_INIT, (u64)&ropp_value, 0, 0, 0);
+#else
+	struct ropp_init *addr;
+
+	addr = (struct ropp_init *)__phys_to_virt(ROPP_ADDR);
+	*addr = ropp_value;
+#endif
+#if (!defined CONFIG_CFP_TEST) && (defined CONFIG_UH)
+	asm volatile("mov %0, xzr" : "=r" (ropp_master_key));
+	pr_info("SYSREG, after zeroing out master key, mk=%lx\n", ropp_master_key);
+	BUG_ON(0 != ropp_master_key); //preventing compiler error
+#endif
+#endif
+}
+#endif
+
+#ifdef CONFIG_UH_RKP
+rkp_init_t rkp_init_data __rkp_ro = {
+	.magic = RKP_INIT_MAGIC,
+	.vmalloc_start = VMALLOC_START,
+	.no_fimc_verify = 1,
+	.fimc_phys_addr = 0,
+	._text = (u64)_text,
+	._etext = (u64)_etext,
+	._srodata = (u64)__start_rodata,
+	._erodata = (u64)__end_rodata,
+	 .large_memory = 0,
+};
+u8 rkp_started __rkp_ro = 0; /* 0 initialized by c standard */
+sparse_bitmap_for_kernel_t* rkp_s_bitmap_ro __rkp_ro = 0;
+sparse_bitmap_for_kernel_t* rkp_s_bitmap_dbl __rkp_ro = 0;
+sparse_bitmap_for_kernel_t* rkp_s_bitmap_buffer __rkp_ro = 0;
+
+static void __init rkp_init(void)
+{
+	rkp_init_data.vmalloc_end = (u64)high_memory;
+	rkp_init_data.init_mm_pgd = (u64)__pa(swapper_pg_dir);
+	rkp_init_data.id_map_pgd = (u64)__pa(idmap_pg_dir);
+	rkp_init_data.zero_pg_addr = (u64)__pa(empty_zero_page);
+	uh_call(UH_APP_RKP, RKP_GET_RO_BITMAP, (u64)&rkp_s_bitmap_ro, 0, 0, 0);
+	uh_call(UH_APP_RKP, RKP_GET_DBL_BITMAP, (u64)&rkp_s_bitmap_dbl, 0, 0, 0);
+	uh_call(UH_APP_RKP, RKP_START, (u64)&rkp_init_data, (u64)kimage_voffset, 0, (u64)memstart_addr);
+	rkp_started = 1;
+}
+
+#endif
+
+#ifdef CONFIG_KDP_CRED
+#define VERITY_PARAM_LENGTH 20
+static char verifiedbootstate[VERITY_PARAM_LENGTH];
+int __check_verifiedboot __kdp_ro = 0;
+
+#if (defined CONFIG_KDP_CRED && defined CONFIG_SAMSUNG_PRODUCT_SHIP)
+extern int selinux_enforcing __kdp_ro;
+extern int ss_initialized __kdp_ro;
+#endif
+
+static int __init verifiedboot_state_setup(char *str)
+{
+	strlcpy(verifiedbootstate, str, sizeof(verifiedbootstate));
+
+	if(!strncmp(verifiedbootstate, "orange", sizeof("orange")))
+		__check_verifiedboot = 1;
+
+	return 0;
+}
+__setup("androidboot.verifiedbootstate=", verifiedboot_state_setup);
+
+void kdp_init(void)
+{
+	kdp_init_t cred;
+	cred.credSize 		= sizeof(struct cred);
+	cred.sp_size		= rkp_get_task_sec_size();
+	cred.pgd_mm 		= offsetof(struct mm_struct,pgd);
+	cred.uid_cred		= offsetof(struct cred,uid);
+	cred.euid_cred		= offsetof(struct cred,euid);
+	cred.gid_cred		= offsetof(struct cred,gid);
+	cred.egid_cred		= offsetof(struct cred,egid);
+
+	cred.bp_pgd_cred 	= offsetof(struct cred,bp_pgd);
+	cred.bp_task_cred 	= offsetof(struct cred,bp_task);
+	cred.type_cred 		= offsetof(struct cred,type);
+
+	cred.security_cred 	= offsetof(struct cred,security);
+	cred.usage_cred 	= offsetof(struct cred,use_cnt);
+	cred.cred_task  	= offsetof(struct task_struct,cred);
+	cred.mm_task 		= offsetof(struct task_struct,mm);
+
+	cred.pid_task		= offsetof(struct task_struct,pid);
+	cred.rp_task		= offsetof(struct task_struct,real_parent);
+	cred.comm_task 		= offsetof(struct task_struct,comm);
+	cred.bp_cred_secptr 	= rkp_get_offset_bp_cred();
+	cred.verifiedbootstate	= (u64)verifiedbootstate;
+#ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
+	cred.selinux.selinux_enforcing_va  = (u64)&selinux_enforcing;
+	cred.selinux.ss_initialized_va	= (u64)&ss_initialized;
+#else
+	cred.selinux.selinux_enforcing_va  = 0;
+	cred.selinux.ss_initialized_va	= 0;
+#endif
+	uh_call(UH_APP_RKP, RKP_KDP_X40, (u64)&cred, 0, 0, 0);
+}
+#endif
 
 asmlinkage __visible void __init start_kernel(void)
 {
@@ -684,11 +869,22 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	mm_init();
+#ifdef CONFIG_UH_RKP
+	rkp_init();
+#endif
+
+#ifdef CONFIG_KDP_CRED
+	rkp_cred_enable = 1;
+#endif
 
 	ftrace_init();
 
 	/* trace_printk can be enabled here */
 	early_trace_init();
+
+#ifdef CONFIG_CFP_ROPP
+	ropp_primary_init();
+#endif
 
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
@@ -737,18 +933,22 @@ asmlinkage __visible void __init start_kernel(void)
 	hrtimers_init();
 	softirq_init();
 	timekeeping_init();
-	time_init();
 
 	/*
 	 * For best initial stack canary entropy, prepare it after:
 	 * - setup_arch() for any UEFI RNG entropy and boot cmdline access
-	 * - timekeeping_init() for ktime entropy used in random_init()
-	 * - time_init() for making random_get_entropy() work on some platforms
-	 * - random_init() to initialize the RNG from from early entropy sources
+	 * - timekeeping_init() for ktime entropy used in rand_initialize()
+	 * - rand_initialize() to get any arch-specific entropy like RDRAND
+	 * - add_latent_entropy() to get any latent entropy
+	 * - adding command line entropy
 	 */
-	random_init(command_line);
+	rand_initialize();
+	add_latent_entropy();
+	add_device_randomness(command_line, strlen(command_line));
 	boot_init_stack_canary();
 
+	time_init();
+	printk_safe_init();
 	perf_event_init();
 	profile_init();
 	call_function_init();
@@ -778,6 +978,14 @@ asmlinkage __visible void __init start_kernel(void)
 	 */
 	locking_selftest();
 
+	/*
+	 * This needs to be called before any devices perform DMA
+	 * operations that might use the SWIOTLB bounce buffers. It will
+	 * mark the bounce buffers as decrypted so that their usage will
+	 * not cause "plain-text" data to be decrypted when accessed.
+	 */
+	mem_encrypt_init();
+
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_start && !initrd_below_start_ok &&
 	    page_to_pfn(virt_to_page((void *)initrd_start)) < min_low_pfn) {
@@ -796,9 +1004,6 @@ asmlinkage __visible void __init start_kernel(void)
 		late_time_init();
 	sched_clock_init();
 	calibrate_delay();
-
-	arch_cpu_finalize_init();
-
 	pid_idr_init();
 	anon_vma_init();
 #ifdef CONFIG_X86
@@ -806,6 +1011,13 @@ asmlinkage __visible void __init start_kernel(void)
 		efi_enter_virtual_mode();
 #endif
 	thread_stack_cache_init();
+#ifdef CONFIG_KDP_CRED
+	if (rkp_cred_enable) 
+	    kdp_init();
+#endif
+#ifdef CONFIG_CFP_ROPP
+	ropp_primary_init_finish();
+#endif
 	cred_init();
 	fork_init();
 	proc_caches_init();
@@ -825,6 +1037,7 @@ asmlinkage __visible void __init start_kernel(void)
 	taskstats_init_early();
 	delayacct_init();
 
+	check_bugs();
 
 	acpi_subsystem_init();
 	arch_post_acpi_subsys_init();
@@ -836,8 +1049,6 @@ asmlinkage __visible void __init start_kernel(void)
 
 	/* Do the rest non-__init'ed, we're now alive */
 	rest_init();
-
-	prevent_tail_call_optimization();
 }
 
 /* Call all constructor functions linked into the kernel. */
@@ -876,7 +1087,7 @@ static int __init initcall_blacklist(char *str)
 		}
 	} while (str_entry);
 
-	return 1;
+	return 0;
 }
 
 static bool __init_or_module initcall_blacklisted(initcall_t fn)
@@ -1170,9 +1381,7 @@ static noinline void __init kernel_init_freeable(void);
 bool rodata_enabled __ro_after_init = true;
 static int __init set_debug_rodata(char *str)
 {
-	if (strtobool(str, &rodata_enabled))
-		pr_warn("Invalid option string for rodata: '%s'\n", str);
-	return 1;
+	return strtobool(str, &rodata_enabled);
 }
 __setup("rodata=", set_debug_rodata);
 #endif
@@ -1221,6 +1430,11 @@ static int __ref kernel_init(void *unused)
 	free_initmem();
 #endif
 	mark_readonly();
+#ifndef CONFIG_DEFERRED_INITCALLS
+#ifdef CONFIG_UH_RKP
+	rkp_deferred_init();
+#endif
+#endif
 	/*
 	 * Kernel mappings are now finalized - update the userspace page-table
 	 * to finalize PTI.
@@ -1287,7 +1501,7 @@ static noinline void __init kernel_init_freeable(void)
 	 */
 	set_mems_allowed(node_states[N_MEMORY]);
 
-	cad_pid = get_pid(task_pid(current));
+	cad_pid = task_pid(current);
 
 	smp_prepare_cpus(setup_max_cpus);
 
@@ -1342,4 +1556,7 @@ static noinline void __init kernel_init_freeable(void)
 
 	integrity_load_keys();
 	load_default_modules();
+#ifdef CONFIG_SECURITY_DEFEX
+	defex_load_rules();
+#endif
 }

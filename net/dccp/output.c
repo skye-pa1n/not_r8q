@@ -189,7 +189,7 @@ unsigned int dccp_sync_mss(struct sock *sk, u32 pmtu)
 
 	/* And store cached results */
 	icsk->icsk_pmtu_cookie = pmtu;
-	WRITE_ONCE(dp->dccps_mss_cache, cur_mps);
+	dp->dccps_mss_cache = cur_mps;
 
 	return cur_mps;
 }

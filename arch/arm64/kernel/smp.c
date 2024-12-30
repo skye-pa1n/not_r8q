@@ -466,7 +466,7 @@ static bool __init is_mpidr_duplicate(unsigned int cpu, u64 hwid)
 
 	for (i = 1; (i < cpu) && (i < NR_CPUS); i++)
 		if (cpu_logical_map(i) == hwid)
-			return true;	
+			return true;
 	return false;
 }
 
@@ -533,9 +533,6 @@ acpi_map_gic_cpu_interface(struct acpi_madt_generic_interrupt *processor)
 		}
 		bootcpu_valid = true;
 		cpu_madt_gicc[0] = *processor;
-		early_map_cpu_to_node(logical_bootcpu_id,
-			acpi_numa_get_nid(0, hwid));
-			
 		return;
 	}
 
@@ -607,11 +604,8 @@ static void __init acpi_parse_and_init_cpus(void)
 #define acpi_parse_and_init_cpus(...)	do { } while (0)
 #endif
 void (*__smp_cross_call)(const struct cpumask *, unsigned int);
-/* Dummy vendor field */
 DEFINE_PER_CPU(bool, pending_ipi);
-EXPORT_SYMBOL_GPL(pending_ipi);
 
-static void (*__smp_update_ipi_history_cb)(int cpu);
 /*
  * Enumerate the possible CPU set from the device tree and build the
  * cpu logical map array containing MPIDR values related to logical
@@ -647,6 +641,7 @@ static void __init of_parse_and_init_cpus(void)
 			}
 
 			bootcpu_valid = true;
+			early_map_cpu_to_node(0, of_node_to_nid(dn));
 
 			/*
 			 * cpu_logical_map has already been
@@ -755,12 +750,6 @@ void __init set_smp_cross_call(void (*fn)(const struct cpumask *, unsigned int))
 {
 	__smp_cross_call = fn;
 }
-
-void set_update_ipi_history_callback(void (*fn)(int))
-{
-	__smp_update_ipi_history_cb = fn;
-}
-EXPORT_SYMBOL_GPL(set_update_ipi_history_callback);
 
 static const char *ipi_types[NR_IPI] __tracepoint_string = {
 #define S(x,s)	[x] = s
@@ -973,8 +962,7 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 void smp_send_reschedule(int cpu)
 {
 	BUG_ON(cpu_is_offline(cpu));
-	if (__smp_update_ipi_history_cb)
-		__smp_update_ipi_history_cb(cpu);
+	update_ipi_history(cpu);
 	smp_cross_call_common(cpumask_of(cpu), IPI_RESCHEDULE);
 }
 

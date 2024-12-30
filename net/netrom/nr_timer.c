@@ -124,11 +124,11 @@ static void nr_heartbeat_expiry(struct timer_list *t)
 		   is accepted() it isn't 'dead' so doesn't get removed. */
 		if (sock_flag(sk, SOCK_DESTROY) ||
 		    (sk->sk_state == TCP_LISTEN && sock_flag(sk, SOCK_DEAD))) {
-			if (sk->sk_state == TCP_LISTEN)
-				sock_hold(sk);
+			sock_hold(sk);
 			bh_unlock_sock(sk);
 			nr_destroy_socket(sk);
-			goto out;
+			sock_put(sk);
+			return;
 		}
 		break;
 
@@ -149,8 +149,6 @@ static void nr_heartbeat_expiry(struct timer_list *t)
 
 	nr_start_heartbeat(sk);
 	bh_unlock_sock(sk);
-out:
-	sock_put(sk);
 }
 
 static void nr_t2timer_expiry(struct timer_list *t)
@@ -164,7 +162,6 @@ static void nr_t2timer_expiry(struct timer_list *t)
 		nr_enquiry_response(sk);
 	}
 	bh_unlock_sock(sk);
-	sock_put(sk);
 }
 
 static void nr_t4timer_expiry(struct timer_list *t)
@@ -175,7 +172,6 @@ static void nr_t4timer_expiry(struct timer_list *t)
 	bh_lock_sock(sk);
 	nr_sk(sk)->condition &= ~NR_COND_PEER_RX_BUSY;
 	bh_unlock_sock(sk);
-	sock_put(sk);
 }
 
 static void nr_idletimer_expiry(struct timer_list *t)
@@ -204,7 +200,6 @@ static void nr_idletimer_expiry(struct timer_list *t)
 		sock_set_flag(sk, SOCK_DEAD);
 	}
 	bh_unlock_sock(sk);
-	sock_put(sk);
 }
 
 static void nr_t1timer_expiry(struct timer_list *t)
@@ -217,7 +212,8 @@ static void nr_t1timer_expiry(struct timer_list *t)
 	case NR_STATE_1:
 		if (nr->n2count == nr->n2) {
 			nr_disconnect(sk, ETIMEDOUT);
-			goto out;
+			bh_unlock_sock(sk);
+			return;
 		} else {
 			nr->n2count++;
 			nr_write_internal(sk, NR_CONNREQ);
@@ -227,7 +223,8 @@ static void nr_t1timer_expiry(struct timer_list *t)
 	case NR_STATE_2:
 		if (nr->n2count == nr->n2) {
 			nr_disconnect(sk, ETIMEDOUT);
-			goto out;
+			bh_unlock_sock(sk);
+			return;
 		} else {
 			nr->n2count++;
 			nr_write_internal(sk, NR_DISCREQ);
@@ -237,7 +234,8 @@ static void nr_t1timer_expiry(struct timer_list *t)
 	case NR_STATE_3:
 		if (nr->n2count == nr->n2) {
 			nr_disconnect(sk, ETIMEDOUT);
-			goto out;
+			bh_unlock_sock(sk);
+			return;
 		} else {
 			nr->n2count++;
 			nr_requeue_frames(sk);
@@ -246,7 +244,5 @@ static void nr_t1timer_expiry(struct timer_list *t)
 	}
 
 	nr_start_t1timer(sk);
-out:
 	bh_unlock_sock(sk);
-	sock_put(sk);
 }

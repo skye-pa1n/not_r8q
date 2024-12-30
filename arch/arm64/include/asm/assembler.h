@@ -33,6 +33,20 @@
 #include <asm/ptrace.h>
 #include <asm/thread_info.h>
 
+#ifdef CONFIG_CFP
+/*
+ * Stack pushing/popping (register pairs only). Equivalent to store decrement
+ * before, load increment after.
+ */
+	.macro	push, xreg1, xreg2
+	stp	\xreg1, \xreg2, [sp, # -16] !
+	.endm
+
+	.macro	pop, xreg1, xreg2
+	ldp	\xreg1, \xreg2, [sp], #16
+	.endm
+#endif
+
 	.macro save_and_disable_daif, flags
 	mrs	\flags, daif
 	msr	daifset, #0xf
@@ -145,19 +159,6 @@
  */
 	.macro clearbhb
 	hint	#22
-	.endm
-
-/*
- * Speculation barrier
- */
-	.macro	sb
-alternative_if_not ARM64_HAS_SB
-	dsb	nsh
-	isb
-alternative_else
-	SB_BARRIER_INSN
-	nop
-alternative_endif
 	.endm
 
 /*
@@ -757,7 +758,7 @@ USER(\label, ic	ivau, \tmp2)			// invalidate I line PoU
 alternative_cb  spectre_bhb_patch_loop_iter
 	mov	\tmp, #32		// Patched to correct the immediate
 alternative_cb_end
-.Lspectre_bhb_loop\@:
+.Lspectre_bhb_loop\@ :
 	b	. + 4
 	subs	\tmp, \tmp, #1
 	b.ne	.Lspectre_bhb_loop\@
@@ -769,8 +770,8 @@ alternative_cb_end
 	/* Save/restores x0-x3 to the stack */
 	.macro __mitigate_spectre_bhb_fw
 #ifdef CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY
-	stp	x0, x1, [sp, #-16]!
-	stp	x2, x3, [sp, #-16]!
+	stp	x0, x1, [sp, # -16] !
+	stp	x2, x3, [sp, # -16] !
 	mov	w0, #ARM_SMCCC_ARCH_WORKAROUND_3
 alternative_cb	arm64_update_smccc_conduit
 	nop					// Patched to SMC/HVC #0

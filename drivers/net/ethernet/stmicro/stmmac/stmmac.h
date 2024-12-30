@@ -188,6 +188,8 @@ struct stmmac_priv {
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dbgfs_dir;
+	struct dentry *dbgfs_rings_status;
+	struct dentry *dbgfs_dma_cap;
 #endif
 
 	unsigned long state;

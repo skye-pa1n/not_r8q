@@ -185,11 +185,6 @@ static struct sk_buff *cbs_dequeue_soft(struct Qdisc *sch)
 	s64 credits;
 	int len;
 
-	/* The previous packet is still being sent */
-	if (now < q->last) {
-		qdisc_watchdog_schedule_ns(&q->watchdog, q->last);
-		return NULL;
-	}
 	if (q->credits < 0) {
 		credits = timediff_to_credits(now - q->last, q->idleslope);
 
@@ -221,12 +216,7 @@ static struct sk_buff *cbs_dequeue_soft(struct Qdisc *sch)
 	credits += q->credits;
 
 	q->credits = max_t(s64, credits, q->locredit);
-	/* Estimate of the transmission of the last byte of the packet in ns */
-	if (unlikely(atomic64_read(&q->port_rate) == 0))
-		q->last = now;
-	else
-		q->last = now + div64_s64(len * NSEC_PER_SEC,
-					  atomic64_read(&q->port_rate));
+	q->last = now;
 
 	return skb;
 }
@@ -405,6 +395,7 @@ static int cbs_init(struct Qdisc *sch, struct nlattr *opt,
 {
 	struct cbs_sched_data *q = qdisc_priv(sch);
 	struct net_device *dev = qdisc_dev(sch);
+	int err;
 
 	if (!opt) {
 		NL_SET_ERR_MSG(extack, "Missing CBS qdisc options  which are mandatory");
@@ -416,10 +407,6 @@ static int cbs_init(struct Qdisc *sch, struct nlattr *opt,
 	if (!q->qdisc)
 		return -ENOMEM;
 
-	spin_lock(&cbs_list_lock);
-	list_add(&q->cbs_list, &cbs_list);
-	spin_unlock(&cbs_list_lock);
-
 	qdisc_hash_add(q->qdisc, false);
 
 	q->queue = sch->dev_queue - netdev_get_tx_queue(dev, 0);
@@ -429,7 +416,17 @@ static int cbs_init(struct Qdisc *sch, struct nlattr *opt,
 
 	qdisc_watchdog_init(&q->watchdog, sch);
 
-	return cbs_change(sch, opt, extack);
+	err = cbs_change(sch, opt, extack);
+	if (err)
+		return err;
+
+	if (!q->offload) {
+		spin_lock(&cbs_list_lock);
+		list_add(&q->cbs_list, &cbs_list);
+		spin_unlock(&cbs_list_lock);
+	}
+
+	return 0;
 }
 
 static void cbs_destroy(struct Qdisc *sch)
@@ -437,18 +434,15 @@ static void cbs_destroy(struct Qdisc *sch)
 	struct cbs_sched_data *q = qdisc_priv(sch);
 	struct net_device *dev = qdisc_dev(sch);
 
-	/* Nothing to do if we couldn't create the underlying qdisc */
-	if (!q->qdisc)
-		return;
-
-	qdisc_watchdog_cancel(&q->watchdog);
-	cbs_disable_offload(dev, q);
-
 	spin_lock(&cbs_list_lock);
 	list_del(&q->cbs_list);
 	spin_unlock(&cbs_list_lock);
 
-	qdisc_put(q->qdisc);
+	qdisc_watchdog_cancel(&q->watchdog);
+	cbs_disable_offload(dev, q);
+
+	if (q->qdisc)
+		qdisc_destroy(q->qdisc);
 }
 
 static int cbs_dump(struct Qdisc *sch, struct sk_buff *skb)

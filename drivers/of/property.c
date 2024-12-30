@@ -919,10 +919,8 @@ of_fwnode_get_reference_args(const struct fwnode_handle *fwnode,
 						       nargs, index, &of_args);
 	if (ret < 0)
 		return ret;
-	if (!args) {
-		of_node_put(of_args.np);
+	if (!args)
 		return 0;
-	}
 
 	args->nargs = of_args.args_count;
 	args->fwnode = of_fwnode_handle(of_args.np);
@@ -1033,20 +1031,8 @@ static int of_link_to_phandle(struct device *dev, struct device_node *sup_np,
 	 * Find the device node that contains the supplier phandle.  It may be
 	 * @sup_np or it may be an ancestor of @sup_np.
 	 */
-	while (sup_np) {
-
-		/* Don't allow linking to a disabled supplier */
-		if (!of_device_is_available(sup_np)) {
-			of_node_put(sup_np);
-			sup_np = NULL;
-		}
-
-		if (of_find_property(sup_np, "compatible", NULL))
-			break;
-
+	while (sup_np && !of_find_property(sup_np, "compatible", NULL))
 		sup_np = of_get_next_parent(sup_np);
-	}
-
 	if (!sup_np) {
 		dev_dbg(dev, "Not linking to %pOFP - No device\n", tmp_np);
 		return -ENODEV;
@@ -1226,7 +1212,6 @@ struct supplier_bindings {
 					  const char *prop_name, int index);
 };
 
-DEFINE_SIMPLE_PROP(qcom_wrapper_core, "qcom,wrapper-core", NULL)
 DEFINE_SIMPLE_PROP(clocks, "clocks", "#clock-cells")
 DEFINE_SIMPLE_PROP(interconnects, "interconnects", "#interconnect-cells")
 DEFINE_SIMPLE_PROP(iommus, "iommus", "#iommu-cells")
@@ -1236,24 +1221,13 @@ DEFINE_SIMPLE_PROP(interrupt_parent, "interrupt-parent", NULL)
 DEFINE_SIMPLE_PROP(dmas, "dmas", "#dma-cells")
 DEFINE_SIMPLE_PROP(power_domains, "power-domains", "#power-domain-cells")
 DEFINE_SIMPLE_PROP(hwlocks, "hwlocks", "#hwlock-cells")
-DEFINE_SIMPLE_PROP(extcon, "extcon", NULL)
-DEFINE_SIMPLE_PROP(phys, "phys", "#phy-cells")
 DEFINE_SIMPLE_PROP(pinctrl0, "pinctrl-0", NULL)
 DEFINE_SIMPLE_PROP(pinctrl1, "pinctrl-1", NULL)
 DEFINE_SIMPLE_PROP(pinctrl2, "pinctrl-2", NULL)
 DEFINE_SIMPLE_PROP(pinctrl3, "pinctrl-3", NULL)
 DEFINE_SUFFIX_PROP(regulators, "-supply", NULL)
 DEFINE_SUFFIX_PROP(gpio, "-gpio", "#gpio-cells")
-
-static struct device_node *parse_gpios(struct device_node *np,
-				       const char *prop_name, int index)
-{
-	if (!strcmp_suffix(prop_name, ",nr-gpios"))
-		return NULL;
-
-	return parse_suffix_prop_cells(np, prop_name, index, "-gpios",
-				       "#gpio-cells");
-}
+DEFINE_SUFFIX_PROP(gpios, "-gpios", "#gpio-cells")
 
 static struct device_node *parse_iommu_maps(struct device_node *np,
 					    const char *prop_name, int index)
@@ -1266,7 +1240,6 @@ static struct device_node *parse_iommu_maps(struct device_node *np,
 
 static const struct supplier_bindings of_supplier_bindings[] = {
 	{ .parse_prop = parse_msm_bus_name, },
-	{ .parse_prop = parse_qcom_wrapper_core, },
 	{ .parse_prop = parse_qcom_any, },
 	{ .parse_prop = parse_clocks, },
 	{ .parse_prop = parse_interconnects, },
@@ -1278,8 +1251,6 @@ static const struct supplier_bindings of_supplier_bindings[] = {
 	{ .parse_prop = parse_dmas, },
 	{ .parse_prop = parse_power_domains, },
 	{ .parse_prop = parse_hwlocks, },
-	{ .parse_prop = parse_extcon, },
-	{ .parse_prop = parse_phys, },
 	{ .parse_prop = parse_pinctrl0, },
 	{ .parse_prop = parse_pinctrl1, },
 	{ .parse_prop = parse_pinctrl2, },
@@ -1350,7 +1321,7 @@ static int of_link_to_suppliers(struct device *dev,
 		if (of_link_property(dev, con_np, p->name))
 			ret = -ENODEV;
 
-	for_each_available_child_of_node(con_np, child)
+	for_each_child_of_node(con_np, child)
 		if (of_link_to_suppliers(dev, child) && !ret)
 			ret = -EAGAIN;
 

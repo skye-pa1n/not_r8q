@@ -623,10 +623,8 @@ int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 	     capsnap->size);
 
 	spin_lock(&mdsc->snap_flush_lock);
-	if (list_empty(&ci->i_snap_flush_item)) {
-		ihold(inode);
+	if (list_empty(&ci->i_snap_flush_item))
 		list_add_tail(&ci->i_snap_flush_item, &mdsc->snap_flush_list);
-	}
 	spin_unlock(&mdsc->snap_flush_lock);
 	return 1;  /* caller may want to ceph_flush_snaps */
 }
@@ -673,17 +671,14 @@ int ceph_update_snap_trace(struct ceph_mds_client *mdsc,
 	struct ceph_mds_snap_realm *ri;    /* encoded */
 	__le64 *snaps;                     /* encoded */
 	__le64 *prior_parent_snaps;        /* encoded */
-	struct ceph_snap_realm *realm;
+	struct ceph_snap_realm *realm = NULL;
 	struct ceph_snap_realm *first_realm = NULL;
-	struct ceph_snap_realm *realm_to_rebuild = NULL;
-	int rebuild_snapcs;
+	int invalidate = 0;
 	int err = -ENOMEM;
 	LIST_HEAD(dirty_realms);
 
 	dout("update_snap_trace deletion=%d\n", deletion);
 more:
-	realm = NULL;
-	rebuild_snapcs = 0;
 	ceph_decode_need(&p, e, sizeof(*ri), bad);
 	ri = p;
 	p += sizeof(*ri);
@@ -707,7 +702,7 @@ more:
 	err = adjust_snap_realm_parent(mdsc, realm, le64_to_cpu(ri->parent));
 	if (err < 0)
 		goto fail;
-	rebuild_snapcs += err;
+	invalidate += err;
 
 	if (le64_to_cpu(ri->seq) > realm->seq) {
 		dout("update_snap_trace updating %llx %p %lld -> %lld\n",
@@ -732,30 +727,22 @@ more:
 		if (realm->seq > mdsc->last_snap_seq)
 			mdsc->last_snap_seq = realm->seq;
 
-		rebuild_snapcs = 1;
+		invalidate = 1;
 	} else if (!realm->cached_context) {
 		dout("update_snap_trace %llx %p seq %lld new\n",
 		     realm->ino, realm, realm->seq);
-		rebuild_snapcs = 1;
+		invalidate = 1;
 	} else {
 		dout("update_snap_trace %llx %p seq %lld unchanged\n",
 		     realm->ino, realm, realm->seq);
 	}
 
-	dout("done with %llx %p, rebuild_snapcs=%d, %p %p\n", realm->ino,
-	     realm, rebuild_snapcs, p, e);
+	dout("done with %llx %p, invalidated=%d, %p %p\n", realm->ino,
+	     realm, invalidate, p, e);
 
-	/*
-	 * this will always track the uppest parent realm from which
-	 * we need to rebuild the snapshot contexts _downward_ in
-	 * hierarchy.
-	 */
-	if (rebuild_snapcs)
-		realm_to_rebuild = realm;
-
-	/* rebuild_snapcs when we reach the _end_ (root) of the trace */
-	if (realm_to_rebuild && p >= e)
-		rebuild_snap_realms(realm_to_rebuild, &dirty_realms);
+	/* invalidate when we reach the _end_ (root) of the trace */
+	if (invalidate && p >= e)
+		rebuild_snap_realms(realm, &dirty_realms);
 
 	if (!first_realm)
 		first_realm = realm;
@@ -978,19 +965,6 @@ skip_inode:
 				continue;
 			adjust_snap_realm_parent(mdsc, child, realm->ino);
 		}
-	} else {
-		/*
-		 * In the non-split case both 'num_split_inos' and
-		 * 'num_split_realms' should be 0, making this a no-op.
-		 * However the MDS happens to populate 'split_realms' list
-		 * in one of the UPDATE op cases by mistake.
-		 *
-		 * Skip both lists just in case to ensure that 'p' is
-		 * positioned at the start of realm info, as expected by
-		 * ceph_update_snap_trace().
-		 */
-		p += sizeof(u64) * num_split_inos;
-		p += sizeof(u64) * num_split_realms;
 	}
 
 	/*
