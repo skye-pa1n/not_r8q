@@ -2,7 +2,7 @@
 
 comment "Samsung Debugging Feature"
 menuconfig SEC_DEBUG
-	tristate "Samsung TN Ramdump Feature"
+	bool "Samsung TN Ramdump Feature"
 	default n
 	help
 	  Samsung TN Ramdump Feature.
