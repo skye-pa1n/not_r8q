@@ -163,8 +163,10 @@ unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
  * util * margin < capacity * 1024
  *
  * (default: ~20%)
+ * (not default: ~10%)
  */
-unsigned int capacity_margin				= 1280;
+unsigned int capacity_margin				= 1125;
+
 unsigned int sched_capacity_margin_up[NR_CPUS] = {
 			[0 ... NR_CPUS-1] = 1078}; /* ~5% margin */
 unsigned int sched_capacity_margin_down[NR_CPUS] = {
@@ -12243,6 +12245,29 @@ static void propagate_entity_cfs_rq(struct sched_entity *se)
 #else
 static void propagate_entity_cfs_rq(struct sched_entity *se) { }
 #endif
+
+unsigned int sched_dvfs_headroom[8] = { [0 ... 8 - 1] = 1280 };
+unsigned long apply_dvfs_headroom(unsigned long util, int cpu, bool tapered)
+{
+	if (tapered) {
+		unsigned long capacity = capacity_orig_of(cpu);
+		unsigned long headroom;
+		if (util >= capacity)
+			return util;
+		/*
+		 * Taper the boosting at e top end as these are expensive and
+		 * we don't need that much of a big headroom as we approach max
+		 * capacity
+		 *
+		 */
+		headroom = (capacity - util);
+		/* formula: headroom * (1.X - 1) == headroom * 0.X */
+		headroom = headroom *
+			(sched_dvfs_headroom[cpu] - SCHED_CAPACITY_SCALE) >> SCHED_CAPACITY_SHIFT;
+		return util + headroom;
+	}
+	return util * sched_dvfs_headroom[cpu] >> SCHED_CAPACITY_SHIFT;
+}
 
 static void detach_entity_cfs_rq(struct sched_entity *se)
 {
