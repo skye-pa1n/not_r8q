@@ -25,6 +25,7 @@
 
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/netlog.h>
 
 struct prefix_info {
 	__u8			type;
@@ -413,8 +414,14 @@ void in6_dev_finish_destroy(struct inet6_dev *idev);
 
 static inline void in6_dev_put(struct inet6_dev *idev)
 {
-	if (refcount_dec_and_test(&idev->refcnt))
+	if (!refcount_read(&idev->refcnt)) {
+		return;
+	}
+
+	if (refcount_dec_and_test(&idev->refcnt)) {
+		net_log("%s(): freeing inet dev for %s\n", __func__, idev->dev->name);
 		in6_dev_finish_destroy(idev);
+	}
 }
 
 static inline void in6_dev_put_clear(struct inet6_dev **pidev)

@@ -128,21 +128,6 @@ static struct pm_qos_object memory_bandwidth_pm_qos = {
 	.constraints = &memory_bw_constraints,
 	.name = "memory_bandwidth",
 };
- 
-static BLOCKING_NOTIFIER_HEAD(bias_hyst_notifier);
-static struct pm_qos_constraints bias_hyst_constraints = {
-	.list = PLIST_HEAD_INIT(bias_hyst_constraints.list),
-	.target_value = PM_QOS_BIAS_HYST_DEFAULT_VALUE,
-	.default_value = PM_QOS_BIAS_HYST_DEFAULT_VALUE,
-	.no_constraint_value = PM_QOS_BIAS_HYST_DEFAULT_VALUE,
-	.type = PM_QOS_MAX,
-	.notifiers = &bias_hyst_notifier,
-};
-static struct pm_qos_object bias_hyst_pm_qos = {
-	.constraints = &bias_hyst_constraints,
-	.name = "bias_hyst",
-};
-
 
 static struct pm_qos_object *pm_qos_array[] = {
 	&null_pm_qos,
@@ -150,7 +135,6 @@ static struct pm_qos_object *pm_qos_array[] = {
 	&network_lat_pm_qos,
 	&network_throughput_pm_qos,
 	&memory_bandwidth_pm_qos,
-	&bias_hyst_pm_qos,
 };
 
 static ssize_t pm_qos_power_write(struct file *filp, const char __user *buf,
@@ -282,7 +266,7 @@ static const struct file_operations pm_qos_debug_fops = {
 };
 
 static inline int pm_qos_set_value_for_cpus(struct pm_qos_constraints *c,
-		struct cpumask *cpus)
+					     bool dev_req, struct cpumask *cpus)
 {
 	struct pm_qos_request *req = NULL;
 	int cpu;
@@ -295,6 +279,19 @@ static inline int pm_qos_set_value_for_cpus(struct pm_qos_constraints *c,
 
 	if (c != pm_qos_array[PM_QOS_CPU_DMA_LATENCY]->constraints)
 		return -EINVAL;
+
+	/*
+	 * pm_qos_set_value_for_cpus expects all c->list elements to be of type
+	 * pm_qos_request, however requests from device will contain elements
+	 * of type dev_pm_qos_request.
+	 * pm_qos_constraints.target_per_cpu can be accessed only for
+	 * constraints associated with one of the pm_qos_class and present in
+	 * pm_qos_array. Device requests are not associated with any of
+	 * pm_qos_class, therefore their target_per_cpu cannot be accessed. We
+	 * can safely skip updating target_per_cpu for device requests.
+	 */
+	if (dev_req)
+		return 0;
 
 	plist_for_each_entry(req, &c->list, node) {
 		for_each_cpu(cpu, &req->cpus_affine) {
@@ -372,7 +369,7 @@ int pm_qos_update_target(struct pm_qos_constraints *c, struct plist_node *node,
 	curr_value = pm_qos_get_value(c);
 	cpumask_clear(&cpus);
 	pm_qos_set_value(c, curr_value);
-	ret = pm_qos_set_value_for_cpus(c, &cpus);
+	ret = pm_qos_set_value_for_cpus(c, dev_req, &cpus);
 
 	spin_unlock_irqrestore(&pm_qos_lock, flags);
 
@@ -499,6 +496,7 @@ int pm_qos_request_for_cpumask(int pm_qos_class, struct cpumask *mask)
 	val = c->default_value;
 
 	for_each_cpu(cpu, mask) {
+
 		switch (c->type) {
 		case PM_QOS_MIN:
 			if (c->target_per_cpu[cpu] < val)

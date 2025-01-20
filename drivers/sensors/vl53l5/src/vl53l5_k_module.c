@@ -614,6 +614,8 @@ static ssize_t vl53l5_firmware_version_show(struct device *dev,
 
 	status = vl53l5_get_version(&p_module->stdev, &p_version);
 
+	vl53l5_k_log_info("fw read %d", status);
+
 	if (prev_state <= VL53L5_STATE_LOW_POWER) {
 		vl53l5_ioctl_set_power_mode(p_module, NULL, VL53L5_POWER_STATE_LP_IDLE_COMMS);
 	}
@@ -1216,6 +1218,11 @@ static ssize_t vl53l5_test_mode_store(struct device *dev,
 	int ret;
 
 	ret = kstrtou8(buf, 10, &val);
+
+	if (ret) {
+		vl53l5_k_log_info("Invalid\n");
+		return count;
+	}
 
 	switch(val) {
 	case 1:

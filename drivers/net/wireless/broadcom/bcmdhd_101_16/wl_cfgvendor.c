@@ -6886,7 +6886,6 @@ exit:
 
 #ifdef LINKSTAT_SUPPORT
 
-#define NUM_RATE 32
 #define NUM_PEER 1
 #define NUM_CHAN 11
 #define HEADER_SIZE sizeof(ver_len)
@@ -7002,6 +7001,8 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 	uint32 cca_busy_time = 0;
 	int cur_chansp, cur_band;
 	chanspec_t cur_chanspec;
+	struct sk_buff *skb;
+	int mem_needed;
 
 	COMPAT_STRUCT_IFACE(wifi_iface_stat, iface);
 
@@ -7396,8 +7397,6 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 	COMPAT_ASSIGN_VALUE(iface, num_peers, NUM_PEER);
 	COMPAT_ASSIGN_VALUE(iface, peer_info->num_rate, NUM_RATE);
 
-	COMPAT_MEMCOPY_IFACE(output, total_len, wifi_iface_stat, iface, wifi_rate_stat);
-
 	err = wldev_iovar_getbuf(bcmcfg_to_prmry_ndev(cfg), "ratestat", NULL, 0,
 		iovar_buf, WLC_IOCTL_MAXLEN, NULL);
 	if (err != BCME_OK && err != BCME_UNSUPPORTED) {
@@ -7407,7 +7406,7 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 	for (i = 0; i < NUM_RATE; i++) {
 		p_wifi_rate_stat =
 			(wifi_rate_stat *)(iovar_buf + i*sizeof(wifi_rate_stat));
-		p_wifi_rate_stat_v1 = (wifi_rate_stat_v1 *)output;
+		p_wifi_rate_stat_v1 = &iface.peer_info->rate_stats[i];
 		p_wifi_rate_stat_v1->rate.preamble = p_wifi_rate_stat->rate.preamble;
 		p_wifi_rate_stat_v1->rate.nss = p_wifi_rate_stat->rate.nss;
 		p_wifi_rate_stat_v1->rate.bw = p_wifi_rate_stat->rate.bw;
@@ -7420,8 +7419,6 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 		p_wifi_rate_stat_v1->retries = p_wifi_rate_stat->retries;
 		p_wifi_rate_stat_v1->retries_short = p_wifi_rate_stat->retries_short;
 		p_wifi_rate_stat_v1->retries_long = p_wifi_rate_stat->retries_long;
-		output = (char *) &(p_wifi_rate_stat_v1->retries_long);
-		output += sizeof(p_wifi_rate_stat_v1->retries_long);
 	}
 
 	total_len = sizeof(wifi_radio_stat_h) + chan_stats_size;
@@ -7434,10 +7431,28 @@ static int wl_cfgvendor_lstats_get_info(struct wiphy *wiphy,
 		err = BCME_BADLEN;
 		goto exit;
 	}
-	err =  wl_cfgvendor_send_cmd_reply(wiphy, outdata, total_len);
+	mem_needed = VENDOR_REPLY_OVERHEAD + (ATTRIBUTE_U32_LEN) + total_len;
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, mem_needed);
+	if (unlikely(!skb)) {
+		WL_ERR(("skb alloc failed"));
+		err = -ENOMEM;
+		goto exit;
+	}
+	err = nla_put_u32(skb, ANDR_WIFI_STATS_ATTRIBUTE_NUM_RADIO, 1);
+	if (unlikely(err)) {
+		kfree_skb(skb);
+		goto exit;
+	}
+	err = nla_put(skb, ANDR_WIFI_STATS_ATTRIBUTE_STATS_INFO, total_len, outdata);
+	if (unlikely(err)) {
+		kfree_skb(skb);
+		goto exit;
+	}
 
-	if (unlikely(err))
-		WL_ERR(("Vendor Command reply failed ret:%d \n", err));
+	err = cfg80211_vendor_cmd_reply(skb);
+	if (unlikely(err)) {
+		WL_ERR(("Vendor command reply failed ret:%d\n", err));
+	}
 
 exit:
 	if (outdata) {

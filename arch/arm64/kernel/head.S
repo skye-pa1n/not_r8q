@@ -90,7 +90,7 @@ _head:
 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
 	le64sym	_kernel_flags_le		// Informative flags, little-endian
 	.quad	0				// reserved
-	.quad	0				// reserved
+	.quad	0xecefecef			// Magic number for proca ta
 	.quad	0				// reserved
 	.ascii	"ARM\x64"			// Magic number
 #ifdef CONFIG_EFI

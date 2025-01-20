@@ -176,34 +176,6 @@ config ARM64
 	select SYSCTL_EXCEPTION_TRACE
 	select THREAD_INFO_IN_TASK
 	select ARCH_SUPPORTS_SPECULATIVE_PAGE_FAULT
-	select ARCH_INLINE_SPIN_TRYLOCK
-	select ARCH_INLINE_SPIN_TRYLOCK_BH
-	select ARCH_INLINE_SPIN_LOCK
-	select ARCH_INLINE_SPIN_LOCK_BH
-	select ARCH_INLINE_SPIN_LOCK_IRQ
-	select ARCH_INLINE_SPIN_LOCK_IRQSAVE
-	select ARCH_INLINE_SPIN_UNLOCK
-	select ARCH_INLINE_SPIN_UNLOCK_BH
-	select ARCH_INLINE_SPIN_UNLOCK_IRQ
-	select ARCH_INLINE_SPIN_UNLOCK_IRQRESTORE
-	select ARCH_INLINE_READ_TRYLOCK
-	select ARCH_INLINE_READ_LOCK
-	select ARCH_INLINE_READ_LOCK_BH
-	select ARCH_INLINE_READ_LOCK_IRQ
-	select ARCH_INLINE_READ_LOCK_IRQSAVE
-	select ARCH_INLINE_READ_UNLOCK
-	select ARCH_INLINE_READ_UNLOCK_BH
-	select ARCH_INLINE_READ_UNLOCK_IRQ
-	select ARCH_INLINE_READ_UNLOCK_IRQRESTORE
-	select ARCH_INLINE_WRITE_TRYLOCK
-	select ARCH_INLINE_WRITE_LOCK
-	select ARCH_INLINE_WRITE_LOCK_BH
-	select ARCH_INLINE_WRITE_LOCK_IRQ
-	select ARCH_INLINE_WRITE_LOCK_IRQSAVE
-	select ARCH_INLINE_WRITE_UNLOCK
-	select ARCH_INLINE_WRITE_UNLOCK_BH
-	select ARCH_INLINE_WRITE_UNLOCK_IRQ
-	select ARCH_INLINE_WRITE_UNLOCK_IRQRESTORE
 	help
 	  ARM 64-bit (AArch64) Linux support.
 
@@ -895,14 +867,6 @@ config HOTPLUG_CPU
 	  Say Y here to experiment with turning CPUs off and on.  CPUs
 	  can be controlled through /sys/devices/system/cpu.
 
-config ASMP
-	bool "Multi-core automatic hotplug support"
-	depends on SMP && HOTPLUG_CPU
-	default n
-	help
-	  Automatically hotplugs the multiple cpu cores on and off
-	  based on cpu load and suspend state
-
 config ARCH_ENABLE_MEMORY_HOTPLUG
     depends on !NUMA
 	def_bool y
@@ -1232,7 +1196,6 @@ config ARM64_TAGGED_ADDR_ABI
 
 config COMPAT_VDSO
 	bool "Enable vDSO for 32-bit applications"
-	depends on !CPU_BIG_ENDIAN && "$(CROSS_COMPILE_COMPAT)" != ""
 	select GENERIC_COMPAT_VDSO
 	default y
 	help

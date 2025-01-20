@@ -62,8 +62,6 @@
 #include <linux/oom.h>
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
-#include <linux/hwui_mon.h>
-#include <linux/ksm.h>
 
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1396,8 +1394,7 @@ void setup_new_exec(struct linux_binprm * bprm)
 
 	/* An exec changes our domain. We are no longer part of the thread
 	   group */
-	current->self_exec_id++;
-
+	WRITE_ONCE(current->self_exec_id, current->self_exec_id + 1);
 	flush_signal_handlers(current, 0);
 }
 EXPORT_SYMBOL(setup_new_exec);
@@ -1741,7 +1738,6 @@ static int __do_execve_file(int fd, struct filename *filename,
 	struct files_struct *displaced;
 	int retval;
 
-
 	if (IS_ERR(filename))
 		return PTR_ERR(filename);
 
@@ -1899,24 +1895,11 @@ out_ret:
 	return retval;
 }
 
-#ifdef CONFIG_KSU_SUSFS_SUS_SU
-extern bool susfs_is_sus_su_hooks_enabled __read_mostly;
-#endif
-
-#ifdef CONFIG_KSU
-extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
-				void *envp, int *flags);
-#endif
-
 static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr argv,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
-#ifdef CONFIG_KSU
-		ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-#endif
-	hwui_mon_handle_exec(filename);
 	return __do_execve_file(fd, filename, argv, envp, flags, NULL);
 }
 

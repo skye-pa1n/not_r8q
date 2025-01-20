@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: GPL-2.0+
 /*
  * Driver for USB Mass Storage compliant devices
@@ -404,7 +403,7 @@ static int command_abort_matching(struct us_data *us, struct scsi_cmnd *srb_matc
 	/* is there any active pending command to abort ? */
 	if (!us->srb) {
 		scsi_unlock(us_to_host(us));
-		usb_stor_dbg(us, "-- nothing to abort\n");	
+		usb_stor_dbg(us, "-- nothing to abort\n");
 		return SUCCESS;
 	}
 

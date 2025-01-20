@@ -19,13 +19,11 @@
  *
  *  Adaptive scheduling granularity, math enhancements by Peter Zijlstra
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
- *
- *  Burst-Oriented Response Enhancer (BORE) CPU Scheduler
- *  Copyright (C) 2021-2024 Masahito Suzuki <firelzrd@gmail.com>
  */
 #include "sched.h"
 
 #include <trace/events/sched.h>
+
 #include "walt.h"
 
 #ifdef CONFIG_SMP
@@ -74,16 +72,10 @@ walt_dec_cfs_rq_stats(struct cfs_rq *cfs_rq, struct task_struct *p) {}
  * (to see the precise effective timeslice length of your workload,
  *  run vmstat and monitor the context-switches (cs) field)
  *
- * (BORE default: 24ms constant, units: nanoseconds)
- * (CFS  default: 5ms * (1 + ilog(ncpus)), units: nanoseconds) 
+ * (default: 6ms * (1 + ilog(ncpus)), units: nanoseconds)
  */
-#ifdef CONFIG_SCHED_BORE
-unsigned int sysctl_sched_latency			= 24000000ULL;
-static unsigned int normalized_sysctl_sched_latency	= 24000000ULL;
-#else // CONFIG_SCHED_BORE
-unsigned int sysctl_sched_latency			= 5000000ULL;
-unsigned int normalized_sysctl_sched_latency		= 5000000ULL;
-#endif // CONFIG_SCHED_BORE
+unsigned int sysctl_sched_latency			= 6000000ULL;
+unsigned int normalized_sysctl_sched_latency		= 6000000ULL;
 
 /*
  * Enable/disable honoring sync flag in energy-aware wakeups.
@@ -104,33 +96,22 @@ unsigned int sysctl_sched_cstate_aware = 1;
  *   SCHED_TUNABLESCALING_LOG - scaled logarithmical, *1+ilog(ncpus)
  *   SCHED_TUNABLESCALING_LINEAR - scaled linear, *ncpus
  *
- * (BORE default SCHED_TUNABLESCALING_NONE = *1 constant)
- * (CFS  default SCHED_TUNABLESCALING_LOG  = *(1+ilog(ncpus))
+ * (default SCHED_TUNABLESCALING_LOG = *(1+ilog(ncpus))
  */
-#ifdef CONFIG_SCHED_BORE
-enum sched_tunable_scaling sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_NONE;
-#else // CONFIG_SCHED_BORE
 enum sched_tunable_scaling sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
-#endif // CONFIG_SCHED_BORE
 
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
- * (BORE default: 3 msec constant, units: nanoseconds)
- * (CFS  default: 0.50 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
- #ifdef CONFIG_SCHED_BORE
-unsigned int sysctl_sched_min_granularity		= 3000000ULL;
-unsigned int normalized_sysctl_sched_min_granularity	= 3000000ULL;
-#else // CONFIG_SCHED_BORE
-unsigned int sysctl_sched_min_granularity		= 500000ULL;
-unsigned int normalized_sysctl_sched_min_granularity	= 500000ULL;
-#endif // CONFIG_SCHED_BORE
+unsigned int sysctl_sched_min_granularity		= 750000ULL;
+unsigned int normalized_sysctl_sched_min_granularity	= 750000ULL;
 
 /*
  * This value is kept at sysctl_sched_latency/sysctl_sched_min_granularity
  */
-static unsigned int sched_nr_latency = 6;
+static unsigned int sched_nr_latency = 8;
 
 /*
  * After fork, child runs first. If set to 0 (default) then
@@ -145,16 +126,10 @@ unsigned int sysctl_sched_child_runs_first __read_mostly;
  * and reduces their over-scheduling. Synchronous workloads will still
  * have immediate wakeup/sleep latencies.
  *
- * (BORE default: 4 msec constant, units: nanoseconds)
- * (CFS  default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (default: 1 msec * (1 + ilog(ncpus)), units: nanoseconds)
  */
-#ifdef CONFIG_SCHED_BORE
-unsigned int sysctl_sched_wakeup_granularity			= 4000000UL;
-unsigned int normalized_sysctl_sched_wakeup_granularity	= 4000000UL;
-#else // CONFIG_SCHED_BORE
-unsigned int sysctl_sched_wakeup_granularity = 1000000UL;
-unsigned int normalized_sysctl_sched_wakeup_granularity = 1000000UL;
-#endif // CONFIG_SCHED_BORE
+unsigned int sysctl_sched_wakeup_granularity		= 1000000UL;
+unsigned int normalized_sysctl_sched_wakeup_granularity	= 1000000UL;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
 DEFINE_PER_CPU_READ_MOSTLY(int, sched_load_boost);
@@ -180,7 +155,7 @@ int __weak arch_asym_cpu_priority(int cpu)
  *
  * (default: 5 msec, units: microseconds)
  */
-unsigned int sysctl_sched_cfs_bandwidth_slice		= 4000UL;
+unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
 #endif
 
 /*
@@ -191,11 +166,9 @@ unsigned int sysctl_sched_cfs_bandwidth_slice		= 4000UL;
  */
 unsigned int capacity_margin				= 1280;
 unsigned int sched_capacity_margin_up[NR_CPUS] = {
-			1280, 1280, 1625, 1625, 1625, 1625, 1024, 1024
-}; /* ~20% margin for small, ~37% for big, not used for big+  */
+			[0 ... NR_CPUS-1] = 1078}; /* ~5% margin */
 unsigned int sched_capacity_margin_down[NR_CPUS] = {
-			1024, 1024, 1796, 1796, 1796, 1796, 1442, 1442
-}; /* Not used for small, ~43% margin for big, ~29% for big+ */
+			[0 ... NR_CPUS-1] = 1205}; /* ~15% margin */
 
 #ifdef CONFIG_SCHED_WALT
 /* 1ms default for 20ms window size scaled to 1024 */
@@ -605,6 +578,7 @@ static void update_min_vruntime(struct cfs_rq *cfs_rq)
 	struct rb_node *leftmost = rb_first_cached(&cfs_rq->tasks_timeline);
 
 	u64 vruntime = cfs_rq->min_vruntime;
+
 	if (curr) {
 		if (curr->on_rq)
 			vruntime = curr->vruntime;
@@ -734,6 +708,7 @@ static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
 {
 	if (unlikely(se->load.weight != NICE_0_LOAD))
 		delta = __calc_delta(delta, NICE_0_LOAD, &se->load);
+
 	return delta;
 }
 
@@ -790,63 +765,6 @@ static u64 sched_vslice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	return calc_delta_fair(sched_slice(cfs_rq, se), se);
 }
-
-#ifdef CONFIG_SCHED_BORE
-uint __read_mostly sched_bore                   = 1;
-uint __read_mostly sched_burst_smoothness_long  = 1;
-uint __read_mostly sched_burst_smoothness_short = 1;
-uint __read_mostly sched_burst_fork_atavistic   = 2;
-uint __read_mostly sched_burst_penalty_offset   = 22;
-uint __read_mostly sched_burst_penalty_scale    = 1280;
-uint __read_mostly sched_burst_cache_lifetime   = 60000000;
-#define MAX_BURST_PENALTY (39U <<2)
-static inline u32 log2plus1_u64_u32f8(u64 v) {
-	u32 msb = fls64(v);
-	s32 excess_bits = msb - 9;
-    u8 fractional = (0 <= excess_bits)? v >> excess_bits: v << -excess_bits;
-	return msb << 8 | fractional;
-}
-static inline u32 calc_burst_penalty(u64 burst_time) {
-	u32 greed, tolerance, penalty, scaled_penalty;
-	
-	greed = log2plus1_u64_u32f8(burst_time);
-	tolerance = sched_burst_penalty_offset << 8;
-	penalty = max(0, (s32)greed - (s32)tolerance);
-	scaled_penalty = penalty * sched_burst_penalty_scale >> 16;
-	return min(MAX_BURST_PENALTY, scaled_penalty);
-}
-static inline u64 scale_slice(u64 delta, struct sched_entity *se) {
-	return mul_u64_u32_shr(delta, sched_prio_to_wmult[se->burst_score], 22);
-}
-static void update_burst_score(struct sched_entity *se) {
-	if (!entity_is_task(se)) return;
-	struct task_struct *p = task_of(se);
-	u8 prio = p->static_prio - MAX_RT_PRIO;
-	u8 prev_prio = min(39, prio + se->burst_score);
-	se->burst_score = se->burst_penalty >> 2;
-	u8 new_prio = min(39, prio + se->burst_score);
-	if (new_prio != prev_prio)
-	 	reweight_task(p, new_prio);
-}
-static void update_burst_penalty(struct sched_entity *se) {
-	se->curr_burst_penalty = calc_burst_penalty(se->burst_time);
-	se->burst_penalty = max(se->prev_burst_penalty, se->curr_burst_penalty);
-	update_burst_score(se);
-}
-static inline u32 binary_smooth(u32 new, u32 old) {
-  int increment = new - old;
-  return (0 <= increment)?
-    old + ( increment >> (int)sched_burst_smoothness_long):
-    old - (-increment >> (int)sched_burst_smoothness_short);
-}
-static void restart_burst(struct sched_entity *se) {
-	se->burst_penalty = se->prev_burst_penalty =
-		binary_smooth(se->curr_burst_penalty, se->prev_burst_penalty);
-	se->curr_burst_penalty = 0;
-	se->burst_time = 0;
-	update_burst_score(se);
-}
-#endif // CONFIG_SCHED_BORE
 
 #include "pelt.h"
 #ifdef CONFIG_SMP
@@ -981,13 +899,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	curr->sum_exec_runtime += delta_exec;
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
-#ifdef CONFIG_SCHED_BORE
-	curr->burst_time += delta_exec;
-	update_burst_penalty(curr);
-	curr->vruntime += max(1ULL, calc_delta_fair(delta_exec, curr));
-#else // !CONFIG_SCHED_BORE
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
-#endif // CONFIG_SCHED_BORE
 	update_min_vruntime(cfs_rq);
 
 	if (entity_is_task(curr)) {
@@ -4222,6 +4134,7 @@ static void
 place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 {
 	u64 vruntime = cfs_rq->min_vruntime;
+
 	/*
 	 * The 'current' period is already promised to the current tasks,
 	 * however the extra weight of the new task will slow them down a
@@ -4602,6 +4515,7 @@ pick_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 			if (!second || (curr && entity_before(curr, second)))
 				second = curr;
 		}
+
 		if (second && wakeup_preempt_entity(second, left) < 1)
 			se = second;
 	}
@@ -5606,7 +5520,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct cfs_rq *cfs_rq;
 	struct sched_entity *se = &p->se;
-	
+	int task_new = !(flags & ENQUEUE_WAKEUP);
+
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
 	 * the cfs_rq utilization to select a frequency.
@@ -5693,7 +5608,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		 * into account, but that is not straightforward to implement,
 		 * and the following generally works well enough in practice.
 		 */
-		if (flags & ENQUEUE_WAKEUP)
+		if (!task_new)
 			update_overutilized_status(rq);
 	}
 
@@ -5729,15 +5644,6 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct cfs_rq *cfs_rq;
 	struct sched_entity *se = &p->se;
 	int task_sleep = flags & DEQUEUE_SLEEP;
-	
-#ifdef CONFIG_SCHED_BORE
-	if (task_sleep) {
-		cfs_rq = cfs_rq_of(se);
-		if (cfs_rq->curr == se)
-			update_curr(cfs_rq);
-		restart_burst(se);
-	}
-#endif // CONFIG_SCHED_BORE
 
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
@@ -6337,11 +6243,10 @@ stune_util(int cpu, unsigned long other_util,
 	unsigned long util = min_t(unsigned long, SCHED_CAPACITY_SCALE,
 				   cpu_util_freq(cpu, walt_load) + other_util);
 	long margin = schedtune_cpu_margin_with(util, cpu, NULL);
-	unsigned long boosted_util;
-	trace_sched_boost_cpu(cpu, util, margin);
-	boosted_util = util + margin;
 
-	return boosted_util;
+	trace_sched_boost_cpu(cpu, util, margin);
+
+	return util + margin;
 }
 
 #else /* CONFIG_SCHED_TUNE */
@@ -6353,19 +6258,6 @@ schedtune_cpu_margin_with(unsigned long util, int cpu, struct task_struct *p)
 }
 
 #endif /* CONFIG_SCHED_TUNE */
-
-static inline unsigned long
-boosted_task_util(struct task_struct *task)
-{
-	unsigned long util = task_util_est(task);
-	long margin = schedtune_task_margin(task);
-	unsigned long ret_value;
-
-	ret_value = util + margin;
-	trace_sched_boost_task(task, util, margin);
-
-	return ret_value;
-}
 
 static unsigned long cpu_util_without(int cpu, struct task_struct *p);
 
@@ -7035,11 +6927,6 @@ static int get_start_cpu(struct task_struct *p)
 			task_boost == TASK_BOOST_ON_MID;
 	bool task_skip_min = task_skip_min_cpu(p);
 
-	if (task_boost > TASK_BOOST_ON_MID) {
-		start_cpu = rd->max_cap_orig_cpu;
-		return start_cpu;
-	}
-
 	/*
 	 * note about min/mid/max_cap_orig_cpu - either all of them will be -ve
 	 * or just mid will be -1, there never be any other combinations of -1s
@@ -7048,9 +6935,11 @@ static int get_start_cpu(struct task_struct *p)
 	if (task_skip_min || boosted) {
 		start_cpu = rd->mid_cap_orig_cpu == -1 ?
 			rd->max_cap_orig_cpu : rd->mid_cap_orig_cpu;
-#ifdef CONFIG_WALT_POWER_FEATURE
+	}
+
+	if (task_boost > TASK_BOOST_ON_MID) {
+		start_cpu = rd->max_cap_orig_cpu;
 		return start_cpu;
-#endif
 	}
 
 	if (start_cpu == -1 || start_cpu == rd->max_cap_orig_cpu)
@@ -7983,6 +7872,7 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		}
 		goto unlock;
 	}
+
 	/* If there is only one sensible candidate, select it now. */
 	cpu = cpumask_first(candidates);
 	if (weight == 1 && ((uclamp_latency_sensitive(p) && idle_cpu(cpu)) ||
@@ -8347,7 +8237,6 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 	find_matching_se(&se, &pse);
 	update_curr(cfs_rq_of(se));
 	BUG_ON(!pse);
-
 	if (wakeup_preempt_entity(se, pse) == 1) {
 		/*
 		 * Bias pick_next to pick the sched entity that is
@@ -8393,7 +8282,6 @@ again:
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	if (prev->sched_class != &fair_sched_class)
 		goto simple;
-
 
 	/*
 	 * Because of the set_next_buddy() in dequeue_task_fair() it is rather
@@ -8549,31 +8437,24 @@ static void yield_task_fair(struct rq *rq)
 	/*
 	 * Are we the only task in the tree?
 	 */
-#if !defined(CONFIG_SCHED_BORE)
 	if (unlikely(rq->nr_running == 1))
 		return;
 
 	clear_buddies(cfs_rq, se);
-#endif // CONFIG_SCHED_BORE
 
-	update_rq_clock(rq);
-	/*
-	 * Update run-time statistics of the 'current'.
-	 */
-	update_curr(cfs_rq);
-#ifdef CONFIG_SCHED_BORE
-	restart_burst(se);
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
-#endif // CONFIG_SCHED_BORE
-	/*
-	 * Tell update_rq_clock() that we've just updated,
-	 * so we don't do microscopic update in schedule()
-	 * and double the fastpath cost.
-	 */
-	rq_clock_skip_update(rq);
+	if (curr->policy != SCHED_BATCH) {
+		update_rq_clock(rq);
+		/*
+		 * Update run-time statistics of the 'current'.
+		 */
+		update_curr(cfs_rq);
+		/*
+		 * Tell update_rq_clock() that we've just updated,
+		 * so we don't do microscopic update in schedule()
+		 * and double the fastpath cost.
+		 */
+		rq_clock_skip_update(rq);
+	}
 
 	set_skip_buddy(se);
 }
@@ -8872,6 +8753,7 @@ static
 int can_migrate_task(struct task_struct *p, struct lb_env *env)
 {
 	int tsk_cache_hot;
+
 	lockdep_assert_held(&env->src_rq->lock);
 
 	/*
@@ -9429,7 +9311,6 @@ struct sg_lb_stats {
 	unsigned long group_capacity;
 	unsigned long group_util; /* Total utilization of the group */
 	unsigned int sum_nr_running; /* Nr tasks running in the group */
-	unsigned int sum_nr_running_all; /* All Nr tasks running in the group */
 	unsigned int idle_cpus;
 	unsigned int group_weight;
 	enum group_type group_type;
@@ -9476,12 +9357,7 @@ static inline void init_sd_lb_stats(struct sd_lb_stats *sds)
 		.busiest_stat = {
 			.avg_load = 0UL,
 			.sum_nr_running = 0,
-			.sum_nr_running_all = 0,
 			.group_type = group_other,
-		},
-		.local_stat = {
-			.sum_nr_running = 0,
-			.sum_nr_running_all = 0,
 		},
 	};
 }
@@ -9550,6 +9426,7 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 	capacity *= arch_scale_max_freq_capacity(sd, cpu);
 	capacity >>= SCHED_CAPACITY_SHIFT;
 
+	capacity = min(capacity, thermal_cap(cpu));
 	cpu_rq(cpu)->cpu_capacity_orig = capacity;
 
 	capacity = scale_rt_capacity(cpu, capacity);
@@ -9704,7 +9581,7 @@ static inline int sg_imbalanced(struct sched_group *group)
 static inline bool
 group_has_capacity(struct lb_env *env, struct sg_lb_stats *sgs)
 {
-	if (sgs->sum_nr_running_all < sgs->group_weight)
+	if (sgs->sum_nr_running < sgs->group_weight)
 		return true;
 
 	if ((sgs->group_capacity * 100) >
@@ -9725,7 +9602,7 @@ group_has_capacity(struct lb_env *env, struct sg_lb_stats *sgs)
 static inline bool
 group_is_overloaded(struct lb_env *env, struct sg_lb_stats *sgs)
 {
-	if (sgs->sum_nr_running_all <= sgs->group_weight)
+	if (sgs->sum_nr_running <= sgs->group_weight)
 		return false;
 
 #ifdef CONFIG_SCHED_WALT
@@ -9853,8 +9730,6 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 		sgs->group_load += load;
 		sgs->group_util += cpu_util(i);
 		sgs->sum_nr_running += rq->cfs.h_nr_running;
-		sgs->sum_nr_running_all += rq->cfs.h_nr_running +
-			 rq->rt.rt_nr_running + rq->dl.dl_nr_running;
 
 		nr_running = rq->nr_running;
 		if (nr_running > 1)
@@ -9972,7 +9847,7 @@ static bool update_sd_pick_busiest(struct lb_env *env,
 	 * capable CPUs may harm throughput. Maximize throughput,
 	 * power/energy consequences are not considered.
 	 */
-	if (sgs->sum_nr_running_all <= sgs->group_weight &&
+	if (sgs->sum_nr_running <= sgs->group_weight &&
 	    group_smaller_min_cpu_capacity(sds->local, sg))
 		return false;
 
@@ -10100,7 +9975,7 @@ static inline void update_sd_lb_stats(struct lb_env *env, struct sd_lb_stats *sd
 		 */
 		if (prefer_sibling && sds->local &&
 		    group_has_capacity(env, local) &&
-		    (sgs->sum_nr_running_all > local->sum_nr_running_all + 1)) {
+		    (sgs->sum_nr_running > local->sum_nr_running + 1)) {
 			sgs->group_no_capacity = 1;
 			sgs->group_type = group_classify(sg, sgs);
 		}
@@ -10330,8 +10205,8 @@ void fix_small_imbalance(struct lb_env *env, struct sd_lb_stats *sds)
 	 */
 	if (env->sd->flags & SD_ASYM_CPUCAPACITY &&
 		busiest->group_type == group_overloaded &&
-		busiest->sum_nr_running_all > busiest->group_weight &&
-		local->sum_nr_running_all < local->group_weight &&
+		busiest->sum_nr_running > busiest->group_weight &&
+		local->sum_nr_running < local->group_weight &&
 		local->group_capacity < busiest->group_capacity)
 		env->imbalance = busiest->load_per_task;
 }
@@ -10436,7 +10311,7 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 	 */
 	if (busiest->group_type == group_misfit_task &&
 		(env->idle == CPU_NEWLY_IDLE ||
-		local->sum_nr_running_all < local->group_weight)) {
+		local->sum_nr_running < local->group_weight)) {
 		env->imbalance = max_t(long, env->imbalance,
 				       busiest->group_misfit_task_load);
 	}
@@ -10732,6 +10607,7 @@ static struct rq *find_busiest_queue(struct lb_env *env,
  * so long as it is large enough.
  */
 #define MAX_PINNED_INTERVAL	512
+#define NEED_ACTIVE_BALANCE_THRESHOLD 10
 
 static int need_active_balance(struct lb_env *env)
 {
@@ -11089,7 +10965,8 @@ no_move:
 			}
 
 			/* We've kicked active balancing, force task migration. */
-			sd->nr_balance_failed = sd->cache_nice_tries+1;
+			sd->nr_balance_failed = sd->cache_nice_tries +
+					NEED_ACTIVE_BALANCE_THRESHOLD - 1;
 		}
 	} else
 		sd->nr_balance_failed = 0;
@@ -12271,9 +12148,6 @@ static void task_fork_fair(struct task_struct *p)
 		update_curr(cfs_rq);
 		se->vruntime = curr->vruntime;
 	}
-#ifdef CONFIG_SCHED_BORE
-	update_burst_score(se);
-#endif // CONFIG_SCHED_BORE
 	place_entity(cfs_rq, se, 1);
 
 	if (sysctl_sched_child_runs_first && curr && entity_before(curr, se)) {
@@ -12714,16 +12588,6 @@ static unsigned int get_rr_interval_fair(struct rq *rq, struct task_struct *task
 
 	return rr_interval;
 }
-
-#ifdef CONFIG_SCHED_CASS
-#include "cass.c"
-/* Use CASS. A dummy wrapper ensures the replaced function is still "used". */
-static inline void *select_task_rq_fair_dummy(void)
-{
-	return (void *)select_task_rq_fair;
-}
-#define select_task_rq_fair cass_select_task_rq_fair
-#endif /* CONFIG_SCHED_CASS */
 
 /*
  * All the scheduling class methods:
@@ -13199,4 +13063,5 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 		raw_spin_unlock(&migration_lock);
 	}
 }
+
 #endif /* CONFIG_SCHED_WALT */

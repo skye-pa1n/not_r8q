@@ -126,7 +126,6 @@ static inline void unregister_handler_proc(unsigned int irq,
 					   struct irqaction *action) { }
 #endif
 
-extern bool __irq_can_set_affinity(struct irq_desc *desc);
 extern bool irq_can_set_affinity_usr(unsigned int irq);
 
 extern void irq_set_thread_affinity(struct irq_desc *desc);

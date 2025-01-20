@@ -1007,6 +1007,7 @@ config SERIAL_MSM_SEC_GENI
 	    Serial driver for Qualcomm Technologies Inc's GENI based QUPv3
 	    hardware.
 	    The driver supports console and High speed UART functions.
+	    This driver includes Broadcom specific changes from SEC.
 
 config SERIAL_MSM_GENI_HALF_SAMPLING
 	bool "Changes clock divider which impacts sampling rate for QUP HW ver greater than 2.5.0"

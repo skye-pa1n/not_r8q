@@ -8,6 +8,23 @@ config DEFCONFIG_LIST
 	default ARCH_DEFCONFIG
 	default "arch/$(ARCH)/defconfig"
 
+config CC_VERSION_TEXT
+	string
+	default "$(CC_VERSION_TEXT)"
+	help
+	  This is used in unclear ways:
+
+	  - Re-run Kconfig when the compiler is updated
+	    The 'default' property references the environment variable,
+	    CC_VERSION_TEXT so it is recorded in include/config/auto.conf.cmd.
+	    When the compiler is updated, Kconfig will be invoked.
+
+	  - Ensure full rebuild when the compier is updated
+	    include/linux/kconfig.h contains this option in the comment line so
+	    fixdep adds include/config/cc/version/text.h into the auto-generated
+	    dependency. When the compiler is updated, syncconfig will touch it
+	    and then every file will be rebuilt.
+
 config CC_IS_GCC
 	def_bool $(success,$(CC) --version | head -n 1 | grep -q gcc)
 
@@ -127,17 +144,7 @@ config BUILD_SALT
           this option will use the value in the calculation of the build id.
           This is mostly useful for distributions which want to ensure the
           build is unique between builds. It's safe to leave the default.
-          
-config POLLY_CLANG
-	bool "Use Clang Polly optimizations"
-	help
-	  This option enables Clang's polyhedral loop optimizer known as
-	  Polly. Polly is able to optimize various loops throughout the
-	  kernel for cache locality. This requires a Clang toolchain
-	  compiled with support for Polly. More information can be found
-	  from Polly's website:
-	  https://polly.llvm.org
-	  
+
 config HAVE_KERNEL_GZIP
 	bool
 
@@ -1167,21 +1174,6 @@ config NET_NS
 
 endif # NAMESPACES
 
-config SCHED_BORE
-	bool "Burst-Oriented Response Enhancer"
-	default y
-	help
-	  In Desktop and Mobile computing, one might prefer interactive
-	  tasks to keep responsive no matter what they run in the background.
-	  Enabling this kernel feature modifies the scheduler to discriminate
-	  tasks by their burst time (runtime since it last went sleeping or
-	  yielding state) and prioritize those that run less bursty.
-	  Such tasks usually include window compositor, widgets backend,
-	  terminal emulator, video playback, games and so on.
-	  With a little impact to scheduling fairness, it may improve
-	  responsiveness especially under heavy background workload.
-	  If unsure, say Y here.
-
 config CHECKPOINT_RESTORE
 	bool "Checkpoint/restore support"
 	select PROC_CHILDREN
@@ -1193,30 +1185,7 @@ config CHECKPOINT_RESTORE
 	  entries.
 
 	  If unsure, say N here.
-	  
-config SCHED_CASS
-	bool "Capacity Aware Superset Scheduler"
-	depends on SMP
-	help
-	  This enables the Capacity Aware Superset Scheduler (CASS), which
-	  optimizes runqueue selection of CFS tasks. By using CPU capacity as a
-	  basis for comparing the relative utilization between different CPUs,
-	  CASS fairly balances load across CPUs of varying capacities. This
-	  results in improved multi-core performance, especially when CPUs are
-	  overutilized because CASS doesn't clip a CPU's utilization when it
-	  eclipses the CPU's capacity.
-	  As a superset of capacity aware scheduling, CASS implements a
-	  hierarchy of criteria to determine the better CPU to wake a task upon
-	  between CPUs that have the same relative utilization. This way,
-	  single-core performance, latency, and cache affinity are all optimized
-	  where possible.
-	  CASS doesn't feature explicit energy awareness but its basic load
-	  balancing principle results in decreased overall energy, often better
-	  than what is possible with explicit energy awareness. By fairly
-	  balancing load based on relative utilization, all CPUs are kept at
-	  their lowest P-state necessary to satisfy the overall load at any
-	  given moment.
-	  
+
 config SCHED_AUTOGROUP
 	bool "Automatic process group scheduling"
 	select CGROUPS

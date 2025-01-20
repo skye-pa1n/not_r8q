@@ -384,6 +384,37 @@
                         7		326		123400		130380		1
 		>;
 
+		samsung,fod-dim-lut = <
+                /* brightness, alpha */
+                	    0     0xFF
+                	    1     0xE8
+                	    11     0xD5
+                	    21     0xC8
+                	    31     0xB9
+                	    42     0xAF
+                	    52     0xA3
+                	    62     0x96
+                	    73     0x8C
+                	    83     0x85
+                	    93     0x7D
+                	    104     0x75
+                	    114     0x6B
+                	    124     0x64
+                	    135     0x5F
+                	    145     0x55
+                	    155     0x4B
+                	    166     0x44
+                	    176     0x3F
+                	    186     0x3B
+                	    197     0x35
+                	    207     0x31
+                	    217     0x2C
+                	    228     0x27
+                	    238     0x22
+                	    248     0x1E
+                	    256     0x00
+		>;
+
 		/* *************************************************************
 		 * candela to index mappings
 		 * **************************************************************
@@ -1093,7 +1124,7 @@
 				qcom,mdss-dsi-v-front-porch = <4>;
 
 				samsung,mdss-dsi-sot-hs-mode; // HS Setting
-				qcom,mdss-dsi-panel-framerate = <135>;
+				qcom,mdss-dsi-panel-framerate = <120>;
 				qcom,mdss-mdp-transfer-time-us = <7533>; /* transfer time: 48Hz: 20032, 60Hz: 15866, 96Hz: 9616, 120Hz: 7533 */
 
 				qcom,mdss-dsi-panel-clockrate = <1110000000>; /* 1110 Mbps*/

@@ -850,6 +850,11 @@ static void qbt2000_gpio_report_event(struct qbt2000_drvdata *drvdata)
 	if (!kfifo_put(&drvdata->fd_events, fw_event))
 		pr_err("fw events fifo: error adding item\n");
 
+#ifdef QBT2000_AVOID_NOISE
+	if (!state)
+		qbt2000_noise_control(drvdata, QBT2000_NOISE_UNBLOCK);
+#endif
+
 	mutex_unlock(&drvdata->fd_events_mutex);
 	wake_up_interruptible(&drvdata->read_wait_queue_fd);
 	pr_info("state: %s\n", state ? "Finger Down" : "Finger Leave");

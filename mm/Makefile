@@ -2,8 +2,7 @@
 #
 # Makefile for the linux memory manager.
 #
-ccflags-y := -Wno-format
-subdir-ccflags-y := -Wno-format
+subdir-ccflags-y := -Wformat
 KASAN_SANITIZE_slab_common.o := n
 KASAN_SANITIZE_slab.o := n
 KASAN_SANITIZE_slub.o := n
@@ -73,8 +72,7 @@ obj-$(CONFIG_SPARSEMEM)	+= sparse.o
 obj-$(CONFIG_SPARSEMEM_VMEMMAP) += sparse-vmemmap.o
 obj-$(CONFIG_SLOB) += slob.o
 obj-$(CONFIG_MMU_NOTIFIER) += mmu_notifier.o
-obj-$(CONFIG_KSM_LEGACY) += ksm.o
-obj-$(CONFIG_UKSM) += uksm.o
+obj-$(CONFIG_KSM) += ksm.o
 obj-$(CONFIG_PAGE_POISONING) += page_poison.o
 obj-$(CONFIG_SLAB) += slab.o
 obj-$(CONFIG_SLUB) += slub.o

@@ -1177,9 +1177,6 @@ const char * const vmstat_text[] = {
 	"nr_ion_heap",
 	"nr_ion_heap_pool",
 	"nr_gpu_heap",
-#ifdef CONFIG_UKSM
-	"nr_uksm_zero_pages",
-#endif
 	/* enum writeback_stat_item counters */
 	"nr_dirty_threshold",
 	"nr_dirty_background_threshold",
@@ -1764,7 +1761,7 @@ static const struct seq_operations vmstat_op = {
 
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct delayed_work, vmstat_work);
-int sysctl_stat_interval __read_mostly = 10 * HZ;
+int sysctl_stat_interval __read_mostly = HZ;
 
 #ifdef CONFIG_PROC_FS
 static void refresh_vm_stats(struct work_struct *work)

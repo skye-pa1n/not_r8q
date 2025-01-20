@@ -12,6 +12,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/memblock.h>
 #include <linux/completion.h>
+#include <soc/qcom/ramdump.h>
+#include <linux/of_gpio.h>
 
 #include "main.h"
 #include "bus.h"
@@ -4520,7 +4522,13 @@ void cnss_pci_clear_dump_info(struct cnss_pci_data *pci_priv)
 	}
 
 	for (i = 0, j = 0; i < plat_priv->fw_mem_seg_len; i++) {
+
+#ifdef CONFIG_SEC_CNSS2
+		if (fw_mem[i].type == CNSS_MEM_TYPE_DDR &&
+		    (fw_mem[i].attrs & DMA_ATTR_FORCE_CONTIGUOUS)) {
+#else
 		if (fw_mem[i].type == CNSS_MEM_TYPE_DDR) {
+#endif
 			cnss_pci_remove_dump_seg(pci_priv, dump_seg,
 						 CNSS_FW_REMOTE_HEAP, j,
 						 fw_mem[i].va, fw_mem[i].pa,

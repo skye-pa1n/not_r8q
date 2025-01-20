@@ -20,8 +20,8 @@
  */
 #define DEFAULT_SCHED_RAVG_WINDOW (3333333 * 6)
 #else
-/* Default window size (in ns) = 1ms */
-#define DEFAULT_SCHED_RAVG_WINDOW 1000000
+/* Default window size (in ns) = 20ms */
+#define DEFAULT_SCHED_RAVG_WINDOW 20000000
 #endif
 
 /* Max window size (in ns) = 1s */
@@ -64,10 +64,6 @@ extern void update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime);
 
 extern unsigned int walt_big_tasks(int cpu);
-
-struct waltgov_callback {
-	void (*func)(struct waltgov_callback *cb, u64 time, unsigned int flags);
-};
 
 static inline void
 inc_nr_big_task(struct walt_sched_stats *stats, struct task_struct *p)

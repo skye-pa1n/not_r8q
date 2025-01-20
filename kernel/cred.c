@@ -137,6 +137,7 @@ void __put_cred(struct cred *cred)
 	kdebug("__put_cred(%p{%d,%d})", cred,
 	       atomic_read(&cred->usage),
 	       read_cred_subscribers(cred));
+
 	BUG_ON(atomic_read(&cred->usage) != 0);
 #ifdef CONFIG_DEBUG_CREDENTIALS
 	BUG_ON(read_cred_subscribers(cred) != 0);
@@ -190,12 +191,14 @@ void exit_creds(struct task_struct *tsk)
 const struct cred *get_task_cred(struct task_struct *task)
 {
 	const struct cred *cred;
+
 	rcu_read_lock();
 
 	do {
 		cred = __task_cred((task));
 		BUG_ON(!cred);
-	} while (!atomic_inc_not_zero(&((struct cred *)cred)->usage));
+	} while (!get_cred_rcu(cred));
+
 	rcu_read_unlock();
 	return cred;
 }
@@ -311,6 +314,7 @@ struct cred *prepare_exec_creds(void)
 
 	return new;
 }
+
 /*
  * Copy credentials for the new process created by fork()
  *
@@ -325,15 +329,6 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 	struct cred *new;
 	int ret;
 
-	/*
-	 * Disabling cred sharing among the same thread group. This
-	 * is needed because we only added one back pointer in cred.
-	 *
-	 * This should NOT in any way change kernel logic, if we think about what
-	 * happens when a thread needs to change its credentials: it will just
-	 * create a new one, while all other threads in the same thread group still
-	 * reference the old one, whose reference counter decreases by 2.
-	 */
 	if (
 #ifdef CONFIG_KEYS
 		!p->cred->thread_keyring &&
@@ -500,6 +495,7 @@ int commit_creds(struct cred *new)
 	    !gid_eq(new->sgid,  old->sgid) ||
 	    !gid_eq(new->fsgid, old->fsgid))
 		proc_id_connector(task, PROC_EVENT_GID);
+
 	/* release the old obj and subj refs both */
 	put_cred(old);
 	put_cred(old);

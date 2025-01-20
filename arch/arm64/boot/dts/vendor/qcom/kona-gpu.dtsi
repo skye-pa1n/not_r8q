@@ -1,3 +1,4 @@
+
 #define MHZ_TO_KBPS(mhz, w) ((mhz * 1000000 * w) / (1024))
 
 &soc {
@@ -169,13 +170,7 @@
 
 			qcom,l3-pwrlevel@2 {
 				reg = <2>;
-				qcom,l3-freq = <1744000000>;
-				
-			};
-			
-			qcom,l3-pwrlevel@3 {
-				reg = <3>;
-				qcom,l3-freq = <2133000000>;	
+				qcom,l3-freq = <1344000000>;
 			};
 		};
 

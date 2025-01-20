@@ -95,7 +95,6 @@
 #include <linux/thread_info.h>
 #include <linux/cpufreq_times.h>
 #include <linux/scs.h>
-#include <linux/simple_lmk.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -552,7 +551,6 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 		rb_link = &tmp->vm_rb.rb_right;
 		rb_parent = &tmp->vm_rb;
 
-		uksm_vma_add_new(tmp);
 		mm->map_count++;
 		if (!(tmp->vm_flags & VM_WIPEONFORK)) {
 			if (IS_ENABLED(CONFIG_SPECULATIVE_PAGE_FAULT)) {
@@ -1075,7 +1073,6 @@ static inline void __mmput(struct mm_struct *mm)
 	}
 	if (mm->binfmt)
 		module_put(mm->binfmt->module);
-	simple_lmk_mm_freed(mm);
 	mmdrop(mm);
 }
 
@@ -2244,7 +2241,6 @@ static __latent_entropy struct task_struct *copy_process(
 		fd_install(pidfd, pidfile);
 
 	proc_fork_connector(p);
-	sched_post_fork(p);
 	cgroup_post_fork(p);
 	cgroup_threadgroup_change_end(current);
 	perf_event_fork(p);

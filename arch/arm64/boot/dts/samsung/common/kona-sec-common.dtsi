@@ -24,7 +24,6 @@
 #include "kona-sec-pm-common.dtsi"
 #include "kona-sec-pm8150b-common.dtsi"
 #include "kona-sec-sensor-common.dtsi"
-#include "kona-sec-booster-common.dtsi"
 #include "kona-sec-argos-common.dtsi"
 
 &soc {
@@ -41,10 +40,6 @@
 	samsung,sec_slub_debug {
 		free_track,black_list-names = "kmalloc-128";
 		free_track,black_list-skips = <2>;
-	};
-
-	samsung,sec_hdm {
-		memory-region = <&hdm_region>;
 	};
 
 	samsung,ss_plog {

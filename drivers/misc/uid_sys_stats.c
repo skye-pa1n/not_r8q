@@ -29,7 +29,6 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
-
 #ifdef CONFIG_SDCARD_FS
 #include <linux/kobject.h>
 #include <linux/sysfs.h>

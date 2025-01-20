@@ -364,3 +364,42 @@ scsi_trace_misc(struct trace_seq *p, unsigned char *cdb, int len)
 	return ret;
 }
 
+const char *
+scsi_trace_parse_cdb(struct trace_seq *p, unsigned char *cdb, int len)
+{
+	switch (cdb[0]) {
+	case READ_6:
+	case WRITE_6:
+		return scsi_trace_rw6(p, cdb, len);
+	case READ_10:
+	case VERIFY:
+	case WRITE_10:
+	case WRITE_SAME:
+		return scsi_trace_rw10(p, cdb, len);
+	case READ_12:
+	case VERIFY_12:
+	case WRITE_12:
+		return scsi_trace_rw12(p, cdb, len);
+	case READ_16:
+	case VERIFY_16:
+	case WRITE_16:
+	case WRITE_SAME_16:
+		return scsi_trace_rw16(p, cdb, len);
+	case UNMAP:
+		return scsi_trace_unmap(p, cdb, len);
+	case SERVICE_ACTION_IN_16:
+		return scsi_trace_service_action_in(p, cdb, len);
+	case VARIABLE_LENGTH_CMD:
+		return scsi_trace_varlen(p, cdb, len);
+	case MAINTENANCE_IN:
+		return scsi_trace_maintenance_in(p, cdb, len);
+	case MAINTENANCE_OUT:
+		return scsi_trace_maintenance_out(p, cdb, len);
+	case ZBC_IN:
+		return scsi_trace_zbc_in(p, cdb, len);
+	case ZBC_OUT:
+		return scsi_trace_zbc_out(p, cdb, len);
+	default:
+		return scsi_trace_misc(p, cdb, len);
+	}
+}

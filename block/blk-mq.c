@@ -1904,10 +1904,10 @@ static size_t order_to_size(unsigned int order)
 static void blk_mq_clear_rq_mapping(struct blk_mq_tag_set *set,
 		struct blk_mq_tags *tags, unsigned int hctx_idx)
 {
-		struct blk_mq_tags *drv_tags = set->tags[hctx_idx];
-		struct ext_blk_mq_tags *drv_etags;
-		struct page *page;
-		unsigned long flags;
+	struct blk_mq_tags *drv_tags = set->tags[hctx_idx];
+	struct ext_blk_mq_tags *drv_etags;
+	struct page *page;
+	unsigned long flags;
 
 	list_for_each_entry(page, &tags->page_list, lru) {
 		unsigned long start = (unsigned long)page_address(page);

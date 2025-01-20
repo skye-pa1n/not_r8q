@@ -20,7 +20,7 @@
 #include <net/netns/ipv4.h>
 #include <net/netns/ipv6.h>
 #ifdef CONFIG_MPTCP
-	#include <net/netns/mptcp.h>
+#include <net/netns/mptcp.h>
 #endif
 #include <net/netns/ieee802154_6lowpan.h>
 #include <net/netns/sctp.h>

@@ -49,7 +49,6 @@
 #include <linux/prefetch.h>
 #include <linux/printk.h>
 #include <linux/dax.h>
-#include <linux/simple_lmk.h>
 #include <linux/psi.h>
 
 #include <asm/tlbflush.h>
@@ -107,15 +106,6 @@ struct scan_control {
 
 	/* One of the zones is ready for compaction */
 	unsigned int compaction_ready:1;
-
-	/* The anonymous pages on the current node are below vm.anon_min_kbytes */
-	unsigned int anon_below_min:1;
-
-	/* The clean file pages on the current node are below vm.clean_low_kbytes */
-	unsigned int clean_below_low:1;
-
-	/* The clean file pages on the current node are below vm.clean_min_kbytes */
-	unsigned int clean_below_min:1;
 
 	/* Allocation order */
 	s8 order;
@@ -187,14 +177,10 @@ int kswapd_threads_current = DEF_KSWAPD_THREADS_PER_NODE;
 #define prefetchw_prev_lru_page(_page, _base, _field) do { } while (0)
 #endif
 
-unsigned long sysctl_anon_min_kbytes __read_mostly = CONFIG_ANON_MIN_KBYTES;
-unsigned long sysctl_clean_low_kbytes __read_mostly = CONFIG_CLEAN_LOW_KBYTES;
-unsigned long sysctl_clean_min_kbytes __read_mostly = CONFIG_CLEAN_MIN_KBYTES;
-
 /*
- * From 0 .. 200.  Higher means more swappy.
+ * From 0 .. 100.  Higher means more swappy.
  */
-int vm_swappiness = 165;
+int vm_swappiness = 60;
 /*
  * The total number of pages which are beyond the high watermark within all
  * zones.
@@ -2395,54 +2381,6 @@ static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
 	}
 
 	return shrink_inactive_list(nr_to_scan, lruvec, sc, lru);
-}	
-
-static void prepare_workingset_protection(pg_data_t *pgdat, struct scan_control *sc)
-{
-	/*
-	 * Check the number of anonymous pages to protect them from
-	 * reclaiming if their amount is below the specified.
-	 */
-	if (sysctl_anon_min_kbytes) {
-		unsigned long reclaimable_anon;
-
-		reclaimable_anon =
-			node_page_state(pgdat, NR_ACTIVE_ANON);
-			node_page_state(pgdat, NR_INACTIVE_ANON);
-			node_page_state(pgdat, NR_ISOLATED_ANON);
-		reclaimable_anon <<= (PAGE_SHIFT - 10);
-
-		sc->anon_below_min = reclaimable_anon < sysctl_anon_min_kbytes;
-	} else
-		sc->anon_below_min = 0;
-
-	/*
-	 * Check the number of clean file pages to protect them from
-	 * reclaiming if their amount is below the specified.
-	 */
-	if (sysctl_clean_low_kbytes || sysctl_clean_min_kbytes) {
-		unsigned long reclaimable_file, dirty, clean;
-
-		reclaimable_file =
-			node_page_state(pgdat, NR_ACTIVE_FILE);
-			node_page_state(pgdat, NR_INACTIVE_FILE);
-			node_page_state(pgdat, NR_ISOLATED_FILE);
-		dirty = node_page_state(pgdat, NR_FILE_DIRTY);
-		/*
-		 * node_page_state() sum can go out of sync since
-		 * all the values are not read at once.
-		 */
-		if (likely(reclaimable_file > dirty))
-			clean = (reclaimable_file - dirty) << (PAGE_SHIFT - 10);
-		else
-			clean = 0;
-
-		sc->clean_below_low = clean < sysctl_clean_low_kbytes;
-		sc->clean_below_min = clean < sysctl_clean_min_kbytes;
-	} else {
-		sc->clean_below_low = 0;
-		sc->clean_below_min = 0;
-	}
 }
 
 enum scan_balance {
@@ -2517,14 +2455,18 @@ static ssize_t am_app_launch_show(struct kobject *kobj,
 
 static int notify_app_launch_started(void)
 {
+#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("%s\n", "am_app_launch started");
+#endif
 	atomic_notifier_call_chain(&am_app_launch_notifier, 1, NULL);
 	return 0;
 }
 
 static int notify_app_launch_finished(void)
 {
+#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("%s\n", "am_app_launch finished");
+#endif
 	atomic_notifier_call_chain(&am_app_launch_notifier, 0, NULL);
 	return 0;
 }
@@ -2542,8 +2484,10 @@ static ssize_t am_app_launch_store(struct kobject *kobj,
 		return -EINVAL;
 
 	am_app_launch_new = mode ? true : false;
+#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("am_app_launch %d -> %d\n", am_app_launch,
 		     am_app_launch_new);
+#endif
 	if (am_app_launch != am_app_launch_new) {
 		if (am_app_launch_new)
 			notify_app_launch_started();
@@ -2683,8 +2627,6 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	unsigned long ap, fp;
 	enum lru_list lru;
 
-	prepare_workingset_protection(pgdat, sc);
-
 	/* If we have no swap space, do not bother scanning anon pages. */
 	if (!sc->may_swap || mem_cgroup_get_nr_swap_pages(memcg) <= 0) {
 		scan_balance = SCAN_FILE;
@@ -2761,69 +2703,6 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	}
 
 	/*
-	 * Force-scan anon if clean file pages is under vm.clean_low_kbytes
-	 * or vm.clean_min_kbytes.
-	 */
-	if (sc->clean_below_low || sc->clean_below_min) {
-		scan_balance = SCAN_ANON;
-		goto out;
-	}
-
-	/*
-	 * Force-scan anon if clean file pages is under vm.clean_low_kbytes
-	 * or vm.clean_min_kbytes.
-	 */
-	if (sc->clean_below_low || sc->clean_below_min) {
-		scan_balance = SCAN_ANON;
-		goto out;
-	}
-
-	/*
-	 * Force-scan anon if clean file pages is under vm.clean_low_kbytes
-	 * or vm.clean_min_kbytes.
-	 */
-	if (sc->clean_below_low || sc->clean_below_min) {
-		scan_balance = SCAN_ANON;
-		goto out;
-	}
-
-	/*
-	 * Force-scan anon if clean file pages is under vm.clean_low_kbytes
-	 * or vm.clean_min_kbytes.
-	 */
-	if (sc->clean_below_low || sc->clean_below_min) {
-		scan_balance = SCAN_ANON;
-		goto out;
-	}
-
-	/*
-	 * Force-scan anon if clean file pages is under vm.clean_low_kbytes
-	 * or vm.clean_min_kbytes.
-	 */
-	if (sc->clean_below_low || sc->clean_below_min) {
-		scan_balance = SCAN_ANON;
-		goto out;
-	}
-
-	/*
-	 * Force-scan anon if clean file pages is under vm.clean_low_kbytes
-	 * or vm.clean_min_kbytes.
-	 */
-	if (sc->clean_below_low || sc->clean_below_min) {
-		scan_balance = SCAN_ANON;
-		goto out;
-	}
-
-	/*
-	 * Force-scan anon if clean file pages is under vm.clean_low_kbytes
-	 * or vm.clean_min_kbytes.
-	 */
-	if (sc->clean_below_low || sc->clean_below_min) {
-		scan_balance = SCAN_ANON;
-		goto out;
-	}
-
-	/*
 	 * If there is enough inactive page cache, i.e. if the size of the
 	 * inactive list is greater than that of the active list *and* the
 	 * inactive list actually has some pages to scan on this priority, we
@@ -2834,8 +2713,7 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	 */
 	if (!IS_ENABLED(CONFIG_BALANCE_ANON_FILE_RECLAIM) &&
 	    !inactive_list_is_low(lruvec, true, sc, false) &&
-	    	    lruvec_lru_size(lruvec, LRU_INACTIVE_FILE, sc->reclaim_idx) >> sc->priority &&
-	    (swappiness != 300)) {
+	    lruvec_lru_size(lruvec, LRU_INACTIVE_FILE, sc->reclaim_idx) >> sc->priority) {
 		scan_balance = SCAN_FILE;
 		goto out;
 	}
@@ -2938,25 +2816,6 @@ out:
 			BUG();
 		}
 
-		/*
-		 * Hard protection of the working set.
-		 */
-		if (file) {
-			/*
-			 * Don't reclaim file pages when the amount of
-			 * clean file pages is below vm.clean_min_kbytes.
-			 */
-			if (sc->clean_below_min)
-				scan = 0;
-		} else {
-			/*
-			 * Don't reclaim anonymous pages when their
-			 * amount is below vm.anon_min_kbytes.
-			 */
-			if (sc->anon_below_min)
-				scan = 0;
-		}
-
 		*lru_pages += size;
 		nr[lru] = scan;
 	}
@@ -2996,7 +2855,9 @@ void forced_shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 		nr[LRU_ACTIVE_FILE] = nr[LRU_INACTIVE_FILE] = file;
 	}
 
+#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("%s heimdall start %d %lu %lu %lu\n", __func__, type, nr_requested, anon, file);
+#endif
 	blk_start_plug(&plug);
 	while (nr[LRU_INACTIVE_ANON] > 0 || nr[LRU_INACTIVE_FILE] > 0) {
 		for_each_evictable_lru(lru) {
@@ -3016,8 +2877,10 @@ void forced_shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 	}
 	blk_finish_plug(&plug);
 	sc.nr_reclaimed += nr_reclaimed;
+#if defined(CONFIG_TRACING) && defined(DEBUG)
 	trace_printk("%s end %d %lu %lu %lu\n", __func__, type, nr_reclaimed,
 		nr[LRU_INACTIVE_ANON], nr[LRU_INACTIVE_FILE]);
+#endif
 }
 #endif
 
@@ -4138,7 +4001,6 @@ restart:
 		bool balanced;
 		bool ret;
 
-		simple_lmk_decide_reclaim(sc.priority);
 		sc.reclaim_idx = classzone_idx;
 
 		/*
@@ -4333,7 +4195,6 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 	 * succeed.
 	 */
 	if (prepare_kswapd_sleep(pgdat, reclaim_order, classzone_idx)) {
-		simple_lmk_stop_reclaim();
 		/*
 		 * Compaction records what page blocks it recently failed to
 		 * isolate pages from and skips them in the future scanning.
@@ -4373,7 +4234,6 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 	 */
 	if (!remaining &&
 	    prepare_kswapd_sleep(pgdat, reclaim_order, classzone_idx)) {
-		simple_lmk_stop_reclaim();
 		trace_mm_vmscan_kswapd_sleep(pgdat->node_id);
 
 		/*

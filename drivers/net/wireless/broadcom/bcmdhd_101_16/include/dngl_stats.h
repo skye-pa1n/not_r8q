@@ -27,6 +27,8 @@
 #ifndef _dngl_stats_h_
 #define _dngl_stats_h_
 
+#define NUM_RATE 32
+
 #include <ethernet.h>
 #include <802.11.h>
 
@@ -199,6 +201,9 @@ typedef struct {
 	wifi_radio radio;
 	uint32 on_time;
 	uint32 tx_time;
+	uint32 num_tx_levels;
+	uint32 *tx_time_per_levels;
+
 	uint32 rx_time;
 	uint32 on_time_scan;
 	uint32 on_time_nbd;
@@ -255,11 +260,18 @@ typedef enum
 
 /* per peer statistics */
 typedef struct {
+	uint16 sta_count;		/* station count */
+	uint16 chan_util;		/* channel utilization */
+	uint8 PAD[4];
+} bssload_info_t;
+
+typedef struct {
 	wifi_peer_type type;           /* peer type (AP, TDLS, GO etc.) */
 	uint8 peer_mac_address[6];        /* mac address */
 	uint32 capabilities;              /* peer WIFI_CAPABILITY_XXX */
+	bssload_info_t bssload;		/* STA count and CU */
 	uint32 num_rate;                  /* number of rates */
-	wifi_rate_stat rate_stats[1];   /* per rate statistics, number of entries  = num_rate */
+	wifi_rate_stat_v1 rate_stats[NUM_RATE];   /* per rate statistics, number of entries  = num_rate */
 } wifi_peer_info;
 
 /* per access category statistics */

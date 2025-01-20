@@ -258,19 +258,6 @@ static void loop_set_size(struct loop_device *lo, loff_t size)
 	kobject_uevent(&disk_to_dev(bdev->bd_disk)->kobj, KOBJ_CHANGE);
 }
 
-static int
-figure_loop_size(struct loop_device *lo, loff_t offset, loff_t sizelimit)
-{
-	loff_t size = get_size(offset, sizelimit, lo->lo_backing_file);
-
-	sector_t x = (sector_t)size;
- 
-	if (unlikely((loff_t)x != size))
-		return -EFBIG;
- 	loop_set_size(lo, size);
-	return 0;
-}
- 
 static inline int
 lo_do_transfer(struct loop_device *lo, int cmd,
 	       struct page *rpage, unsigned roffs,
@@ -960,24 +947,6 @@ static int loop_prepare_queue(struct loop_device *lo)
 	return 0;
 }
 
-static void loop_update_rotational(struct loop_device *lo)
-{
-	struct file *file = lo->lo_backing_file;
-	struct inode *file_inode = file->f_mapping->host;
-	struct block_device *file_bdev = file_inode->i_sb->s_bdev;
-	struct request_queue *q = lo->lo_queue;
-	bool nonrot = true;
-
-	/* not all filesystems (e.g. tmpfs) have a sb->s_bdev */
-	if (file_bdev)
-		nonrot = blk_queue_nonrot(bdev_get_queue(file_bdev));
-
-	if (nonrot)
-		blk_queue_flag_set(QUEUE_FLAG_NONROT, q);
-	else
-		blk_queue_flag_clear(QUEUE_FLAG_NONROT, q);
-}
-
 static int
 loop_release_xfer(struct loop_device *lo)
 {
@@ -1030,7 +999,6 @@ loop_set_status_from_info(struct loop_device *lo,
 	int err;
 	struct loop_func_table *xfer;
 	kuid_t uid = current_uid();
-	loff_t new_size;
 
 	if ((unsigned int) info->lo_encrypt_key_size > LO_KEY_SIZE)
 		return -EINVAL;
@@ -1445,6 +1413,11 @@ loop_get_status(struct loop_device *lo, struct loop_info64 *info)
 	info->lo_number = lo->lo_number;
 	info->lo_offset = lo->lo_offset;
 	info->lo_sizelimit = lo->lo_sizelimit;
+
+	/* loff_t vars have been assigned __u64 */
+	if (lo->lo_offset < 0 || lo->lo_sizelimit < 0)
+		return -EOVERFLOW;
+
 	info->lo_flags = lo->lo_flags;
 	memcpy(info->lo_file_name, lo->lo_file_name, LO_NAME_SIZE);
 	memcpy(info->lo_crypt_name, lo->lo_crypt_name, LO_NAME_SIZE);

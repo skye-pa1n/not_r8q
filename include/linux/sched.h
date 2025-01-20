@@ -29,6 +29,7 @@
 #include <linux/mm_event.h>
 #include <linux/task_io_accounting.h>
 #include <linux/rseq.h>
+#include <linux/android_kabi.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -374,7 +375,6 @@ struct sched_info {
 
 	/* Time spent waiting on a runqueue: */
 	unsigned long long		run_delay;
-	/* Time spent waiting on a runqueue: */
 	unsigned long long		last_sum_run_delay;
 
 	/* Timestamps: */
@@ -538,16 +538,6 @@ struct sched_entity {
 	u64				sum_exec_runtime;
 	u64				vruntime;
 	u64				prev_sum_exec_runtime;
-#ifdef CONFIG_SCHED_BORE
-	u64				burst_time;
-	u8				prev_burst_penalty;
-	u8				curr_burst_penalty;
-	u8				burst_penalty;
-	u8				burst_score;
-	u8				child_burst;
-	u32				child_burst_cnt;
-	u64				child_burst_last_cached;
-#endif // CONFIG_SCHED_BORE
 
 	u64				nr_migrations;
 
@@ -571,6 +561,11 @@ struct sched_entity {
 	 */
 	struct sched_avg		avg;
 #endif
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
 };
 
 struct sched_load {
@@ -584,8 +579,6 @@ struct cpu_cycle_counter_cb {
 };
 
 #define MAX_NUM_CGROUP_COLOC_ID	20
-#define SCHED_CPUFREQ_CONTINUE	(1U << 8)
-#define SCHED_CPUFREQ_BOOST_UPDATE	(1U << 9)
 
 DECLARE_PER_CPU_READ_MOSTLY(int, sched_load_boost);
 
@@ -691,6 +684,11 @@ struct sched_rt_entity {
 	/* rq "owned" by this entity/group: */
 	struct rt_rq			*my_q;
 #endif
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
 } __randomize_layout;
 
 struct sched_dl_entity {
@@ -899,9 +897,6 @@ struct task_struct {
 
 #ifdef CONFIG_CGROUP_SCHED
 	struct task_group		*sched_task_group;
-#endif
-#ifdef CONFIG_SCHED_TUNE
-	int				stune_idx;
 #endif
 	struct sched_dl_entity		dl;
 
@@ -1497,12 +1492,6 @@ struct task_struct {
 #endif
 	/* task is frozen/stopped (used by the cgroup freezer) */
 	ANDROID_KABI_USE(1, unsigned frozen:1);
-		
-	/*
-	 * User pointer to hwui DrawFrameTask::mFrameInfo.
-	 * (used by hwui monitor)
-	 */
-	s64 __user *ui_frame_info;
 
 	/* 095444fad7e3 ("futex: Replace PF_EXITPIDONE with a state") */
 	ANDROID_KABI_USE(2, unsigned int futex_state);
@@ -1522,7 +1511,12 @@ struct task_struct {
 	struct mutex			futex_exit_mutex;
 #endif
 
+	/* bca62a0ae565 ("sched/tune: Fix improper accounting of tasks") */
+#ifdef CONFIG_SCHED_TUNE
+	ANDROID_KABI_USE(7, int stune_idx);
+#else
 	ANDROID_KABI_RESERVE(7);
+#endif
 	ANDROID_KABI_RESERVE(8);
 
 	/*
@@ -1866,6 +1860,9 @@ extern int idle_cpu(int cpu);
 extern int available_idle_cpu(int cpu);
 extern int sched_setscheduler(struct task_struct *, int, const struct sched_param *);
 extern int sched_setscheduler_nocheck(struct task_struct *, int, const struct sched_param *);
+extern int sched_set_fifo(struct task_struct *p);
+extern int sched_set_fifo_low(struct task_struct *p);
+extern int sched_set_normal(struct task_struct *p, int nice);
 extern int sched_setattr(struct task_struct *, const struct sched_attr *);
 extern int sched_setattr_nocheck(struct task_struct *, const struct sched_attr *);
 extern struct task_struct *idle_task(int cpu);
@@ -1933,7 +1930,6 @@ extern struct task_struct *find_get_task_by_vpid(pid_t nr);
 extern int wake_up_state(struct task_struct *tsk, unsigned int state);
 extern int wake_up_process(struct task_struct *tsk);
 extern void wake_up_new_task(struct task_struct *tsk);
-extern void sched_post_fork(struct task_struct *p);
 
 #ifdef CONFIG_SMP
 extern void kick_process(struct task_struct *tsk);

@@ -64,8 +64,6 @@ extern unsigned int lpcharge;
 #include <linux/spu-verify.h>
 #endif
 
-#include <linux/rom_notifier.h>
-
 #define TSP_PATH_EXTERNAL_FW		"/sdcard/Firmware/TSP/tsp.bin"
 #define TSP_PATH_EXTERNAL_FW_SIGNED	"/sdcard/Firmware/TSP/tsp_signed.bin"
 #define TSP_PATH_SPU_FW_SIGNED		"/spu/TSP/ffu_tsp.bin"
@@ -122,7 +120,7 @@ enum power_control {
 /* ESD Protection */
 /*second : if 0, no use. if you have to use, 3 is recommended*/
 #define ESD_TIMER_INTERVAL			2
-#define SCAN_RATE_HZ				1200
+#define SCAN_RATE_HZ				1000
 #define CHECK_ESD_TIMER				5
 
 /*Test Mode (Monitoring Raw Data) */
@@ -804,7 +802,6 @@ struct zt_ts_info {
 	u8 fod_info_vi_trx[3];
 	u16 fod_info_vi_data_len;
 	u16 fod_rect[4];
-    int fod_pressed;
 
 	u16 aod_rect[4];
 	u16 aod_active_area[3];
@@ -1602,23 +1599,13 @@ static ssize_t secure_touch_show(struct device *dev,
 	return snprintf(buf, PAGE_SIZE, "%u", val);
 }
 
-static ssize_t zt_fod_pressed_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct zt_ts_info *info = dev_get_drvdata(dev);
-
-	return snprintf(buf, PAGE_SIZE, "%u\n", info->fod_pressed);
-}
-
 static DEVICE_ATTR(secure_touch_enable, (S_IRUGO | S_IWUSR | S_IWGRP),
 		secure_touch_enable_show, secure_touch_enable_store);
 static DEVICE_ATTR(secure_touch, S_IRUGO, secure_touch_show, NULL);
-static DEVICE_ATTR(fod_pressed, S_IRUGO, zt_fod_pressed_show, NULL);
 
 static struct attribute *secure_attr[] = {
 	&dev_attr_secure_touch_enable.attr,
 	&dev_attr_secure_touch.attr,
-	&dev_attr_fod_pressed.attr,
 	NULL,
 };
 
@@ -1882,12 +1869,11 @@ static void zt_ts_fod_event_report(struct zt_ts_info *info, struct point_info to
 			| ((touch_info.byte04.value_u8bit & 0xF0) >> 4);
 		info->scrub_y = ((touch_info.byte03.value_u8bit << 4) & 0xFF0)
 			| ((touch_info.byte04.value_u8bit & 0x0F));
-		if (!is_aosp) {
-			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
-			input_sync(info->input_dev);
-			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
-			input_sync(info->input_dev);
-		}
+
+		input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+		input_sync(info->input_dev);
+		input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
+		input_sync(info->input_dev);
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 		input_info(true, &info->client->dev, "%s: FOD %s PRESS: %d\n", __func__,
 				touch_info.byte01.value_u8bit ? "NORMAL" : "LONG", info->scrub_id);
@@ -1896,8 +1882,6 @@ static void zt_ts_fod_event_report(struct zt_ts_info *info, struct point_info to
 				touch_info.byte01.value_u8bit ? "NORMAL" : "LONG",
 				info->scrub_id, info->scrub_x, info->scrub_y);
 #endif
-        info->fod_pressed = true;
-		    sysfs_notify(&info->input_dev->dev.kobj, NULL, "fod_pressed");
 	} else if (touch_info.byte01.value_u8bit == 2) {
 		info->scrub_id = SPONGE_EVENT_TYPE_FOD_RELEASE;
 
@@ -1905,20 +1889,17 @@ static void zt_ts_fod_event_report(struct zt_ts_info *info, struct point_info to
 			| ((touch_info.byte04.value_u8bit & 0xF0) >> 4);
 		info->scrub_y = ((touch_info.byte03.value_u8bit << 4) & 0xFF0)
 			| ((touch_info.byte04.value_u8bit & 0x0F));
-		if (!is_aosp) {
-			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
-			input_sync(info->input_dev);
-			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
-			input_sync(info->input_dev);
-		}
+
+		input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+		input_sync(info->input_dev);
+		input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
+		input_sync(info->input_dev);
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 		input_info(true, &info->client->dev, "%s: FOD RELEASE: %d\n", __func__, info->scrub_id);
 #else
 		input_info(true, &info->client->dev, "%s: FOD RELEASE: %d, %d, %d\n",
 				__func__, info->scrub_id, info->scrub_x, info->scrub_y);
 #endif
-        info->fod_pressed = false;
-			sysfs_notify(&info->input_dev->dev.kobj, NULL, "fod_pressed");
 	} else if (touch_info.byte01.value_u8bit == 3) {
 		info->scrub_id = SPONGE_EVENT_TYPE_FOD_OUT;
 
@@ -1926,12 +1907,11 @@ static void zt_ts_fod_event_report(struct zt_ts_info *info, struct point_info to
 			| ((touch_info.byte04.value_u8bit & 0xF0) >> 4);
 		info->scrub_y = ((touch_info.byte03.value_u8bit << 4) & 0xFF0)
 			| ((touch_info.byte04.value_u8bit & 0x0F));
-		if (!is_aosp) {
-			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
-			input_sync(info->input_dev);
-			input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
-			input_sync(info->input_dev);
-		}
+
+		input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 1);
+		input_sync(info->input_dev);
+		input_report_key(info->input_dev, KEY_BLACK_UI_GESTURE, 0);
+		input_sync(info->input_dev);
 #ifdef CONFIG_SAMSUNG_PRODUCT_SHIP
 		input_info(true, &info->client->dev, "%s: FOD OUT: %d\n", __func__, info->scrub_id);
 #else
@@ -3598,8 +3578,8 @@ static irqreturn_t zt_touch_work(int irq, void *data)
 
 			info->hover_event = prox_data;
 
-			input_info(true, &client->dev, "PROXIMITY DETECT. LVL = %d \n", !prox_data);
-			input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, !prox_data);
+			input_info(true, &client->dev, "PROXIMITY DETECT. LVL = %d \n", prox_data);
+			input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, prox_data);
 			input_sync(info->input_dev_proximity);
 			break;
 		}

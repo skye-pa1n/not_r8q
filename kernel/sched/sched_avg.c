@@ -11,7 +11,6 @@
 #include <linux/hrtimer.h>
 #include <linux/sched.h>
 #include <linux/math64.h>
-#include <linux/pm_qos.h>
 
 #include "sched.h"
 #include "walt.h"
@@ -125,7 +124,7 @@ void sched_update_hyst_times(void)
 	for_each_possible_cpu(cpu) {
 		std_time = (BIT(cpu)
 			     & sysctl_sched_busy_hyst_enable_cpus) ?
-			     max(sysctl_sched_busy_hyst, (unsigned int) (pm_qos_request(PM_QOS_BIAS_HYST) * NSEC_PER_MSEC)) : 0;
+			     sysctl_sched_busy_hyst : 0;
 		rtgb_time = ((BIT(cpu)
 			     & sysctl_sched_coloc_busy_hyst_enable_cpus)
 			     && rtgb_active) ? sysctl_sched_coloc_busy_hyst : 0;
@@ -225,8 +224,6 @@ u64 sched_lpm_disallowed_time(int cpu)
 {
 	u64 now = sched_clock();
 	u64 bias_end_time = atomic64_read(&per_cpu(busy_hyst_end_time, cpu));
-	
-	return 0;
 
 	if (now < bias_end_time)
 		return bias_end_time - now;

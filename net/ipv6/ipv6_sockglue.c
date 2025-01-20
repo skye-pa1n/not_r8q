@@ -72,7 +72,9 @@ int ip6_ra_control(struct sock *sk, int sel)
 		return -ENOPROTOOPT;
 
 	new_ra = (sel >= 0) ? kmalloc(sizeof(*new_ra), GFP_KERNEL) : NULL;
-
+	if (sel >= 0 && !new_ra)
+		return -ENOMEM;
+	
 	write_lock_bh(&ip6_ra_lock);
 	for (rap = &ip6_ra_chain; (ra = *rap) != NULL; rap = &ra->next) {
 		if (ra->sk == sk) {
@@ -232,7 +234,7 @@ static int do_ipv6_setsockopt(struct sock *sk, int level, int optname,
 				WRITE_ONCE(sk->sk_prot, &tcp_prot);
 #ifdef CONFIG_MPTCP
 				if (sock_flag(sk, SOCK_MPTCP))
-					icsk->icsk_af_ops = &mptcp_v4_specific;
+					WRITE_ONCE(icsk->icsk_af_ops, &mptcp_v4_specific);
 				else
 #endif
 				/* Paired with READ_ONCE() in tcp_(get|set)sockopt() */

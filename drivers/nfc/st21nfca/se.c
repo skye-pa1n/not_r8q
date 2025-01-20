@@ -362,9 +362,10 @@ int st21nfca_connectivity_event_received(struct nfc_hci_dev *hdev, u8 host,
 
 		memcpy(transaction->aid, &skb->data[2],
 		       transaction->aid_len);
+
 		transaction->params_len = skb->data[transaction->aid_len + 3];
 
-        /* Total size is allocated (skb->len - 2) minus fixed array members */
+		/* Total size is allocated (skb->len - 2) minus fixed array members */
 		if (transaction->params_len > ((skb->len - 2) -
 		    sizeof(struct nfc_evt_transaction))) {
 			devm_kfree(dev, transaction);

@@ -371,8 +371,6 @@ static int cqhci_enable(struct mmc_host *mmc, struct mmc_card *card)
 	err = cqhci_host_alloc_tdl(cq_host);
 	if (err)
 		return err;
-    if (cqhci_host_is_crypto_supported(cq_host))
-        cqhci_crypto_enable(cq_host);
 
 	if (cqhci_host_is_crypto_supported(cq_host))
 		cqhci_crypto_enable(cq_host);
@@ -434,8 +432,6 @@ static void cqhci_disable(struct mmc_host *mmc)
 		return;
 
 	cqhci_off(mmc);
-    if (cqhci_host_is_crypto_supported(cq_host))
-        cqhci_crypto_disable(cq_host);
 
 	if (cqhci_host_is_crypto_supported(cq_host))
 		cqhci_crypto_disable(cq_host);

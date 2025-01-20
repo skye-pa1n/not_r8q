@@ -470,7 +470,7 @@ static void a96t3x6_reset_for_bootmode(struct a96t3x6_data *data)
 #endif
 }
 
-static int a96t3x6_recovery_mode_check(char *str)
+static int a96t3x6_sub_recovery_mode_check(char *str)
 {
 	if (strncmp(str, "1", 1) == 0)
 		recovery_mode = true;
@@ -480,8 +480,8 @@ static int a96t3x6_recovery_mode_check(char *str)
 	GRIP_INFO("recovery_mode = %d\n", recovery_mode);
 	return true;
 }
-EXPORT_SYMBOL(a96t3x6_recovery_mode_check);
-__setup("androidboot.boot_recovery=", a96t3x6_recovery_mode_check);
+EXPORT_SYMBOL(a96t3x6_sub_recovery_mode_check);
+__setup("androidboot.boot_recovery=", a96t3x6_sub_recovery_mode_check);
 
 static void a96t3x6_reset(struct a96t3x6_data *data)
 {

@@ -13,7 +13,6 @@
 
 #include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/pagemap.h>
 #include <linux/exportfs.h>
 #include <linux/mm.h>
 #include <linux/debugfs.h>

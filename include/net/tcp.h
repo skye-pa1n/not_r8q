@@ -357,9 +357,6 @@ extern struct proto tcp_prot;
 
 #ifdef CONFIG_MPTCP
 /**** START - Exports needed for MPTCP ****/
-extern const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops;
-extern const struct tcp_request_sock_ops tcp_request_sock_ipv6_ops;
-
 struct mptcp_options_received;
 
 void tcp_cleanup_rbuf(struct sock *sk, int copied);

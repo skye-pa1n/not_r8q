@@ -493,6 +493,11 @@ struct sde_drm_roi_v1 {
 #define SDE_RECOVERY_CAPTURE		1
 #define SDE_RECOVERY_HARD_RESET		2
 
+/**
+ * sde fod dim layer
+ */
+#define FOD_PRESSED_LAYER_ZORDER	0x20000000u
+
 /* display format modifiers */
 /*
  * QTI planar fsc Tile Format
@@ -501,10 +506,4 @@ struct sde_drm_roi_v1 {
  * Implementation may be platform and base-format specific.
  */
 #define DRM_FORMAT_MOD_QCOM_FSC_TILE       fourcc_mod_code(QCOM, 0x10)
-
-/**
- * sde fod dim layer
- */
-#define FOD_PRESSED_LAYER_ZORDER	0x20000000u
-
 #endif /* _SDE_DRM_H_ */

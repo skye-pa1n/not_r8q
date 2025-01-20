@@ -72,6 +72,7 @@
 #include <asm/futex.h>
 
 #include "locking/rtmutex_common.h"
+
 /*
  * READ this before attempting to hack on futexes!
  *
@@ -2348,6 +2349,7 @@ static inline void __queue_me(struct futex_q *q, struct futex_hash_bucket *hb)
 	 * the others are woken last, in FIFO order.
 	 */
 	prio = min(current->normal_prio, MAX_RT_PRIO);
+
 	plist_node_init(&q->list, prio);
 	plist_add(&q->list, &hb->chain);
 	q->task = current;

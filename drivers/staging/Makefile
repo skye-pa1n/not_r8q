@@ -54,5 +54,3 @@ obj-$(CONFIG_STAGING_GASKET_FRAMEWORK)	+= gasket/
 obj-$(CONFIG_XIL_AXIS_FIFO)	+= axis-fifo/
 obj-$(CONFIG_SEC_STI)		+= sti/
 obj-$(CONFIG_QCA_CLD_WLAN)	+= qcacld-3.0/
-
-subdir-ccflags-y += -Wno-unused-variable

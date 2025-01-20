@@ -4129,6 +4129,10 @@ static void addrconf_dad_work(struct work_struct *w)
 	}
 
 	ifp->dad_probes--;
+	if (!strcmp(ifp->idev->dev->name, "aware_data0"))
+		addrconf_mod_dad_work(ifp,
+					NEIGH_VAR(ifp->idev->nd_parms, RETRANS_TIME)/10);
+	else
 	addrconf_mod_dad_work(ifp,
 			      NEIGH_VAR(ifp->idev->nd_parms, RETRANS_TIME));
 	spin_unlock(&ifp->lock);

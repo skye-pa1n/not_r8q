@@ -251,6 +251,7 @@ __rwsem_down_read_failed_common(struct rw_semaphore *sem, int state)
 	raw_spin_lock_irq(&sem->wait_lock);
 	if (list_empty(&sem->wait_list))
 		adjustment += RWSEM_WAITING_BIAS;
+
 	/* is_first_waiter == true means we are first in the queue */
 	is_first_waiter = rwsem_list_add_per_prio(&waiter, sem);
 

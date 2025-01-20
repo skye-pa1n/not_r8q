@@ -49,11 +49,7 @@ $(warning Detected assembler with broken .inst; disassembly will be unreliable)
   endif
 endif
 
-ifeq ($(cc-name),clang)
-KBUILD_CFLAGS	+= -mno-implicit-float
-else
 KBUILD_CFLAGS	+= -mgeneral-regs-only
-endif
 KBUILD_CFLAGS	+= $(lseinstr) $(brokengasinst) $(compat_vdso)
 KBUILD_CFLAGS	+= -fno-asynchronous-unwind-tables
 KBUILD_CFLAGS	+= $(call cc-disable-warning, psabi)
@@ -64,14 +60,6 @@ KBUILD_AFLAGS	+= $(call cc-option,-mabi=lp64)
 
 ifeq ($(CONFIG_SHADOW_CALL_STACK), y)
 KBUILD_CFLAGS	+= -ffixed-x18
-endif
-
-ifeq ($(cc-name),clang)
-KBUILD_CFLAGS   += -mcpu=cortex-a77+crypto+crc+sha2+aes -mtune=kryo
-KBUILD_AFLAGS   += -mcpu=cortex-a77+crypto+crc+sha2+aes -mtune=kryo
-ifeq ($(CONFIG_LD_IS_LLD), y)
-KBUILD_LDFLAGS  += -mllvm -mcpu=kryo
-endif
 endif
 
 ifeq ($(CONFIG_CPU_BIG_ENDIAN), y)
@@ -141,8 +129,8 @@ core-$(CONFIG_CRYPTO) += arch/arm64/crypto/
 libs-y		:= arch/arm64/lib/ $(libs-y)
 core-$(CONFIG_EFI_STUB) += $(objtree)/drivers/firmware/efi/libstub/lib.a
 
-ifeq ($(CONFIG_BUILD_ARM64_KERNEL_COMPRESSION_LZ4),y)
-KBUILD_IMAGE   := Image.lz4
+ifeq ($(CONFIG_BUILD_ARM64_KERNEL_COMPRESSION_GZIP),y)
+KBUILD_IMAGE   := Image.gz
 else
 KBUILD_IMAGE   := Image
 endif
@@ -159,8 +147,6 @@ KBUILD_IMAGE  := $(boot)/$(KBUILD_IMAGE)
 endif
 
 KBUILD_DTBS	:= dtbs
-
-KBUILD_DTBO_IMG := dtbo.img
 
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 export DTC_FLAGS := -@
@@ -193,12 +179,6 @@ Image-dtb: vmlinux scripts dtbs
 
 Image.gz-dtb: vmlinux scripts dtbs Image.gz
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-	
-ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
-$(KBUILD_DTBO_IMG): dtbs
-	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
-all: $(KBUILD_DTBO_IMG)
-endif
 
 PHONY += vdso_install
 vdso_install:

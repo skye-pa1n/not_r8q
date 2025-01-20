@@ -8,6 +8,9 @@
 
 #include "adreno.h"
 
+extern const unsigned int a3xx_cp_addr_regs[];
+extern const unsigned int a4xx_cp_addr_regs[];
+
 /*
  * struct adreno_ib_object - Structure containing information about an
  * address range found in an IB
@@ -124,7 +127,12 @@ static inline void adreno_ib_init_ib_obj(uint64_t gpuaddr,
 static inline int adreno_cp_parser_getreg(struct adreno_device *adreno_dev,
 					enum adreno_cp_addr_regs reg_enum)
 {
-	return -EEXIST;
+	if (reg_enum == ADRENO_CP_ADDR_MAX)
+		return -EEXIST;
+
+	if (!adreno_is_a3xx(adreno_dev))
+		return -EEXIST;
+	return a3xx_cp_addr_regs[reg_enum];
 }
 
 /*
@@ -144,6 +152,11 @@ static inline int adreno_cp_parser_regindex(struct adreno_device *adreno_dev,
 {
 	int i;
 	const unsigned int *regs;
+
+	if (!adreno_is_a3xx(adreno_dev))
+		return -EEXIST;
+
+	regs = a3xx_cp_addr_regs;
 
 	for (i = start; i <= end && i < ADRENO_CP_ADDR_MAX; i++)
 		if (regs[i] == offset)

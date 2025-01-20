@@ -218,7 +218,7 @@ int athdiag_procfs_init(void *scn)
 	}
 
 #ifdef CONFIG_SEC
-       proc_file = proc_create_data(PROCFS_NAME, 0666, proc_dir,
+	proc_file = proc_create_data(PROCFS_NAME, 0666, proc_dir,
 #else
 	proc_file = proc_create_data(PROCFS_NAME, 0600, proc_dir,
 #endif

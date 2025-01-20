@@ -243,10 +243,10 @@ int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 #ifdef CONFIG_MPTCP
 		if (sock_flag(sk, SOCK_MPTCP))
-			icsk->icsk_af_ops = &mptcp_v6_mapped;
+			WRITE_ONCE(icsk->icsk_af_ops, &mptcp_v6_mapped);
 		else
 #endif
-			/* Paired with READ_ONCE() in tcp_(get|set)sockopt() */
+		/* Paired with READ_ONCE() in tcp_(get|set)sockopt() */
 		WRITE_ONCE(icsk->icsk_af_ops, &ipv6_mapped);
 		sk->sk_backlog_rcv = tcp_v4_do_rcv;
 #ifdef CONFIG_TCP_MD5SIG
@@ -259,10 +259,10 @@ int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 			icsk->icsk_ext_hdr_len = exthdrlen;
 #ifdef CONFIG_MPTCP
 			if (sock_flag(sk, SOCK_MPTCP))
-				icsk->icsk_af_ops = &mptcp_v6_specific;
+				WRITE_ONCE(icsk->icsk_af_ops, &mptcp_v6_specific);
 			else
 #endif
-				/* Paired with READ_ONCE() in tcp_(get|set)sockopt() */
+			/* Paired with READ_ONCE() in tcp_(get|set)sockopt() */
 			WRITE_ONCE(icsk->icsk_af_ops, &ipv6_specific);
 			sk->sk_backlog_rcv = tcp_v6_do_rcv;
 #ifdef CONFIG_TCP_MD5SIG
@@ -873,9 +873,6 @@ struct request_sock_ops tcp6_request_sock_ops __read_mostly = {
 	.syn_ack_timeout =	tcp_syn_ack_timeout,
 };
 
-#ifndef CONFIG_MPTCP
-static
-#endif
 const struct tcp_request_sock_ops tcp_request_sock_ipv6_ops = {
 	.mss_clamp	=	IPV6_MIN_MTU - sizeof(struct tcphdr) -
 				sizeof(struct ipv6hdr),

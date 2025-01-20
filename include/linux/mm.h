@@ -138,16 +138,9 @@ extern int mmap_rnd_compat_bits __read_mostly;
 
 extern int sysctl_max_map_count;
 
-extern unsigned long sysctl_anon_min_kbytes;
-extern unsigned long sysctl_clean_low_kbytes;
-extern unsigned long sysctl_clean_min_kbytes;
-
 extern unsigned long sysctl_user_reserve_kbytes;
 extern unsigned long sysctl_admin_reserve_kbytes;
 
-#ifdef CONFIG_ZRAM_ENTROPY
-extern unsigned long sysctl_zram_entropy_threshold;
-#endif
 extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;
 extern unsigned long sysctl_overcommit_kbytes;
@@ -2591,8 +2584,8 @@ int __must_check write_one_page(struct page *page);
 void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
-#define VM_MAX_READAHEAD	2048	/* kbytes */
-#define VM_MIN_READAHEAD	2048	/* kbytes (includes current page) */
+#define VM_MAX_READAHEAD	128	/* kbytes */
+#define VM_MIN_READAHEAD	16	/* kbytes (includes current page) */
 extern int mmap_readaround_limit;
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
@@ -3107,6 +3100,7 @@ static inline void record_memsize_reserved(const char *name, phys_addr_t base,
 				    phys_addr_t size, bool nomap,
 				    bool reusable) { }
 #endif
+extern bool ion_account_print_usage(void);
 
 #endif /* __KERNEL__ */
 #endif /* _LINUX_MM_H */

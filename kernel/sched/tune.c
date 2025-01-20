@@ -162,7 +162,7 @@ root_schedtune = {
  *    implementation especially for the computation of the per-CPU boost
  *    value
  */
-#define BOOSTGROUPS_COUNT 7
+#define BOOSTGROUPS_COUNT 6
 
 /* Array of configured boostgroups */
 static struct schedtune *allocated_group[BOOSTGROUPS_COUNT] = {
@@ -431,6 +431,7 @@ void schedtune_enqueue_task(struct task_struct *p, int cpu)
 	 * do_exit()::cgroup_exit() and task migration.
 	 */
 	raw_spin_lock_irqsave(&bg->lock, irq_flags);
+
 	idx = p->stune_idx;
 
 	schedtune_tasks_update(p, cpu, idx, ENQUEUE_TASK);
@@ -514,6 +515,7 @@ void schedtune_dequeue_task(struct task_struct *p, int cpu)
 	 * interrupt to be disabled to avoid race conditions on...
 	 */
 	raw_spin_lock_irqsave(&bg->lock, irq_flags);
+
 	idx = p->stune_idx;
 
 	schedtune_tasks_update(p, cpu, idx, DEQUEUE_TASK);

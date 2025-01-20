@@ -299,7 +299,6 @@ static int msm_rpmh_master_stats_probe(struct platform_device *pdev)
 
 	apss_master_stats.version_id = 0x1;
 	platform_set_drvdata(pdev, prvdata);
-
 	return ret;
 
 fail_iomap:

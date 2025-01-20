@@ -136,6 +136,9 @@ struct adsp_data {
 #endif
 	uint32_t support_algo;
 	bool restrict_mode;
+#ifdef CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR
+	bool lcd_is_on;
+#endif
 };
 
 #ifdef CONFIG_SUPPORT_MOBEAM

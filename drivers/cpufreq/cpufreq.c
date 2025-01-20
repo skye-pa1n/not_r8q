@@ -26,7 +26,6 @@
 #include <linux/kernel_stat.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/sched/cpufreq.h>
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/syscore_ops.h>
@@ -34,8 +33,6 @@
 #include <linux/sched/topology.h>
 #include <linux/sched/sysctl.h>
 #include <trace/events/power.h>
-
-int min, max;
 
 static LIST_HEAD(cpufreq_policy_list);
 
@@ -538,11 +535,21 @@ unsigned int cpufreq_policy_transition_delay_us(struct cpufreq_policy *policy)
 		return policy->transition_delay_us;
 
 	latency = policy->cpuinfo.transition_latency / NSEC_PER_USEC;
-	if (latency)
-		/* Give a 50% breathing room between updates */
-		return latency + (latency >> 1);
+	if (latency) {
+		/*
+		 * For platforms that can change the frequency very fast (< 10
+		 * us), the above formula gives a decent transition delay. But
+		 * for platforms where transition_latency is in milliseconds, it
+		 * ends up giving unrealistic values.
+		 *
+		 * Cap the default transition delay to 10 ms, which seems to be
+		 * a reasonable amount of time after which we should reevaluate
+		 * the frequency.
+		 */
+		return min(latency * LATENCY_MULTIPLIER, (unsigned int)10000);
+	}
 
-	return USEC_PER_MSEC;
+	return LATENCY_MULTIPLIER;
 }
 EXPORT_SYMBOL_GPL(cpufreq_policy_transition_delay_us);
 
@@ -715,9 +722,6 @@ static ssize_t store_##file_name					\
 {									\
 	int ret, temp;							\
 	struct cpufreq_policy new_policy;				\
-									\
-	if (likely(&policy->object == &policy->min))			\
-		return count;						\
 									\
 	memcpy(&new_policy, policy, sizeof(*policy));			\
 	new_policy.min = policy->user_policy.min;			\
@@ -2259,12 +2263,6 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 	if (ret)
 		return ret;
 
-	 /* little, big, prime - min/max freq limit (3.36Ghz) */
-        min = 150000;
-        max = 3360000;
-		cpufreq_verify_within_limits(new_policy, new_policy->min, max);
-
-
 	/* adjust if necessary - all reasons */
 	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
 			CPUFREQ_ADJUST, new_policy);
@@ -2331,7 +2329,6 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 		ret = cpufreq_start_governor(policy);
 		if (!ret) {
 			pr_debug("cpufreq: governor change\n");
-			sched_cpufreq_governor_change(policy, old_gov);
 			return 0;
 		}
 		cpufreq_exit_governor(policy);

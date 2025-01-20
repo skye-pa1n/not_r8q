@@ -52,7 +52,7 @@ const_debug unsigned int sysctl_sched_features =
  * Number of tasks to iterate in a single balance run.
  * Limited because this is done with IRQs disabled.
  */
-const_debug unsigned int sysctl_sched_nr_migrate = NR_CPUS;
+const_debug unsigned int sysctl_sched_nr_migrate = 32;
 
 /*
  * period over which we measure -rt task CPU usage in us.
@@ -1585,8 +1585,8 @@ static inline bool is_per_cpu_kthread(struct task_struct *p)
  */
 static inline bool is_cpu_allowed(struct task_struct *p, int cpu)
 {
-		if (!cpumask_test_cpu(cpu, &p->cpus_allowed))
-			return false;
+	if (!cpumask_test_cpu(cpu, &p->cpus_allowed))
+		return false;
 
 	if (is_per_cpu_kthread(p))
 		return cpu_online(cpu);
@@ -2178,6 +2178,7 @@ static int select_fallback_rq(int cpu, struct task_struct *p, bool allow_iso)
 	int isolated_candidate = -1;
 	int backup_cpu = -1;
 	unsigned int max_nr = UINT_MAX;
+
 	/*
 	 * If the node that the CPU is on has been offlined, cpu_to_node()
 	 * will return -1. There is no CPU on the node, and we should
@@ -2936,116 +2937,6 @@ int wake_up_state(struct task_struct *p, unsigned int state)
 	return try_to_wake_up(p, state, 0, 1);
 }
 
-#ifdef CONFIG_SCHED_BORE
-extern u8   sched_burst_fork_atavistic;
-extern uint sched_burst_cache_lifetime;
-static void __init sched_init_bore(void) {
-	init_task.se.burst_time = 0;
-	init_task.se.prev_burst_penalty = 0;
-	init_task.se.curr_burst_penalty = 0;
-	init_task.se.burst_penalty = 0;
-	init_task.se.burst_score = 0;
-	init_task.se.child_burst_last_cached = 0;
-}
-void inline sched_fork_bore(struct task_struct *p) {
-	p->se.burst_time = 0;
-	p->se.curr_burst_penalty = 0;
-	p->se.burst_score = 0;
-	p->se.child_burst_last_cached = 0;
-}
-static u32 count_child_tasks(struct task_struct *p) {
-	struct task_struct *child;
-	u32 cnt = 0;
-	list_for_each_entry(child, &p->children, sibling) {cnt++;}
-	return cnt;
-}
-static inline bool task_is_inheritable(struct task_struct *p) {
-	return (p->sched_class == &fair_sched_class);
-}
-static inline bool child_burst_cache_expired(struct task_struct *p, u64 now) {
-	u64 expiration_time =
-		p->se.child_burst_last_cached + sched_burst_cache_lifetime;
-	return ((s64)(expiration_time - now) < 0);
-}
-static void __update_child_burst_cache(
-	struct task_struct *p, u32 cnt, u32 sum, u64 now) {
-	u8 avg = 0;
-	if (cnt) avg = sum / cnt;
-	p->se.child_burst = max(avg, p->se.burst_penalty);
-	p->se.child_burst_cnt = cnt;
-	p->se.child_burst_last_cached = now;
-}
-static inline void update_child_burst_direct(struct task_struct *p, u64 now) {
-	struct task_struct *child;
-	u32 cnt = 0;
-	u32 sum = 0;
-	list_for_each_entry(child, &p->children, sibling) {
-		if (!task_is_inheritable(child)) continue;
-		cnt++;
-		sum += child->se.burst_penalty;
-	}
-	__update_child_burst_cache(p, cnt, sum, now);
-}
-static inline u8 __inherit_burst_direct(struct task_struct *p, u64 now) {
-	struct task_struct *parent = p->real_parent;
-	if (child_burst_cache_expired(parent, now))
-		update_child_burst_direct(parent, now);
-	return parent->se.child_burst;
-}
-static void update_child_burst_topological(
-	struct task_struct *p, u64 now, u32 depth, u32 *acnt, u32 *asum) {
-	struct task_struct *child, *dec;
-	u32 cnt = 0, dcnt = 0;
-	u32 sum = 0;
-	list_for_each_entry(child, &p->children, sibling) {
-		dec = child;
-		while ((dcnt = count_child_tasks(dec)) == 1)
-			dec = list_first_entry(&dec->children, struct task_struct, sibling);
-		
-		if (!dcnt || !depth) {
-			if (!task_is_inheritable(dec)) continue;
-			cnt++;
-			sum += dec->se.burst_penalty;
-			continue;
-		}
-		if (!child_burst_cache_expired(dec, now)) {
-			cnt += dec->se.child_burst_cnt;
-			sum += (u32)dec->se.child_burst * dec->se.child_burst_cnt;
-			continue;
-		}
-		update_child_burst_topological(dec, now, depth - 1, &cnt, &sum);
-	}
-	__update_child_burst_cache(p, cnt, sum, now);
-	*acnt += cnt;
-	*asum += sum;
-}
-static inline u8 __inherit_burst_topological(struct task_struct *p, u64 now) {
-	struct task_struct *anc = p->real_parent;
-	u32 cnt = 0, sum = 0;
-	while (anc->real_parent != anc && count_child_tasks(anc) == 1)
-		anc = anc->real_parent;
-	if (child_burst_cache_expired(anc, now))
-		update_child_burst_topological(
-			anc, now, sched_burst_fork_atavistic - 1, &cnt, &sum);
-	return anc->se.child_burst;
-}
-static inline void inherit_burst(struct task_struct *p) {
-	u8 burst_cache;
-	u64 now = ktime_get_ns();
-	read_lock(&tasklist_lock);
-	burst_cache = likely(sched_burst_fork_atavistic)?
-		__inherit_burst_topological(p, now):
-		__inherit_burst_direct(p, now);
-	read_unlock(&tasklist_lock);
-	p->se.prev_burst_penalty = max(p->se.prev_burst_penalty, burst_cache);
-}
-static void sched_post_fork_bore(struct task_struct *p) {
-	if (p->sched_class == &fair_sched_class)
-		inherit_burst(p);
-	p->se.burst_penalty = p->se.prev_burst_penalty;
-}
-#endif // CONFIG_SCHED_BORE
-
 /*
  * Perform scheduler related setup for a newly forked process p.
  * p is forked by current.
@@ -3069,9 +2960,6 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 #ifdef CONFIG_SCHED_WALT
 	p->low_latency			= 0;
 #endif
-#ifdef CONFIG_SCHED_BORE
-	sched_fork_bore(p);
-#endif // CONFIG_SCHED_BORE
 	INIT_LIST_HEAD(&p->se.group_node);
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -3300,13 +3188,6 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	RB_CLEAR_NODE(&p->pushable_dl_tasks);
 #endif
 	return 0;
-}
-
-void sched_post_fork(struct task_struct *p)
-{
-#ifdef CONFIG_SCHED_BORE
-	sched_post_fork_bore(p);
-#endif // CONFIG_SCHED_BORE
 }
 
 unsigned long to_ratio(u64 period, u64 runtime)
@@ -5108,8 +4989,7 @@ static void __setscheduler_params(struct task_struct *p,
 	if (policy == SETPARAM_POLICY)
 		policy = p->policy;
 
-		/* Replace SCHED_FIFO with SCHED_RR to reduce latency */
-	p->policy = policy == SCHED_FIFO ? SCHED_RR : policy;
+	p->policy = policy;
 
 	if (dl_policy(policy))
 		__setparam_dl(p, attr);
@@ -5449,6 +5329,8 @@ static int _sched_setscheduler(struct task_struct *p, int policy,
  * @policy: new policy.
  * @param: structure containing the new RT priority.
  *
+ * Use sched_set_fifo(), read its comment.
+ *
  * Return: 0 on success. An error code otherwise.
  *
  * NOTE that the task may be already dead.
@@ -5490,6 +5372,51 @@ int sched_setscheduler_nocheck(struct task_struct *p, int policy,
 	return _sched_setscheduler(p, policy, param, false);
 }
 EXPORT_SYMBOL_GPL(sched_setscheduler_nocheck);
+
+/*
+ * SCHED_FIFO is a broken scheduler model; that is, it is fundamentally
+ * incapable of resource management, which is the one thing an OS really should
+ * be doing.
+ *
+ * This is of course the reason it is limited to privileged users only.
+ *
+ * Worse still; it is fundamentally impossible to compose static priority
+ * workloads. You cannot take two correctly working static prio workloads
+ * and smash them together and still expect them to work.
+ *
+ * For this reason 'all' FIFO tasks the kernel creates are basically at:
+ *
+ *   MAX_RT_PRIO / 2
+ *
+ * The administrator _MUST_ configure the system, the kernel simply doesn't
+ * know enough information to make a sensible choice.
+ */
+int sched_set_fifo(struct task_struct *p)
+{
+	struct sched_param sp = { .sched_priority = MAX_RT_PRIO / 2 };
+	return sched_setscheduler_nocheck(p, SCHED_FIFO, &sp);
+}
+EXPORT_SYMBOL_GPL(sched_set_fifo);
+
+/*
+ * For when you don't much care about FIFO, but want to be above SCHED_NORMAL.
+ */
+int sched_set_fifo_low(struct task_struct *p)
+{
+	struct sched_param sp = { .sched_priority = 1 };
+	return sched_setscheduler_nocheck(p, SCHED_FIFO, &sp);
+}
+EXPORT_SYMBOL_GPL(sched_set_fifo_low);
+
+int sched_set_normal(struct task_struct *p, int nice)
+{
+	struct sched_attr attr = {
+		.sched_policy = SCHED_NORMAL,
+		.sched_nice = nice,
+	};
+	return sched_setattr_nocheck(p, &attr);
+}
+EXPORT_SYMBOL_GPL(sched_set_normal);
 
 static int
 do_sched_setscheduler(pid_t pid, int policy, struct sched_param __user *param)
@@ -5788,28 +5715,6 @@ out_unlock:
 	return retval;
 }
 
-static bool task_is_unity_game(struct task_struct *p)
-{
-
-	struct task_struct *t;
-	bool ret = false;
-	
-	/* Filter for Android user applications (i.e., positive adj) */
-	if (p->signal->oom_score_adj >= 0) {
-		rcu_read_lock();
-		for_each_thread(p, t) {
-			/* Check for a UnityMain thread in the thread group */
-			if (!strcmp(t->comm, "UnityMain")) {
-				ret = true;
-				break;
-			}
-		}
-		
-		rcu_read_unlock();
-	}
-	return ret;
-}
-
 long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 {
 	cpumask_var_t cpus_allowed, new_mask;
@@ -5829,20 +5734,6 @@ long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 	/* Prevent p going away */
 	get_task_struct(p);
 	rcu_read_unlock();
-	
-	/*
-	 * Unity-based games like to shoot themselves in the foot by setting a
-	 * nonsense CPU affinity, restricting the game to a narrow set of CPU
-	 * cores that it thinks are the "big" cores in a heterogeneous CPU. It
-	 * assumes that CPUs only have two performance domains (clusters), and
-	 * therefore royally mucks up games' CPU affinities on CPUs which have
-	 * more than two performance domains.
-	 *
-	 * Check if the target task is part of a Unity-based game and silently
-	 * ignore the setaffinity request so that it can't sabotage itself.
-	 */
-	if (task_is_unity_game(p))
-		goto out_put_task;
 
 	if (p->flags & PF_NO_SETAFFINITY) {
 		retval = -EINVAL;
@@ -7396,10 +7287,7 @@ void __init sched_init(void)
 	unsigned long alloc_size = 0, ptr;
 
 	wait_bit_init();
-#ifdef CONFIG_SCHED_BORE
-	sched_init_bore();
-	printk(KERN_INFO "BORE (Burst-Oriented Response Enhancer) CPU Scheduler modification 5.1.0 by Masahito Suzuki");
-#endif // CONFIG_SCHED_BORE
+
 	init_clusters();
 
 #ifdef CONFIG_FAIR_GROUP_SCHED

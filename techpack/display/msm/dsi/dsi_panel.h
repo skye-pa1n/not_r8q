@@ -235,6 +235,12 @@ struct dsi_panel {
 	struct device_node *mafpc_of_node;
 	struct dsi_parser_utils mafpc_utils;
 #endif
+    struct brightness_alpha_pair *fod_dim_lut;
+	unsigned int fod_dim_lut_len;
+	u8 fod_dim_alpha;
+	bool fod_hbm_enabled;
+	bool fod_ui;
+
 	enum dsi_dms_mode dms_mode;
 
 	bool sync_broadcast_en;
@@ -371,6 +377,10 @@ int ss_dsi_panel_parse_cmd_sets(struct dsi_panel_cmd_set *cmd_sets,
 			struct dsi_panel *panel);
 #endif
 
-u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel);
+int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status);
+
+bool dsi_panel_get_fod_ui(struct dsi_panel *panel);
+void dsi_panel_set_fod_ui(struct dsi_panel *panel, bool status);
+u8 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel);
 
 #endif /* _DSI_PANEL_H_ */

@@ -1484,12 +1484,6 @@ void sec_debug_backtrace(void)
 	struct stackframe frame;
 	int skip_callstack = 0;
 
-/* ata-kaner: Disable ROPP
-#if defined (CONFIG_CFP_ROPP) || defined(CONFIG_RKP_CFP_ROPP)
-	unsigned long where = 0x0;
-#endif
-*/
-
 	if (!once++) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)
 		start_backtrace(&frame, (unsigned long)__builtin_frame_address(0), (unsigned long)sec_debug_backtrace);
@@ -1507,19 +1501,8 @@ void sec_debug_backtrace(void)
 			if (ret < 0)
 				break;
 
-			if (skip_callstack++ > 3) {
-// ata-kaner: Disable ROPP
-// #if defined (CONFIG_CFP_ROPP) || defined(CONFIG_RKP_CFP_ROPP)
-//				where = frame.pc;
-//				if (where>>40 != 0xffffff)
-//					where = ropp_enable_backtrace(where,
-//							current);
-//
-//				_sec_debug_store_backtrace(where);
-//#else
+			if (skip_callstack++ > 3)
 				_sec_debug_store_backtrace(frame.pc);
-//#endif
-			}
 		}
 	}
 }

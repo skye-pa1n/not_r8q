@@ -2,7 +2,6 @@
 #ifndef _LINUX_SCHED_CPUFREQ_H
 #define _LINUX_SCHED_CPUFREQ_H
 
-#include <linux/cpufreq.h>
 #include <linux/types.h>
 
 /*
@@ -16,8 +15,6 @@
 #define SCHED_CPUFREQ_PL        (1U << 5)
 #define SCHED_CPUFREQ_EARLY_DET (1U << 6)
 #define SCHED_CPUFREQ_CONTINUE (1U << 8)
-#define SCHED_CPUFREQ_FPS (1U << 9)
-#define SCHED_CPUFREQ_SKIP_LIMITS (1U << 11)
 
 #ifdef CONFIG_CPU_FREQ
 struct cpufreq_policy;
@@ -38,13 +35,5 @@ static inline unsigned long map_util_freq(unsigned long util,
 	return (freq + (freq >> 2)) * util / cap;
 }
 #endif /* CONFIG_CPU_FREQ */
-
-#ifdef CONFIG_ENERGY_MODEL
-void sched_cpufreq_governor_change(struct cpufreq_policy *policy,
-			struct cpufreq_governor *old_gov);
-#else
-static inline void sched_cpufreq_governor_change(struct cpufreq_policy *policy,
-			struct cpufreq_governor *old_gov) { }
-#endif
 
 #endif /* _LINUX_SCHED_CPUFREQ_H */

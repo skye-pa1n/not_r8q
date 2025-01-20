@@ -227,6 +227,13 @@ config SUPPORT_BRIGHTNESS_NOTIFY_FOR_LIGHT_SENSOR
 	  Support brightness notify for light sensor.
 	  receive aor and brightness level from lcd driver.
 
+config CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR
+	tristate "Sensors support display notify"
+	default n
+	help
+	  Support display notify for light sensor.
+	  Receive lcd status data from SS display driver.
+
 config SUPPORT_DDI_COPR_FOR_LIGHT_SENSOR
 	tristate "Sensors support ddi copr"
 	default n

@@ -642,7 +642,9 @@ struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info)
 	dmabuf->cb_excl.active = dmabuf->cb_shared.active = 0;
 	dmabuf->buf_name = bufname;
 	dmabuf->name = bufname;
+#if defined(CONFIG_DEBUG_FS)
 	dmabuf->ktime = ktime_get();
+#endif
 	atomic_set(&dmabuf->dent_count, 1);
 
 	if (!resv) {

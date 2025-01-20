@@ -11,6 +11,10 @@
 #include <linux/rwsem.h>
 #include <linux/suspend.h>
 #include <linux/timer.h>
+#ifdef CONFIG_SEC_CNSS2
+#include <linux/gpio.h>
+#include <linux/of_gpio.h>
+#endif
 #include <soc/qcom/minidump.h>
 
 #include "main.h"
@@ -65,6 +69,11 @@ struct cnss_driver_event {
 	int ret;
 	void *data;
 };
+
+#ifdef CONFIG_SEC_CNSS2
+char ver_info[512] = {0,};
+char softap_info[512] = {0,};
+#endif
 
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
@@ -2495,6 +2504,233 @@ static void cnss_remove_sysfs_link(struct cnss_plat_data *plat_priv)
 	sysfs_remove_link(kernel_kobj, "cnss");
 }
 
+/**
+ * enum driver_status: Driver Modules status
+ * @DRIVER_MODULES_UNINITIALIZED: Driver CDS modules uninitialized
+ * @DRIVER_MODULES_ENABLED: Driver CDS modules opened
+ * @DRIVER_MODULES_CLOSED: Driver CDS modules closed
+ */
+#ifdef CONFIG_SEC_CNSS2
+enum driver_modules_status {
+        DRIVER_MODULES_UNINITIALIZED,
+        DRIVER_MODULES_ENABLED,
+        DRIVER_MODULES_CLOSED
+};
+
+enum driver_modules_status current_driver_status = DRIVER_MODULES_UNINITIALIZED;
+
+void cnss_sysfs_update_driver_status(int32_t new_status, void *version, void *softap)
+{
+	if (new_status == DRIVER_MODULES_ENABLED) {
+		memcpy(ver_info, version, 512);
+		memcpy(softap_info, softap, 512);
+	}
+	current_driver_status = new_status;
+}
+EXPORT_SYMBOL(cnss_sysfs_update_driver_status);
+
+#define MAC_ADDR_SIZE 6
+uint8_t mac_from_macloader[MAC_ADDR_SIZE] = {0,0,0,0,0,0};
+int pm_from_macloader = 0;
+int ant_from_macloader = 0;
+
+extern int cnss_utils_set_wlan_mac_address(const u8 *mac_list, const uint32_t len);
+static ssize_t store_mac_addr(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    const char *buf,
+			    size_t count)
+{
+	sscanf(buf, "%02X:%02X:%02X:%02X:%02X:%02X",
+		(const u8*)&mac_from_macloader[0],
+		(const u8*)&mac_from_macloader[1],
+		(const u8*)&mac_from_macloader[2],
+		(const u8*)&mac_from_macloader[3],
+		(const u8*)&mac_from_macloader[4],
+		(const u8*)&mac_from_macloader[5]);
+
+	cnss_pr_info("Assigning MAC from Macloader %02x:%02x:%02x:%02x:%02x:%02x\n",
+		mac_from_macloader[0], mac_from_macloader[1],mac_from_macloader[2],
+		mac_from_macloader[3], mac_from_macloader[4],mac_from_macloader[5]);
+
+	cnss_utils_set_wlan_mac_address(mac_from_macloader, MAC_ADDR_SIZE);
+
+	return count;
+}
+
+static ssize_t show_verinfo(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 char *buf)
+{
+	return scnprintf(buf, 512, "%s", ver_info);
+}
+static ssize_t show_softapinfo(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 char *buf)
+{
+	return scnprintf(buf, 512, "%s", softap_info);
+}
+
+static ssize_t show_qcwlanstate(struct kobject *kobj,
+                                struct kobj_attribute *attr,
+                                char *buf)
+{
+       char status[20];
+       static const char wlan_off_str[] = "OFF";
+       static const char wlan_on_str[] = "ON";
+
+       switch (current_driver_status) {
+               case DRIVER_MODULES_UNINITIALIZED:
+               case DRIVER_MODULES_CLOSED:
+                       cnss_pr_info("Modules not initialized just return");
+                       memset(status, '\0', sizeof("OFF"));
+                       memcpy(status, wlan_off_str, sizeof("OFF"));
+                       break;
+               case DRIVER_MODULES_ENABLED:
+                       cnss_pr_info("Modules enabled");
+                       memset(status, '\0', sizeof("ON"));
+                       memcpy(status, wlan_on_str, sizeof("ON"));
+                       break;
+       }
+
+       return scnprintf(buf, PAGE_SIZE, "%s", status);
+}
+
+static ssize_t store_pm_info(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    const char *buf,
+			    size_t count)
+{
+	cnss_pr_info("%s enter\n", __func__);
+	sscanf(buf, "%d", &pm_from_macloader);
+	pm_from_macloader = !pm_from_macloader;
+	cnss_pr_info("pm_from_macloader %d\n", pm_from_macloader);
+
+	return count;
+}
+
+int cnss_sysfs_get_pm_info(void)
+{
+	return pm_from_macloader;
+}
+EXPORT_SYMBOL(cnss_sysfs_get_pm_info);
+
+static ssize_t store_ant_info(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    const char *buf,
+			    size_t count)
+{
+	cnss_pr_info("%s enter\n", __func__);
+	sscanf(buf, "%d", &ant_from_macloader);
+	cnss_pr_info("ant_from_macloader %d\n", ant_from_macloader);
+
+	return count;
+}
+
+static ssize_t show_wificableinfo(struct kobject *kobj,
+				 struct kobj_attribute *attr,
+				 char *buf)
+{
+	struct device_node *np;
+	int wifi_cable1 = 0;
+	int wifi_cable2 = 0;
+	char antbuffer[5] = {0};
+
+	np = of_find_compatible_node(NULL, NULL, "samsung,rome_cable");
+
+	if (!np) {
+		printk(KERN_ERR "[WIFI] %s : can not fine the rome_cable\n",__FUNCTION__);
+		return 0;
+	}
+
+	wifi_cable1 = of_get_named_gpio(np, "wlan_cable_wifi1", 0);
+	wifi_cable2 = of_get_named_gpio(np, "wlan_cable_wifi2", 0);
+
+	printk(KERN_INFO "%s : gpio=%d value = %d \n",__FUNCTION__, wifi_cable1, gpio_get_value(wifi_cable1));
+	printk(KERN_INFO "%s : gpio=%d value = %d \n",__FUNCTION__, wifi_cable2, gpio_get_value(wifi_cable2));
+
+	printk(KERN_ERR "%s : gpio=%d value = %d \n",__FUNCTION__, wifi_cable1, gpio_get_value(wifi_cable1));
+	printk(KERN_ERR "%s : gpio=%d value = %d \n",__FUNCTION__, wifi_cable2, gpio_get_value(wifi_cable2));
+
+	sprintf(antbuffer, "%c%c\n", (gpio_get_value(wifi_cable1) > 0) ? 'D' : 'E' , (gpio_get_value(wifi_cable2) > 0) ? 'D' : 'E');
+
+	return scnprintf(buf, PAGE_SIZE, "%s", antbuffer);
+}
+
+static ssize_t store_memdump_info(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    const char *buf,
+			    size_t count)
+{
+	cnss_pr_info("%s called\n", __func__);
+	return count;
+}
+
+static struct kobj_attribute sec_mac_addr_attribute =
+        __ATTR(mac_addr, 0220, NULL, store_mac_addr);
+static struct kobj_attribute sec_verinfo_sysfs_attribute =
+	__ATTR(wifiver, 0440, show_verinfo, NULL);
+static struct kobj_attribute sec_softapinfo_sysfs_attribute =
+	__ATTR(softap, 0440, show_softapinfo, NULL);
+static struct kobj_attribute qcwlanstate_attribute =
+       __ATTR(qcwlanstate, 0440, show_qcwlanstate, NULL);
+static struct kobj_attribute sec_pminfo_sysfs_attribute =
+       __ATTR(pm, 0220, NULL, store_pm_info);
+static struct kobj_attribute sec_antinfo_sysfs_attribute =
+       __ATTR(ant, 0220, NULL, store_ant_info);
+static struct kobj_attribute sec_wificableinfo_sysfs_attribute =
+	__ATTR(wificable, 0440, show_wificableinfo, NULL);
+static struct kobj_attribute sec_memdumpinfo_sysfs_attribute =
+	__ATTR(memdump, 0220, NULL, store_memdump_info);
+
+static struct attribute *sec_sysfs_attrs[] = {
+	&sec_mac_addr_attribute.attr,
+	&sec_verinfo_sysfs_attribute.attr,
+	&sec_softapinfo_sysfs_attribute.attr,
+	&qcwlanstate_attribute.attr,
+	&sec_pminfo_sysfs_attribute.attr,
+	&sec_antinfo_sysfs_attribute.attr,
+	&sec_wificableinfo_sysfs_attribute.attr,
+	&sec_memdumpinfo_sysfs_attribute.attr,
+	NULL
+};
+
+static struct attribute_group sec_sysfs_attr_group = {
+        .attrs = sec_sysfs_attrs,
+};
+
+static int sec_create_wifi_sysfs(struct cnss_plat_data *plat_priv)
+{
+	int ret = 0;
+
+	plat_priv->wifi_kobj = kobject_create_and_add("wifi", NULL);
+	if (!plat_priv->wifi_kobj) {
+		cnss_pr_err("Failed to create shutdown_wlan kernel object\n");
+		return -ENOMEM;
+	}
+
+        ret = sysfs_create_group(plat_priv->wifi_kobj, &sec_sysfs_attr_group);
+        if (ret) {
+                cnss_pr_err("could not create group %d", ret);
+		kobject_put(plat_priv->wifi_kobj);
+		plat_priv->wifi_kobj = NULL;
+	}
+
+	cnss_pr_info("%s done\n", __func__);
+
+	return ret;
+}
+
+static void sec_remove_wifi_sysfs(struct cnss_plat_data *plat_priv)
+{
+	if (plat_priv->wifi_kobj) {
+		sysfs_remove_group(plat_priv->wifi_kobj,
+				  &sec_sysfs_attr_group);
+		kobject_put(plat_priv->wifi_kobj);
+		plat_priv->wifi_kobj = NULL;
+	}
+}
+#endif
+
 static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
@@ -2508,7 +2744,9 @@ static int cnss_create_sysfs(struct cnss_plat_data *plat_priv)
 	}
 
 	cnss_create_sysfs_link(plat_priv);
-
+#ifdef CONFIG_SEC_CNSS2
+	sec_create_wifi_sysfs(plat_priv);
+#endif
 	return 0;
 out:
 	return ret;
@@ -2517,6 +2755,9 @@ out:
 static void cnss_remove_sysfs(struct cnss_plat_data *plat_priv)
 {
 	cnss_remove_sysfs_link(plat_priv);
+#ifdef CONFIG_SEC_CNSS2
+	sec_remove_wifi_sysfs(plat_priv);
+#endif
 	devm_device_remove_group(&plat_priv->plat_dev->dev, &cnss_attr_group);
 }
 

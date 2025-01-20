@@ -54,7 +54,7 @@ static DEFINE_IDR(zram_index_idr);
 static DEFINE_MUTEX(zram_index_mutex);
 
 static int zram_major;
-static const char *default_compressor = "lz4kd";
+static const char *default_compressor = "lzo-rle";
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
@@ -67,9 +67,7 @@ static size_t huge_class_size;
 static void zram_free_page(struct zram *zram, size_t index);
 static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 				u32 index, int offset, struct bio *bio);
-#ifdef CONFIG_ZRAM_ENTROPY
-unsigned long sysctl_zram_entropy_threshold __read_mostly = CONFIG_ZRAM_ENTROPY_THRESHOLD;
-#endif
+
 
 static int zram_slot_trylock(struct zram *zram, u32 index)
 {
@@ -2749,29 +2747,6 @@ out:
 
 	return ret;
 }
-
-#ifdef CONFIG_ZRAM_ENTROPY
-static inline u32 ilog2_w(u64 n)
-{
-	return ilog2(n * n * n * n);
-}
-static inline s32 shannon_entropy(const u8 *src)
-{
-	s32 entropy_sum = 0;
-	u32 sz_base, i;
-	u16 entropy_count[256] = { 0 };
-	for (i = 0; i < PAGE_SIZE; ++i)
-		entropy_count[src[i]]++;
-	sz_base = ilog2_w(PAGE_SIZE);
-	for (i = 0; i < ARRAY_SIZE(entropy_count); ++i) {
-		if (entropy_count[i] > 0) {
-			s32 p = entropy_count[i];
-			entropy_sum += p * (sz_base - ilog2_w((u64)p));
-		}
-	}
-	return entropy_sum;
-}
-#endif
 
 static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 				u32 index, struct bio *bio)

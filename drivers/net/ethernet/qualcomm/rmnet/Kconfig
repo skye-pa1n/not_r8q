@@ -2,6 +2,10 @@
 # RMNET MAP driver
 #
 
+config RMNET_ARGOS
+	bool "RmNet Argos extension"
+	default n
+
 menuconfig RMNET
 	tristate "RmNet MAP driver"
 	default n

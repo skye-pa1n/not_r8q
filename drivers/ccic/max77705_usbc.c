@@ -768,11 +768,11 @@ static int max77705_port_type_set(const struct typec_capability *cap, enum typec
 		usbpd_data->typec_power_role, usbpd_data->typec_data_role, port_type);
 
 	reinit_completion(&usbpd_data->typec_reverse_completion);
-	if (port_type == TYPEC_PORT_DFP) {
+	if (port_type == TYPEC_PORT_SRC) {
 		msg_maxim("try reversing, from UFP(Sink) to DFP(Source)");
 		usbpd_data->typec_try_state_change = TRY_ROLE_SWAP_TYPE;
 		max77705_rprd_mode_change(usbpd_data, TYPE_C_ATTACH_DFP);
-	} else if (port_type == TYPEC_PORT_UFP) {
+	} else if (port_type == TYPEC_PORT_SNK) {
 		msg_maxim("try reversing, from DFP(Source) to UFP(Sink)");
 #if defined(CONFIG_CCIC_NOTIFIER)
 		max77705_ccic_event_work(usbpd_data,
@@ -3606,7 +3606,7 @@ void factory_write_reg_uic_int_m(struct work_struct *work)
 
 #ifdef CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME
 #define NUM_BUS_TABLE	13
-#define MAX_FREQ		3187200
+#define MAX_FREQ		2841600
 #define MHZ_TO_BPS(mhz, w) ((uint64_t)mhz * 1000 * 1000 * w)
 #define BUS_W 4	/* SM8250 DDR Voting('w' for DDR is 4) */
 
@@ -3685,6 +3685,7 @@ void max77705_clk_booster_init(void)
 void max77705_clk_booster_set(void *data, int on)
 {
 	struct max77705_usbc_platform_data *usbpd_data = data;
+	int res = 0;
 	int index = 0;
 
 	if (system_state < SYSTEM_RUNNING) {
@@ -3695,6 +3696,8 @@ void max77705_clk_booster_set(void *data, int on)
 	cancel_delayed_work_sync(&usbpd_data->acc_booster_off_work);
 	if (on) {
 		usbpd_data->set_booster = true;
+		// cpu freq
+		res = set_freq_limit(DVFS_BOOST_HOST_ID, MAX_FREQ);
 		// hmp booster on
 		sched_set_boost(1);
 		// ddr freq
@@ -3719,8 +3722,11 @@ void max77705_clk_booster_off(struct work_struct *wk)
 		container_of(wk, struct delayed_work, work);
 	struct max77705_usbc_platform_data *usbpd_data =
 		container_of(delay_work, struct max77705_usbc_platform_data, acc_booster_off_work);		
+	int res = 0;
 
 	pr_info("[PDIC Booster] %s+  \n", __func__);
+	// cpu freq
+	res = set_freq_limit(DVFS_BOOST_HOST_ID, -1);
 	// hmp booster off
 	sched_set_boost(0);
 	// ddr freq

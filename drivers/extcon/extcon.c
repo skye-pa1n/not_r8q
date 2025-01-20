@@ -1310,6 +1310,7 @@ int extcon_dev_register(struct extcon_dev *edev)
 
 		edev->dev.type = &edev->extcon_dev_type;
 	}
+
 	spin_lock_init(&edev->lock);
 	if (edev->max_supported) {
 		edev->nh = kcalloc(edev->max_supported, sizeof(*edev->nh),

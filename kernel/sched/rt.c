@@ -1804,10 +1804,8 @@ retry:
 		int capacity_orig = capacity_orig_of(fcpu);
 
 		if (boost_on_big) {
-			if (is_min_capacity_cpu(fcpu)){
+			if (is_min_capacity_cpu(fcpu))
 				continue;
-			}else{
-			}
 		} else {
 			if (capacity_orig > best_capacity)
 				continue;
@@ -1823,9 +1821,10 @@ retry:
 			if (sched_cpu_high_irqload(cpu))
 				continue;
 
-			util = cpu_util(cpu);
 			if (__cpu_overutilized(cpu, tutil))
 				continue;
+
+			util = cpu_util(cpu);
 
 			/* Find the least loaded CPU */
 			if (util > best_cpu_util)
@@ -1910,6 +1909,7 @@ static int find_lowest_rq(struct task_struct *task)
 	 */
 	if (cpumask_test_cpu(cpu, lowest_mask))
 		return cpu;
+
 	/*
 	 * Otherwise, we consult the sched_domains span maps to figure
 	 * out which CPU is logically closest to our hot cache data.
@@ -1963,7 +1963,7 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
 	struct rq *lowest_rq = NULL;
 	int tries;
 	int cpu;
-	bool cpu_allow_check = true;
+
 	for (tries = 0; tries < RT_MAX_TRIES; tries++) {
 		cpu = find_lowest_rq(task);
 
@@ -1990,9 +1990,8 @@ static struct rq *find_lock_lowest_rq(struct task_struct *task, struct rq *rq)
 			 * migrated already or had its affinity changed.
 			 * Also make sure that it wasn't scheduled on its rq.
 			 */
-			cpu_allow_check = cpumask_test_cpu(lowest_rq->cpu, &task->cpus_allowed);
 			if (unlikely(task_rq(task) != rq ||
-				     !cpu_allow_check ||
+				     !cpumask_test_cpu(lowest_rq->cpu, &task->cpus_allowed) ||
 				     task_running(rq, task) ||
 				     !rt_task(task) ||
 				     !task_on_rq_queued(task))) {

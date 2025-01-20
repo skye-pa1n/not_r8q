@@ -42,7 +42,6 @@
 #include <linux/psci.h>
 #include <linux/sched/task.h>
 #include <linux/mm.h>
-#include <linux/libfdt.h>
 
 #include <asm/acpi.h>
 #include <asm/fixmap.h>

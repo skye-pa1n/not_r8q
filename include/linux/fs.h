@@ -725,6 +725,7 @@ struct inode {
 #endif
 
 	void			*i_private; /* fs or device private pointer */
+
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 } __randomize_layout;
@@ -1539,6 +1540,7 @@ struct super_block {
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
+
 	ANDROID_KABI_RESERVE(1);
 	ANDROID_KABI_RESERVE(2);
 	ANDROID_KABI_RESERVE(3);
@@ -1755,8 +1757,6 @@ struct fiemap_extent_info {
 int fiemap_fill_next_extent(struct fiemap_extent_info *info, u64 logical,
 			    u64 phys, u64 len, u32 flags);
 int fiemap_check_flags(struct fiemap_extent_info *fieinfo, u32 fs_flags);
-int fiemap_check_ranges(struct super_block *sb,
-					       u64 start, u64 len, u64 *new_len);
 
 /*
  * File types
@@ -2368,6 +2368,7 @@ extern int thaw_super(struct super_block *super);
 extern bool our_mnt(struct vfsmount *mnt);
 extern __printf(2, 3)
 int super_setup_bdi_name(struct super_block *sb, char *fmt, ...);
+int sec_super_setup_bdi_name(struct super_block *sb, char *fmt, ...);
 extern int super_setup_bdi(struct super_block *sb);
 
 extern int current_umask(void);
@@ -2856,6 +2857,7 @@ static inline errseq_t filemap_sample_wb_err(struct address_space *mapping)
 extern int vfs_fsync_range(struct file *file, loff_t start, loff_t end,
 			   int datasync);
 extern int vfs_fsync(struct file *file, int datasync);
+extern unsigned long read_fsync_time_cnt(int idx);
 
 /*
  * Sync the bytes written if this was a synchronous write.  Expect ki_pos

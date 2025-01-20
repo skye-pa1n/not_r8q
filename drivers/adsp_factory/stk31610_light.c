@@ -40,7 +40,7 @@ enum {
 	OPTION_TYPE_MAX
 };
 
-#ifdef CONFIG_SUPPORT_BRIGHTNESS_NOTIFY_FOR_LIGHT_SENSOR
+#if IS_ENABLED(CONFIG_SUPPORT_BRIGHTNESS_NOTIFY_FOR_LIGHT_SENSOR) || IS_ENABLED(CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR)
 #include "../../../techpack/display/msm/samsung/ss_panel_notify.h"
 #endif
 
@@ -164,6 +164,23 @@ static ssize_t light_brightness_store(struct device *dev,
 	return size;
 }
 
+#if IS_ENABLED(CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR)
+static ssize_t light_lcd_onoff_show(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct adsp_data *data = dev_get_drvdata(dev);
+	uint16_t light_idx = get_light_sidx(data);
+	int32_t msg_buf[2];
+
+	msg_buf[0] = OPTION_TYPE_LCD_ONOFF;
+	msg_buf[1] = lcd_is_on;
+
+	adsp_unicast(msg_buf, sizeof(msg_buf),
+		light_idx, 0, MSG_TYPE_OPTION_DEFINE);
+
+	return snprintf(buf, PAGE_SIZE, data->lcd_is_on);
+}
+#else
 static ssize_t light_lcd_onoff_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
@@ -190,6 +207,7 @@ static ssize_t light_lcd_onoff_store(struct device *dev,
 
 	return size;
 }
+#endif
 
 static ssize_t light_circle_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -355,7 +373,49 @@ static struct notifier_block light_panel_data_notifier = {
 };
 #endif /* CONFIG_SUPPORT_BRIGHTNESS_NOTIFY_FOR_LIGHT_SENSOR */
 
+#if IS_ENABLED(CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR)
+static int light_panel_state_change(struct notifier_block *nb,
+	unsigned long val, void *data)
+{
+	struct panel_state_data *evdata = (struct panel_state_data *)data;
+	unsigned int panel_state;
+
+	if (val != PANEL_EVENT_STATE_CHANGED)
+		return 0;
+
+    if(evdata) {
+    	panel_state = evdata->state;
+    } else {
+        return 0;
+    }
+
+    switch (panel_state) {
+    case PANEL_OFF:
+        lcd_is_on = false;
+        sysfs_notify(&data->dev.kobj, NULL, "lcd_onoff");
+        break;
+    case PANEL_ON:
+        lcd_is_on = true;
+        sysfs_notify(&data->dev.kobj, NULL, "lcd_onoff");
+        break;
+    default:
+        break;
+    }
+
+	return NOTIFY_OK;
+}
+
+static struct notifier_block light_panel_status_notifier = {
+	.notifier_call = light_panel_state_change,
+	.priority = 1,
+};
+#endif /* CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR */
+
+#if IS_ENABLED(CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR)
+static DEVICE_ATTR(lcd_onoff, 0444, light_lcd_onoff_show, NULL);
+#else
 static DEVICE_ATTR(lcd_onoff, 0220, NULL, light_lcd_onoff_store);
+#endif
 static DEVICE_ATTR(light_circle, 0444, light_circle_show, NULL);
 static DEVICE_ATTR(register_write, 0220, NULL, light_register_write_store);
 static DEVICE_ATTR(register_read, 0664,
@@ -388,6 +448,9 @@ static int __init stk31610_light_factory_init(void)
 #ifdef CONFIG_SUPPORT_BRIGHTNESS_NOTIFY_FOR_LIGHT_SENSOR
 	ss_panel_notifier_register(&light_panel_data_notifier);
 #endif
+#if IS_ENABLED(CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR)
+	ss_panel_notifier_register(&light_panel_status_notifier);
+#endif
 	pr_info("[FACTORY] %s\n", __func__);
 
 	brightness = 0;
@@ -400,6 +463,9 @@ static void __exit stk31610_light_factory_exit(void)
 	adsp_factory_unregister(MSG_LIGHT);
 #ifdef CONFIG_SUPPORT_BRIGHTNESS_NOTIFY_FOR_LIGHT_SENSOR
 	ss_panel_notifier_unregister(&light_panel_data_notifier);
+#endif
+#if IS_ENABLED(CONFIG_SUPPORT_DISPLAY_NOTIFY_FOR_LIGHT_SENSOR)
+	ss_panel_notifier_unregister(&light_panel_status_notifier);
 #endif
 
 	pr_info("[FACTORY] %s\n", __func__);
