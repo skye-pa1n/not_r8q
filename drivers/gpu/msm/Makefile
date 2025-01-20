@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-only
 ccflags-y += -I$(src)
+ccflags-y := -funsafe-math-optimizations
+ccflags-y := -funroll-loops
+ccflags-y := -ffast-math
+ccflags-y := -Ofast
 
 msm_kgsl_core-y = \
 	kgsl.o \
