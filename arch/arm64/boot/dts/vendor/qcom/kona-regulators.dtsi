@@ -56,37 +56,6 @@
 		VDD_CX_LEVEL: S3A_LEVEL:
 		pm8150_s3_level: regulator-pm8150-s3-level {
 			regulator-name = "pm8150_s3_level";
-			qcom,supported-modes =
-			<RPMH_REGULATOR_MODE_LPM
-			 RPMH_REGULATOR_MODE_HPM>;
-			qcom,set = <RPMH_REGULATOR_SET_ALL>;
-			regulator-min-microvolt =
-				<RPMH_REGULATOR_LEVEL_NOT>;
-			regulator-max-microvolt =
-				<RPMH_REGULATOR_LEVEL_TURBO_L2>;
-			qcom,init-voltage-level =
-				<RPMH_REGULATOR_LEVEL_NOT>;
-			qcom,min-dropout-voltage-level = <(-1)>;
-		};
-
-		VDD_CX_LEVEL_AO: S3A_LEVEL_AO:
-		pm8150_s3_level_ao: regulator-pm8150-s3-level-ao {
-			regulator-name = "pm8150_s3_level_ao";
-			qcom,supported-modes =
-			<RPMH_REGULATOR_MODE_LPM
-			 RPMH_REGULATOR_MODE_HPM>;
-			qcom,set = <RPMH_REGULATOR_SET_ACTIVE>;
-			regulator-min-microvolt =
-				<RPMH_REGULATOR_LEVEL_NOT>;
-			regulator-max-microvolt =
-				<RPMH_REGULATOR_LEVEL_TURBO_L2>;
-			qcom,init-voltage-level =
-				<RPMH_REGULATOR_LEVEL_NOT>;
-			qcom,min-dropout-voltage-level = <(-1)>;
-		};
-
-		VDD_CX_MMCX_SUPPLY_LEVEL: regulator-pm8150-s3-mmcx-sup-level {
-			regulator-name = "pm8150_s3_mmcx_sup_level";
 			qcom,set = <RPMH_REGULATOR_SET_ALL>;
 			regulator-min-microvolt =
 				<RPMH_REGULATOR_LEVEL_RETENTION>;
@@ -94,9 +63,34 @@
 				<RPMH_REGULATOR_LEVEL_MAX>;
 			qcom,init-voltage-level =
 				<RPMH_REGULATOR_LEVEL_RETENTION>;
+			qcom,min-dropout-voltage-level = <(-1)>;
+		};
+
+		VDD_CX_LEVEL_AO: S3A_LEVEL_AO:
+		pm8150_s3_level_ao: regulator-pm8150-s3-level-ao {
+			regulator-name = "pm8150_s3_level_ao";
+			qcom,set = <RPMH_REGULATOR_SET_ACTIVE>;
+			regulator-min-microvolt =
+				<RPMH_REGULATOR_LEVEL_RETENTION>;
+			regulator-max-microvolt =
+				<RPMH_REGULATOR_LEVEL_MAX>;
+			qcom,init-voltage-level =
+				<RPMH_REGULATOR_LEVEL_RETENTION>;
+			qcom,min-dropout-voltage-level = <(-1)>;
+		};
+
+		VDD_CX_MMCX_SUPPLY_LEVEL: regulator-pm8150-s3-mmcx-sup-level {
+			regulator-name = "pm8150_s3_mmcx_sup_level";
+			qcom,set = <RPMH_REGULATOR_SET_ALL>;
+			regulator-min-microvolt =
+				<RPMH_REGULATOR_LEVEL_MIN_SVS>;
+			regulator-max-microvolt =
+				<RPMH_REGULATOR_LEVEL_MAX>;
+			qcom,init-voltage-level =
+				<RPMH_REGULATOR_LEVEL_MIN_SVS>;
 			qcom,proxy-consumer-enable;
 			qcom,proxy-consumer-voltage
-				= <RPMH_REGULATOR_LEVEL_NOM_L1
+				= <RPMH_REGULATOR_LEVEL_TURBO
 				   RPMH_REGULATOR_LEVEL_MAX>;
 		};
 	};
@@ -498,15 +492,15 @@
 			regulator-name = "pm8150a_s4_level";
 			qcom,set = <RPMH_REGULATOR_SET_ALL>;
 			regulator-min-microvolt
-				= <RPMH_REGULATOR_LEVEL_RETENTION>;
+				= <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 			regulator-max-microvolt
 				= <RPMH_REGULATOR_LEVEL_MAX>;
 			qcom,init-voltage-level
-				= <RPMH_REGULATOR_LEVEL_RETENTION>;
+				= <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 			qcom,min-dropout-voltage-level = <(-1)>;
 			qcom,proxy-consumer-enable;
 			qcom,proxy-consumer-voltage
-				= <RPMH_REGULATOR_LEVEL_NOM_L1
+				= <RPMH_REGULATOR_LEVEL_TURBO
 				   RPMH_REGULATOR_LEVEL_MAX>;
 		};
 
@@ -515,11 +509,11 @@
 			regulator-name = "pm8150a_s4_level_ao";
 			qcom,set = <RPMH_REGULATOR_SET_ACTIVE>;
 			regulator-min-microvolt
-				= <RPMH_REGULATOR_LEVEL_RETENTION>;
+				= <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 			regulator-max-microvolt
 				= <RPMH_REGULATOR_LEVEL_MAX>;
 			qcom,init-voltage-level
-				= <RPMH_REGULATOR_LEVEL_RETENTION>;
+				= <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 			qcom,min-dropout-voltage-level = <(-1)>;
 		};
 
@@ -527,11 +521,11 @@
 			regulator-name = "pm8150a_s4_level_so";
 			qcom,set = <RPMH_REGULATOR_SET_SLEEP>;
 			regulator-min-microvolt
-				= <RPMH_REGULATOR_LEVEL_RETENTION>;
+				= <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 			regulator-max-microvolt
 				= <RPMH_REGULATOR_LEVEL_MAX>;
 			qcom,init-voltage-level
-				= <RPMH_REGULATOR_LEVEL_RETENTION>;
+				= <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 		};
 	};
 
