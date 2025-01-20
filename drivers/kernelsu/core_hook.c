@@ -847,7 +847,7 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
 		pr_warn("umount %s failed: %d\n", mnt, err);
 	}
 }
-
+#ifdef CONFIG_KSU_SUSFS
 #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
 void susfs_try_umount_all(uid_t uid) {
 	susfs_try_umount(uid);
@@ -859,6 +859,7 @@ void susfs_try_umount_all(uid_t uid) {
 	ksu_try_umount("/data/adb/modules", false, MNT_DETACH);
 	ksu_try_umount("/debug_ramdisk", false, MNT_DETACH);
 }
+#endif
 #endif
 
 int ksu_handle_setuid(struct cred *new, const struct cred *old)
@@ -879,7 +880,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		// old process is not root, ignore it.
 		return 0;
 	}
-
+#ifdef CONFIG_KSU_SUSFS
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 	// check if current process is zygote
 	bool is_zygote_child = susfs_is_sid_equal(old->security, susfs_zygote_sid);
@@ -890,7 +891,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		}
 	}
 #endif
-
+#endif
 	if (!is_appuid(new_uid) || is_unsupported_uid(new_uid.val)) {
 		// pr_info("handle setuid ignore non application or isolated uid: %d\n", new_uid.val);
 		return 0;
@@ -907,8 +908,10 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 	}
 #endif
 
+#ifdef CONFIG_KSU_SUSFS
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 out_ksu_try_umount:
+#endif
 #endif
 	if (!ksu_uid_should_umount(new_uid.val)) {
 		return 0;
@@ -936,6 +939,7 @@ out_ksu_try_umount:
 		current->pid);
 #endif
 
+#ifdef CONFIG_KSU_SUSFS
 #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
 	// susfs come first, and lastly umount by ksu, make sure umount in reversed order
 	susfs_try_umount_all(new_uid.val);
@@ -950,6 +954,7 @@ out_ksu_try_umount:
 	// try umount ksu temp path
 	ksu_try_umount("/debug_ramdisk", false, MNT_DETACH);
 	ksu_try_umount("/sbin", false, MNT_DETACH);
+#endif
 #endif
 
 	return 0;
