@@ -52,6 +52,7 @@
 		interrupt-names = "kgsl_3d0_irq";
 		qcom,id = <0>;
 
+		qcom,gpu-model = "Adreno750v3";
 		qcom,chipid = <0x06050000>;
 
 		qcom,initial-pwrlevel = <2>;
