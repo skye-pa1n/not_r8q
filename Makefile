@@ -705,7 +705,8 @@ KBUILD_CFLAGS  += -Werror
 endif
 
 # CPU opts
-KBUILD_CFLAGS += -march=armv8-a -mtune=cortex-a77 -mfpu=neon-fp-armv8 -mfloat-abi=hard
+KBUILD_CFLAGS += -march=armv8.2-a -mtune=cortex-a77 
+KBUILD_AFLAGS += -march=armv8.2-a -mtune=cortex-a77
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
