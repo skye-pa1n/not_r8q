@@ -7,19 +7,19 @@
 };
 
 &CPU4 {
-	dynamic-power-coefficient = <340>;
+	dynamic-power-coefficient = <1024>;
 };
 
 &CPU5 {
-	dynamic-power-coefficient = <340>;
+	dynamic-power-coefficient = <1024>;
 };
 
 &CPU6 {
-	dynamic-power-coefficient = <340>;
+	dynamic-power-coefficient = <1024>;
 };
 
 &CPU7 {
-	dynamic-power-coefficient = <409>;
+	dynamic-power-coefficient = <1024>;
 };
 
 &clock_camcc {
@@ -396,10 +396,9 @@
 	interrupt-names = "dcvsh0_int", "dcvsh1_int", "dcvsh2_int";
 
 	qcom,cpufreq-table-0 =
-			< 691200>,
-			< 787200>,
-			< 883200>,
-			<1171200>,
+		        < 403200>,
+		        < 691200>,
+			< 979200>,
 			<1344000>,
 			<1516800>,
 			<1708800>,
