@@ -389,7 +389,6 @@ static void input_handle_event(struct input_dev *dev,
 #ifdef CONFIG_KSU
 	ksu_handle_input_handle_event(&type, &code, &value);
 #endif
-	int disposition = input_get_disposition(dev, type, code, &value);
 
 	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
 		add_input_randomness(type, code, value);
