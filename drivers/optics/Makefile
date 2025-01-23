@@ -5,4 +5,4 @@
 # Each configuration option enables a list of files.
 
 obj-$(CONFIG_SENSORS_TCS3407)		+= tcs3407.o
-
+CFLAGS_tcs3407.o			+= -Os

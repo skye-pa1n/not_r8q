@@ -156,3 +156,4 @@ obj-$(CONFIG_REGULATOR_STUB) += stub-regulator.o
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG
 
 subdir-ccflags-y += -Wformat
+subdir-ccflags-y += -Os

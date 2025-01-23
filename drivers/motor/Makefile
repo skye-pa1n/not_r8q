@@ -3,6 +3,8 @@
 #
 
 subdir-ccflags-y := -Wformat
+subdir-ccflags-y += -Os
+
 obj-$(CONFIG_MOTOR_DRV_MAX77705)	+= max77705_haptic.o
 obj-$(CONFIG_SS_VIBRATOR)		+= ss_vibrator.o
 obj-$(CONFIG_ANDROID_TIMED_OUTPUT)	+= timed_output.o

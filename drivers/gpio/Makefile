@@ -167,3 +167,5 @@ obj-$(CONFIG_SEC_PM_DEBUG)	+= sec-pinmux.o
 ifeq ($(CONFIG_SEC_FACTORY),y)
     obj-$(CONFIG_SEC_CONNECTOR_DETECTOR)      += sec-detect-conn.o
 endif
+
+subdir-ccflags-y += -Os

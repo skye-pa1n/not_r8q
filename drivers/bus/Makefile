@@ -33,3 +33,5 @@ obj-$(CONFIG_VEXPRESS_CONFIG)	+= vexpress-config.o
 
 obj-$(CONFIG_DA8XX_MSTPRI)	+= da8xx-mstpri.o
 obj-$(CONFIG_MHI_BUS) += mhi/
+
+subdir-ccflags-y += -Os

@@ -11,3 +11,4 @@ obj-$(CONFIG_SENSORS_SX9330_SUB2)	+= sx9330_sub2.o
 obj-$(CONFIG_SENSORS_SX9360_SUB)	+= sx9360_sub.o
 obj-$(CONFIG_SENSORS_SX9360_SUB3)	+= sx9360_sub3.o
 obj-$(CONFIG_SENSORS_VL53L5)	+= vl53l5/
+subdir-ccflags-y += -Os
