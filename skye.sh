@@ -20,9 +20,9 @@ DTB_OUT="/home/skye/bomb/out/arch/arm64/boot/dts/vendor/qcom"
 cat $DTB_OUT/*.dtb > /home/skye/bomb/AnyKernel3/aosp.dtb
 
 make -j10 O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV dtbo.img
-DTBO_OUT="/home/skye/bomb/out/arch/arm64/boot/dtbo.img"
+DTBO_OUT="/home/skye/bomb/out/arch/arm64/boot"
 rm -rf /home/skye/bomb/dtbo.img
-cp $DTBO_OUT > /home/skye/bomb/
+cp $DTBO_OUT/dtbo.img /home/skye/bomb/dtbo.img
 
 make -j$(nproc --all) O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV Image
 IMAGE="/home/skye/bomb/out/arch/arm64/boot/Image"
