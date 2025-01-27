@@ -70,6 +70,31 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_SUSFS_SUS_SU)
+struct filename* susfs_ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags) {
+	// const char sh[] = SH_PATH;
+	const char su[] = SU_PATH;
+	struct filename *name = getname_flags(*filename_user, getname_statx_lookup_flags(*flags), NULL);
+
+	if (unlikely(IS_ERR(name) || name->name == NULL)) {
+		return name;
+	}
+
+	if (!ksu_is_allow_uid(current_uid().val)) {
+		return name;
+	}
+
+	if (likely(memcmp(name->name, su, sizeof(su)))) {
+		return name;
+	}
+
+	const char sh[] = SH_PATH;
+	pr_info("vfs_fstatat su->sh!\n");
+	memcpy((void *)name->name, sh, sizeof(sh));
+	return name;
+}
+#endif
+
 int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
 	// const char sh[] = SH_PATH;
@@ -366,7 +391,6 @@ void ksu_sucompat_exit()
 #endif
 }
 
-
 #ifdef CONFIG_KSU_SUSFS_SUS_SU
 extern bool ksu_devpts_hook;
 
@@ -386,4 +410,3 @@ void ksu_susfs_enable_sus_su(void) {
 	ksu_devpts_hook = true;
 }
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_SU
-

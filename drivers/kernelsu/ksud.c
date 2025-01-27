@@ -67,7 +67,7 @@ bool ksu_input_hook __read_mostly = true;
 #ifdef CONFIG_KSU_SUSFS_SUS_SU
 bool ksu_devpts_hook = false;
 bool susfs_is_sus_su_ready = false;
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_SU
 
 u32 ksu_devpts_sid;
 
