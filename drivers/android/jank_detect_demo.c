@@ -21,7 +21,19 @@ static struct hwui_mon_receiver receiver = {
 
 static int __init demo_init(void)
 {
-	return register_hwui_mon(&receiver);
+	 int ret = register_hwui_mon(&receiver);
+	 pr_info("hwui_mon receiver registered\n");
+         if (ret) {
+             pr_err("Failed to register hwui_mon receiver: %d\n", ret);
+             return ret;
+         }
+         return 0;
 }
-
 module_init(demo_init);
+
+static void __exit demo_exit(void)
+{
+    unregister_hwui_mon(&receiver);
+    pr_info("hwui_mon receiver unregistered\n");
+}
+module_exit(demo_exit);
