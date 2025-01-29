@@ -555,8 +555,9 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 
 		cur_freq = c->table[i].frequency;
 
-		dev_dbg(dev, "index=%d freq=%d, core_count %d\n",
-			i, c->table[i].frequency, core_count);
+		/*dev_info(dev, "STOCK cpu=%lu, index=%d, freq=%d, src=%d, lval=%d, volt=%d\n",
+		    	cpu, i, c->table[i].frequency,
+		    	src, lval, volt);*/
 
 				if (!of_find_freq(of_table, of_len, c->table[i].frequency)) {
 			c->table[i].frequency = CPUFREQ_ENTRY_INVALID;
@@ -605,6 +606,22 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 				continue;
 			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000,
 							volt);
+			if (cpu == 0) {
+			dev_pm_opp_add(cpu_dev, c->table[0].frequency * 1000,
+							467000);
+				c->table[0].frequency = 266000;
+                        } else if (cpu == 4) {
+                        dev_pm_opp_add(cpu_dev, c->table[0].frequency * 1000,
+							500000);
+				c->table[0].frequency = 540100;
+			} else if (cpu == 7) {
+			dev_pm_opp_add(cpu_dev, c->table[0].frequency * 1000,
+							500000);
+				c->table[0].frequency = 691200;
+			}
+			dev_info(dev, "MODIFIED cpu=%lu, index=%d, freq=%d, src=%d, lval=%d, volt=%d\n",
+		    	cpu, i, c->table[i].frequency,
+		    	src, lval, volt);
 		}
 	}
 
