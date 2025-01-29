@@ -91,8 +91,8 @@ enum kgsl_event_results {
 #define KGSL_CONTEXT_ID(_context) \
 	((_context != NULL) ? (_context)->id : KGSL_MEMSTORE_GLOBAL)
 
-/* Allocate 600K for the snapshot static region*/
-#define KGSL_SNAPSHOT_MEMSIZE (600 * 1024)
+/* Allocate 1024K //600K// for the snapshot static region*/
+#define KGSL_SNAPSHOT_MEMSIZE (600 * 1024)  // 600 KB
 #define MAX_L3_LEVELS	3
 
 struct kgsl_device;
