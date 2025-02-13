@@ -705,8 +705,8 @@ KBUILD_CFLAGS  += -Werror
 endif
 
 # CPU opts
-KBUILD_CFLAGS += -march=armv8.2-a -mtune=cortex-a77 
-KBUILD_AFLAGS += -march=armv8.2-a -mtune=cortex-a77
+KBUILD_CFLAGS	+= -mcpu=cortex-a77+crc+crypto+sha2+aes -mtune=cortex-a77 -march=armv8.2-a+crc+crypto+lse+rdm+rcpc+dotprod -O3 -funroll-loops -fno-plt
+KBUILD_AFLAGS   += -mcpu=cortex-a77+crc+crypto+sha2+aes -mtune=cortex-a77 -march=armv8.2-a+crc+crypto+lse+rdm+rcpc+dotprod -O3 -funroll-loops -fno-plt
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
@@ -761,7 +761,16 @@ KBUILD_CFLAGS += -Wno-initializer-overrides
 KBUILD_CFLAGS += $(call cc-option, -Wno-undefined-optimized)
 KBUILD_CFLAGS += $(call cc-option, -Wno-tautological-constant-out-of-range-compare)
 KBUILD_CFLAGS += $(call cc-option, -mllvm -disable-struct-const-merge)
-
+# Enable Clang Polly optimizations
+KBUILD_CFLAGS	+= -mllvm -polly \
+		   -mllvm -polly-run-dce \
+		   -mllvm -polly-ast-use-context \
+		   -mllvm -polly-invariant-load-hoisting \
+		   -mllvm -polly-loopfusion-greedy=1 \
+		   -mllvm -polly-postopts=1 \
+		   -mllvm -polly-reschedule=1 \
+		   -mllvm -polly-run-inliner \
+		   -mllvm -polly-vectorizer=stripmine
 # Quiet clang warning: comparison of unsigned expression < 0 is always false
 KBUILD_CFLAGS += $(call cc-disable-warning, tautological-compare)
 KBUILD_CFLAGS += $(call cc-option, -fcatch-undefined-behavior)
