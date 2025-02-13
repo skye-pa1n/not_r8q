@@ -1533,7 +1533,7 @@ static int sugov_init(struct cpufreq_policy *policy)
 		tunables->pl = DEFAULT_PL_PR;
 	}
 
-	tunables->frame_aware = false;
+	tunables->frame_aware = true;
 	policy->governor_data = sg_policy;
 	sg_policy->tunables = tunables;
 

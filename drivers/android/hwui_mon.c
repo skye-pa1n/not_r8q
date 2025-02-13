@@ -17,11 +17,8 @@
 #define UI_FRAME_INFO(pt_regs, regn) ((s64 *)((pt_regs)->regs[regn]))
 #define UI_FRAME_INFO_SIZE 12
 #define VSYNC_TIME(buf) ((ktime_t)buf[3])
-#define CHECKSUM_BUF_SIZE 1024
 
 static struct {
-	// sha1sum of libhwui.so
-	char checksum[SHA1_DIGEST_SIZE * 2 + 1];
 	// Both inject into android_view_ThreadedRenderer_syncAndDrawFrame()
 	/**
 	 * Inject 1. Save the destination pointer before calling
@@ -40,7 +37,6 @@ static struct {
 // Here, record info to support different versions of libhwui.so.
 #define INFO_COUNT 1
 	{
-		.checksum = "dea5f6def7787d5c89fe66e7f888455953fd8880",
 		.inject1_offset = 0x26868C,
 		.reg = 4,
 		.inject2_offset = 0x2686A0
@@ -95,99 +91,18 @@ static struct uprobe_consumer hwui_inject2_consumer = {
 	.handler = &hwui_inject2_handler
 };
 
-static int hwui_mon_checksum(void)
-{
-	const char *TAB = "0123456789abcdef";
-	struct crypto_shash *shash;
-	struct file *f;
-	u8 buf[CHECKSUM_BUF_SIZE];
-	u8 digest[SHA1_DIGEST_SIZE];
-	char digest_str[SHA1_DIGEST_SIZE * 2 + 1];
-	SHASH_DESC_ON_STACK(desc, NULL);
-	ssize_t count;
-	int i, ret;
-
-	f = filp_open(HWUI_PATH, O_RDONLY, 0);
-	if (IS_ERR(f)) {
-		ret = PTR_ERR(f);
-		pr_err("Unable to open libhwui, ret = %d", ret);
-		return ret;
-	}
-
-	shash = crypto_alloc_shash("sha1", 0, CRYPTO_ALG_ASYNC);
-	if (IS_ERR(shash)) {
-		ret = PTR_ERR(shash);
-		pr_err("Unable to alloc shash, ret = %d", ret);
-		goto close_file;
-	}
-
-	desc->tfm = shash;
-	desc->flags = 0;
-	ret = crypto_shash_init(desc);
-	if (ret) {
-		pr_err("Unable to init shash, ret = %d", ret);
-		goto free_shash;
-	}
-
-	while (1) {
-		count = kernel_read(f, buf, CHECKSUM_BUF_SIZE, &f->f_pos);
-		if (!count)
-			break;
-
-		ret = crypto_shash_update(desc, buf, count);
-		if (ret) {
-			pr_err("Unable to update shash, ret = %d", ret);
-			goto free_shash;
-		}
-	}
-
-	ret = crypto_shash_final(desc, digest);
-	if (ret) {
-		pr_err("Unable to calculate shash, ret = %d", ret);
-		goto free_shash;
-	}
-
-	for (i = 0; i < SHA1_DIGEST_SIZE; i++) {
-		digest_str[i * 2] = TAB[(digest[i] >> 4) & 0xF];
-		digest_str[i * 2 + 1] = TAB[digest[i] & 0xF];
-	}
-	digest_str[2 * SHA1_DIGEST_SIZE] = '\0';
-
-	ret = -ENOENT;
-	for (i = 0; i < INFO_COUNT; i++) {
-		if (!strcmp(digest_str, hwui_info[i].checksum)) {
-			hwui_index = i;
-			ret = 0;
-			break;
-		}
-	}
-	if (ret)
-		pr_err("Current checksum is %s, not recorded", digest_str);
-	else
-		pr_info("Current checksum is %s, found at index %d",
-		        digest_str, hwui_index);
-
-free_shash:
-	crypto_free_shash(shash);
-close_file:
-	filp_close(f, NULL);
-	return ret;
-}
-
 static void hwui_mon_init(void)
 {
 	struct path hwui_path;
 	struct inode *hwui_inode;
 	int ret;
 
-	if (hwui_mon_checksum())
-		goto error;
-
-	ret = kern_path(HWUI_PATH, 0, &hwui_path);
-	if (ret)
-		goto error;
-
-	hwui_inode = d_inode(hwui_path.dentry);
+        if (!kern_path(HWUI_PATH, LOOKUP_FOLLOW, &hwui_path)) {
+        hwui_inode = d_inode(hwui_path.dentry);
+        } else {
+        pr_err("Failed to resolve HWUI path\n");
+        return;
+        }
 
 	ret = uprobe_register(hwui_inode,
 	    hwui_info[hwui_index].inject1_offset, &hwui_inject1_consumer);
@@ -199,11 +114,12 @@ static void hwui_mon_init(void)
 	if (ret)
 		goto clean;
 
+	pr_info("HWUI initialization completed.");
 	return;
+
 clean:
 	path_put(&hwui_path);
-error:
-	pr_err("Unable to init, ret = %d", ret);
+	pr_info("HWUI initialization failed: uprobe registration error");
 }
 
 void hwui_mon_handle_exec(struct filename *filename)
