@@ -18,9 +18,9 @@
 #include <linux/sched/sysctl.h>
 #include <linux/hwui_mon.h>
 #define TARGET_FRAME_TIME 4000
-#define DEFAULT_CPU0_FRAME_FREQ 1804800
-#define DEFAULT_CPU4_FRAME_FREQ 1766400
-#define DEFAULT_CPU7_FRAME_FREQ 2073600
+#define DEFAULT_CPU0_FRAME_FREQ 1708800
+#define DEFAULT_CPU4_FRAME_FREQ 1670400
+#define DEFAULT_CPU7_FRAME_FREQ 1862400
 
 static unsigned int default_efficient_freq_lp[] = {1171200};
 static u64 default_up_delay_lp[] = {2560};
@@ -31,17 +31,17 @@ static u64 default_up_delay_hp[] = {5670};
 static unsigned int default_efficient_freq_pr[] = {1401600};
 static u64 default_up_delay_pr[] = {5240};
 
-#define DEFAULT_RTG_BOOST_FREQ_LP 883200
+#define DEFAULT_RTG_BOOST_FREQ_LP 979200
 #define DEFAULT_RTG_BOOST_FREQ_HP 940800
-#define DEFAULT_RTG_BOOST_FREQ_PR 960000
+#define DEFAULT_RTG_BOOST_FREQ_PR 1075200
 
-#define DEFAULT_HISPEED_LOAD_LP 100
-#define DEFAULT_HISPEED_LOAD_HP 100
-#define DEFAULT_HISPEED_LOAD_PR 100
+#define DEFAULT_HISPEED_LOAD_LP 77
+#define DEFAULT_HISPEED_LOAD_HP 67
+#define DEFAULT_HISPEED_LOAD_PR 65
 
-#define DEFAULT_HISPEED_FREQ_LP 1171200
+#define DEFAULT_HISPEED_FREQ_LP 1344000
 #define DEFAULT_HISPEED_FREQ_HP 940800
-#define DEFAULT_HISPEED_FREQ_PR 960000
+#define DEFAULT_HISPEED_FREQ_PR 1075200
 
 #define DEFAULT_PL_LP 1
 #define DEFAULT_PL_HP 1
@@ -433,7 +433,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy, u64 time,
 	irq_work_queue(&sg_policy->irq_work);
 }
 
-#define TARGET_LOAD 96
+#define TARGET_LOAD 94
 /**
  * get_next_freq - Compute a new frequency for a given cpufreq policy.
  * @sg_policy: schedhorizon policy object to compute the new frequency for.
