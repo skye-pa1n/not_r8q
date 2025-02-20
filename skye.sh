@@ -31,6 +31,6 @@ cp $IMAGE /home/skye/bomb/AnyKernel3/AOSP
 
 cd /home/skye/bomb/AnyKernel3
 rm *.zip
-zip -r9 ${KERNEL_NAME}${CLANGV}.0.0git-$(date +"%Y%m%d")-r8q.zip .
+zip -r9 ${KERNEL_NAME}clang_${CLANGV}.0.0git-$(date +"%Y%m%d")-r8q.zip .
 echo "The bomb has been planted."
 

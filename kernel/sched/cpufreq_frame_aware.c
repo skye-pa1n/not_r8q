@@ -1779,11 +1779,6 @@ static struct hwui_mon_receiver sugov_frametime_receiver = {
 	.jank_callback = sugov_frametime_handler
 };
 
-struct cpufreq_governor *cpufreq_default_governor(void)
-{
-		return &frame_aware_gov;
-}
-
 static int __init sugov_init_frame_boost(void)
 {
 	kmem_frame_boost_pool = KMEM_CACHE(frame_boost_info,
