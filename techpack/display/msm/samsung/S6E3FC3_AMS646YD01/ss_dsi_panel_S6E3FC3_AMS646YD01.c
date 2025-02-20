@@ -175,7 +175,7 @@ static struct dsi_panel_cmd_set *__ss_vrr(struct samsung_display_driver_data *vd
 	if (cur_rr == 60) {
 		vrr_cmds->cmds[0].msg.tx_buf[1] = 0x00; /* 60 HZ */
 	} else {
-		vrr_cmds->cmds[0].msg.tx_buf[1] = 0x08; /* 120 HZ */
+		vrr_cmds->cmds[0].msg.tx_buf[1] = 0x09; /* 133 HZ */
 	}
 
 	LCD_INFO("VRR: (cur: %d%s, adj: %d%s)\n",
@@ -204,11 +204,11 @@ static struct dsi_panel_cmd_set *ss_vrr_hbm(struct samsung_display_driver_data *
 }
 
 #define FRAME_WAIT_60FPS (34)		/* HBM   : 17 => 34 */
-#define FRAME_WAIT_120FPS (17)		/* HBM   :  9 => 17 */
+#define FRAME_WAIT_120FPS (15)		/* HBM   :  9 => 17 */
 #define NORMAL_HBM_DELAY_60FPS (6)	/* HBM   : 16 => 6  */
-#define NORMAL_HBM_DELAY_120FPS (8)	/* HBM   :  9 => 8  */
+#define NORMAL_HBM_DELAY_120FPS (7)	/* HBM   :  9 => 8  */
 #define HBM_NORMAL_DELAY_60FPS (8)	/* NORMAL: 16 => 8  */
-#define HBM_NORMAL_DELAY_120FPS (8)	/* NORMAL:  9 => 8  */
+#define HBM_NORMAL_DELAY_120FPS (7)	/* NORMAL:  9 => 8  */
 
 static bool last_br_hbm;
 
@@ -270,9 +270,9 @@ static struct dsi_panel_cmd_set *ss_brightness_gamma_mode2_normal
 			pcmds->cmds[6].post_wait_ms = 0;
 		}
 
-		pcmds->cmds[10].msg.tx_buf[1] = normal_aor_manual[cd_index].aor_63h_119;
-		pcmds->cmds[10].msg.tx_buf[2] = normal_aor_manual[cd_index].aor_63h_120;
-		pcmds->cmds[10].msg.tx_buf[3] = normal_aor_manual[cd_index].aor_63h_121;
+		pcmds->cmds[10].msg.tx_buf[1] = normal_aor_manual[cd_index].aor_63h_132;
+		pcmds->cmds[10].msg.tx_buf[2] = normal_aor_manual[cd_index].aor_63h_133;
+		pcmds->cmds[10].msg.tx_buf[3] = normal_aor_manual[cd_index].aor_63h_134;
 	}
 	else if (ss_panel_revision(vdd) >= 'G') {
 		/* Smooth transition : 0x28 */
@@ -284,9 +284,9 @@ static struct dsi_panel_cmd_set *ss_brightness_gamma_mode2_normal
 		pcmds->cmds[3].msg.tx_buf[1] = vdd->br_info.temperature > 0 ?
 				vdd->br_info.temperature : (char)(BIT(7) | (-1 * vdd->br_info.temperature));
 
-		pcmds->cmds[5].msg.tx_buf[1] = normal_aor_manual[cd_index].aor_63h_119;
-		pcmds->cmds[5].msg.tx_buf[2] = normal_aor_manual[cd_index].aor_63h_120;
-		pcmds->cmds[5].msg.tx_buf[3] = normal_aor_manual[cd_index].aor_63h_121;
+		pcmds->cmds[5].msg.tx_buf[1] = normal_aor_manual[cd_index].aor_63h_132;
+		pcmds->cmds[5].msg.tx_buf[2] = normal_aor_manual[cd_index].aor_63h_133;
+		pcmds->cmds[5].msg.tx_buf[3] = normal_aor_manual[cd_index].aor_63h_134;
 	} else {
 		finger_mask_update_delay = vdd->vrr.cur_refresh_rate > 60 ? 9000 : 17000;
 		if (pcmds->cmds[6].last_command == 1)
@@ -385,9 +385,9 @@ static struct dsi_panel_cmd_set *ss_brightness_gamma_mode2_hbm
 			pcmds->cmds[6].post_wait_ms = 0;
 		}
 
-		pcmds->cmds[10].msg.tx_buf[1] = hbm_aor_manual[cd_index].aor_63h_119;
-		pcmds->cmds[10].msg.tx_buf[2] = hbm_aor_manual[cd_index].aor_63h_120;
-		pcmds->cmds[10].msg.tx_buf[3] = hbm_aor_manual[cd_index].aor_63h_121;
+		pcmds->cmds[10].msg.tx_buf[1] = hbm_aor_manual[cd_index].aor_63h_132;
+		pcmds->cmds[10].msg.tx_buf[2] = hbm_aor_manual[cd_index].aor_63h_133;
+		pcmds->cmds[10].msg.tx_buf[3] = hbm_aor_manual[cd_index].aor_63h_134;
 	} else if (ss_panel_revision(vdd) >= 'G') {
 		pcmds->cmds[2].msg.tx_buf[1] = get_bit(vdd->br_info.common_br.gm2_wrdisbv, 8, 8);
 		pcmds->cmds[2].msg.tx_buf[2] = get_bit(vdd->br_info.common_br.gm2_wrdisbv, 0, 8);
@@ -395,9 +395,9 @@ static struct dsi_panel_cmd_set *ss_brightness_gamma_mode2_hbm
 		pcmds->cmds[3].msg.tx_buf[1] = vdd->br_info.temperature > 0 ?
 				vdd->br_info.temperature : (char)(BIT(7) | (-1 * vdd->br_info.temperature));
 
-		pcmds->cmds[5].msg.tx_buf[1] = hbm_aor_manual[cd_index].aor_63h_119;
-		pcmds->cmds[5].msg.tx_buf[2] = hbm_aor_manual[cd_index].aor_63h_120;
-		pcmds->cmds[5].msg.tx_buf[3] = hbm_aor_manual[cd_index].aor_63h_121;
+		pcmds->cmds[5].msg.tx_buf[1] = hbm_aor_manual[cd_index].aor_63h_132;
+		pcmds->cmds[5].msg.tx_buf[2] = hbm_aor_manual[cd_index].aor_63h_133;
+		pcmds->cmds[5].msg.tx_buf[3] = hbm_aor_manual[cd_index].aor_63h_134;
 	} else {
 		pcmds->cmds[5].msg.tx_buf[1] = get_bit(vdd->br_info.common_br.gm2_wrdisbv, 8, 8);
 		pcmds->cmds[5].msg.tx_buf[2] = get_bit(vdd->br_info.common_br.gm2_wrdisbv, 0, 8);
@@ -1065,9 +1065,9 @@ static int ss_vrr_init(struct vrr_info *vrr)
 	mutex_init(&vrr->brr_lock);
 
 	/* Bootloader: FHD@120hz HSl mode */
-	vrr->cur_refresh_rate = vrr->adjusted_refresh_rate = 120;
+	vrr->cur_refresh_rate = vrr->adjusted_refresh_rate = 133;
 	vrr->cur_sot_hs_mode = vrr->adjusted_sot_hs_mode = true;
-	vrr->max_h_active_support_120hs = 1080; /* supports 120hz until FHD 1080 */
+	vrr->max_h_active_support_120hs = 1080; /* supports 133hz until FHD 1080 */
 
 	vrr->vrr_workqueue = create_singlethread_workqueue("vrr_workqueue");
 	INIT_WORK(&vrr->vrr_work, ss_panel_vrr_switch_work);
@@ -1295,8 +1295,8 @@ static void samsung_panel_init(struct samsung_display_driver_data *vdd)
 	/* SAMSUNG_FINGERPRINT */
 	vdd->panel_hbm_entry_delay = 0;
 
-	/* te high -> 52us (120fps) -> te low -> tx start */
-	vdd->panel_hbm_entry_after_te = 60; //52us is TE high time
+	/* te high -> 47us (133fps) -> te low -> tx start */
+	vdd->panel_hbm_entry_after_te = 55;
 	vdd->panel_hbm_exit_delay = 0;
 
 	/* mdnie */

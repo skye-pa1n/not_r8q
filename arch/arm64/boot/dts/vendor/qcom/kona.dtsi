@@ -693,7 +693,7 @@
 		ranges;
 		compatible = "arm,armv7-timer-mem";
 		reg = <0x17c20000 0x1000>;
-		clock-frequency = <19200000>;
+		clock-frequency = <18800000>;
 
 		frame@17c21000 {
 			frame-number = <0>;
@@ -894,6 +894,7 @@
 		BW_OPP_ENTRY(  806, 16); /* 12298 MB/s */
 		BW_OPP_ENTRY(  933, 16); /* 14236 MB/s */
 		BW_OPP_ENTRY( 1000, 16); /* 15258 MB/s */
+		BW_OPP_ENTRY( 1442, 16); /* 20040 MB/s */
 	};
 
 	suspendable_llcc_bw_opp_table: suspendable-llcc-bw-opp-table {
@@ -906,6 +907,7 @@
 		BW_OPP_ENTRY(  806, 16); /* 12298 MB/s */
 		BW_OPP_ENTRY(  933, 16); /* 14236 MB/s */
 		BW_OPP_ENTRY( 1000, 16); /* 15258 MB/s */
+		BW_OPP_ENTRY( 1442, 16); /* 20040 MB/s */
 	};
 
 	ddr_bw_opp_table: ddr-bw-opp-table {
@@ -922,6 +924,7 @@
 		BW_OPP_ENTRY_DDR( 1804, 4, 0x180); /*  6881 MB/s */
 		BW_OPP_ENTRY_DDR( 2092, 4, 0x180); /*  7980 MB/s */
 		BW_OPP_ENTRY_DDR( 2736, 4, 0x100); /* 10437 MB/s */
+		BW_OPP_ENTRY_DDR( 2933, 4, 0x100); /* 19627 MB/s */
 	};
 
 	suspendable_ddr_bw_opp_table: suspendable-ddr-bw-opp-table {
@@ -939,6 +942,7 @@
 		BW_OPP_ENTRY_DDR( 1804, 4, 0x180); /*  6881 MB/s */
 		BW_OPP_ENTRY_DDR( 2092, 4, 0x180); /*  7980 MB/s */
 		BW_OPP_ENTRY_DDR( 2736, 4, 0x100); /* 10437 MB/s */
+		BW_OPP_ENTRY_DDR( 2933, 4, 0x100); /* 19627 MB/s */
 	};
 
 	llcc_pmu: llcc-pmu@9095000 {
@@ -962,7 +966,7 @@
 		reg-names = "base", "global_base";
 		interrupts = <GIC_SPI 581 IRQ_TYPE_LEVEL_HIGH>;
 		qcom,mport = <0>;
-		qcom,hw-timer-hz = <19200000>;
+		qcom,hw-timer-hz = <18800000>;
 		qcom,target-dev = <&cpu_cpu_llcc_bw>;
 		qcom,count-unit = <0x10000>;
 	};
@@ -981,7 +985,7 @@
 		reg = <0x9091000 0x1000>;
 		reg-names = "base";
 		interrupts = <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>;
-		qcom,hw-timer-hz = <19200000>;
+		qcom,hw-timer-hz = <18800000>;
 		qcom,target-dev = <&cpu_llcc_ddr_bw>;
 		qcom,count-unit = <0x10000>;
 	};
@@ -1005,7 +1009,7 @@
 		qcom,bwmon_clks = "npu_bwmon_ahb", "npu_bwmon_axi";
 		interrupts = <GIC_SPI 476 IRQ_TYPE_LEVEL_HIGH>;
 		qcom,mport = <0>;
-		qcom,hw-timer-hz = <19200000>;
+		qcom,hw-timer-hz = <18800000>;
 		qcom,target-dev = <&npu_npu_llcc_bw>;
 		qcom,count-unit = <0x10000>;
 	};
@@ -1022,7 +1026,7 @@
 		reg = <0x9093000 0x1000>;
 		reg-names = "base";
 		interrupts = <GIC_SPI 81 IRQ_TYPE_LEVEL_HIGH>;
-		qcom,hw-timer-hz = <19200000>;
+		qcom,hw-timer-hz = <18800000>;
 		qcom,target-dev = <&npu_llcc_ddr_bw>;
 		qcom,count-unit = <0x10000>;
 	};
@@ -1046,7 +1050,7 @@
 		qcom,bwmon_clks = "npu_bwmon_ahb", "npu_bwmon_axi";
 		interrupts = <GIC_SPI 155 IRQ_TYPE_LEVEL_HIGH>;
 		qcom,mport = <0>;
-		qcom,hw-timer-hz = <19200000>;
+		qcom,hw-timer-hz = <18800000>;
 		qcom,target-dev = <&npudsp_npu_ddr_bw>;
 		qcom,count-unit = <0x10000>;
 	};
@@ -1071,7 +1075,8 @@
 				<  533000 MHZ_TO_MBPS( 1555, 4) >,
 				<  730000 MHZ_TO_MBPS( 1804, 4) >,
 				<  920000 MHZ_TO_MBPS( 2092, 4) >,
-				< 1000000 MHZ_TO_MBPS( 2736, 4) >;
+				< 1000000 MHZ_TO_MBPS( 2736, 4) >,
+				< 1200000 MHZ_TO_MBPS( 2933, 4) >;
 	};
 
 	cpu0_cpu_llcc_lat: qcom,cpu0-cpu-llcc-lat {
@@ -1277,7 +1282,7 @@
 					< 1804800 MHZ_TO_MBPS(1555, 4) >,
 					< 2227200 MHZ_TO_MBPS(1804, 4) >,
 					< 2380800 MHZ_TO_MBPS(2092, 4) >,
-					< 2476800 MHZ_TO_MBPS(2736, 4) >;
+					< 2476800 MHZ_TO_MBPS(2933, 4) >;
 			};
 		};
 
@@ -1297,7 +1302,7 @@
 				qcom,core-dev-table =
 					< 1804800 MHZ_TO_MBPS( 200, 4) >,
 					< 2380800 MHZ_TO_MBPS(1017, 4) >,
-					< 2500000 MHZ_TO_MBPS(2736, 4) >;
+					< 2500000 MHZ_TO_MBPS(2933, 4) >;
 			};
 		};
 
