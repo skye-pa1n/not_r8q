@@ -20,8 +20,8 @@
  */
 #define DEFAULT_SCHED_RAVG_WINDOW (3333333 * 6)
 #else
-/* Default window size (in ns) = 20ms */
-#define DEFAULT_SCHED_RAVG_WINDOW 20000000
+/* Default window size (in ns) = 2ms */
+#define DEFAULT_SCHED_RAVG_WINDOW 2000000
 #endif
 
 /* Max window size (in ns) = 1s */
@@ -37,7 +37,7 @@
 #define EXITING_TASK_MARKER	0xdeaddead
 
 #define FREQ_REPORT_MAX_CPU_LOAD_TOP_TASK	0
-#define FREQ_REPORT_CPU_LOAD			1
+#define FREQ_REPORT_CPU_LOAD			2
 #define FREQ_REPORT_TOP_TASK			2
 
 #define for_each_related_thread_group(grp) \
