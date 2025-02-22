@@ -822,7 +822,6 @@ static unsigned int waltgov_next_freq_shared(struct waltgov_cpu *wg_cpu, u64 tim
 {
 	struct waltgov_policy *wg_policy = wg_cpu->wg_policy;
 	struct cpufreq_policy *policy = wg_policy->policy;
-	u64 last_freq_update_time = wg_policy->last_freq_update_time;
 	unsigned long util = 0, max = 1;
 	unsigned int j;
 	int boost = wg_policy->tunables->boost;

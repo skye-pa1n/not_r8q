@@ -1537,11 +1537,6 @@ static struct cpufreq_governor schedhorizon_gov = {
 	.limits			= sugov_limits,
 };
 
-struct cpufreq_governor *cpufreq_default_governor(void)
-{
-		return &schedhorizon_gov;
-}
-
 static int __init sugov_register(void)
 {
 	return cpufreq_register_governor(&schedhorizon_gov);

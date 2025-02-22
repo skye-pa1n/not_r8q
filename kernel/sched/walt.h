@@ -37,7 +37,7 @@
 #define EXITING_TASK_MARKER	0xdeaddead
 
 #define FREQ_REPORT_MAX_CPU_LOAD_TOP_TASK	0
-#define FREQ_REPORT_CPU_LOAD			2
+#define FREQ_REPORT_CPU_LOAD			1
 #define FREQ_REPORT_TOP_TASK			2
 
 #define for_each_related_thread_group(grp) \
