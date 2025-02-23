@@ -59,7 +59,7 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			qcom,speed-bin = <0>;
-			qcom,initial-pwrlevel = <8>;
+			qcom,initial-pwrlevel = <5>;
 			qcom,throttle-pwrlevel = <0>;
 
                         qcom,gpu-pwrlevel@0 {
