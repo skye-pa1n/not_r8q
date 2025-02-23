@@ -1177,14 +1177,6 @@ static inline void ufshcd_remove_non_printable(char *val)
 		*val = ' ';
 }
 
-static void ufshcd_add_cmd_upiu_trace(struct ufs_hba *hba, unsigned int tag,
-		const char *str)
-{
-	struct utp_upiu_req *rq = hba->lrb[tag].ucd_req_ptr;
-
-	trace_ufshcd_upiu(dev_name(hba->dev), str, &rq->header, &rq->sc.cdb);
-}
-
 static void ufshcd_add_query_upiu_trace(struct ufs_hba *hba, unsigned int tag,
 		const char *str)
 {
@@ -1339,8 +1331,6 @@ static inline void ufshcd_cond_add_cmd_trace(struct ufs_hba *hba,
 	int transfer_len = 0;
 
 	if (cmd) { /* data phase exists */
-		/* trace UPIU also */
-		ufshcd_add_cmd_upiu_trace(hba, tag, str);
 		opcode = cmd->cmnd[0];
 		if ((opcode == READ_10) || (opcode == WRITE_10)) {
 			/*

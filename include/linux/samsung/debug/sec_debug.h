@@ -338,10 +338,6 @@ extern void sec_debug_update_restart_reason(const char *cmd, const int in_panic,
 /* called @ drivers/soc/qcom/watchdog_v2.c */
 extern void sec_debug_prepare_for_wdog_bark_reset(void);
 
-/* implemented @ drivers/soc/qcom/watchdog_v2.c */
-/* called @ kernel/panic.c */
-extern void emerg_pet_watchdog(void);
-
 /* called @ init/main.c */
 extern char *sec_debug_get_erased_command_line(void);
 
@@ -367,7 +363,6 @@ static inline void sec_debug_save_context(void) {}
 static inline void sec_debug_update_dload_mode(const int restart_mode, const int in_panic) {}
 static inline void sec_debug_update_restart_reason(const char *cmd, const int in_panic, const int restart_mode) {}
 static inline void sec_debug_prepare_for_wdog_bark_reset(void) {}
-static inline void emerg_pet_watchdog(void) {}
 static inline char *sec_debug_get_erased_command_line(void) { return boot_command_line; }
 static inline uint64_t get_pa_dump_sink(void) { return 0ULL; };
 static inline void sec_debug_upload_cause_str(enum sec_debug_upload_cause_t type, char *str, size_t len) {}

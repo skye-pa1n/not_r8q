@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/ipc_logging.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/of.h>
