@@ -15,7 +15,7 @@ rm -rf /home/skye/bomb/dtbo.img
 rm -rf .version
 rm -rf .local
 make O=/home/skye/bomb/out clean
-make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV not_defconfig
+make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV /vendor/kona-not_defconfig
 
 make -j12 O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV dtbs
 DTB_OUT="/home/skye/bomb/out/arch/arm64/boot/dts/vendor/qcom"
