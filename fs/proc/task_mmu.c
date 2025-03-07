@@ -20,9 +20,6 @@
 #include <linux/uaccess.h>
 #include <linux/pkeys.h>
 #include <linux/mm_inline.h>
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-#include <linux/susfs_def.h>
-#endif
 #include <linux/freezer.h>
 #include <linux/ctype.h>
 
@@ -30,6 +27,10 @@
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include "internal.h"
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
+#endif
 
 #ifdef CONFIG_ZRAM_LRU_WRITEBACK
 #include <linux/delay.h>
@@ -379,28 +380,6 @@ static void show_vma_header_prefix(struct seq_file *m,
 	seq_putc(m, ' ');
 }
 
-static void show_vma_header_prefix_fake(struct seq_file *m,
-				   unsigned long start, unsigned long end,
-				   vm_flags_t flags, unsigned long long pgoff,
-				   dev_t dev, unsigned long ino)
-
-{
-	seq_setwidth(m, 25 + sizeof(void *) * 6 - 1);
-	seq_printf(m, "%08lx-%08lx %c%c%c%c %08llx %02x:%02x %lu ",
-		   start,
-		   end,
-		   flags & VM_READ ? 'r' : '-',
-		   flags & VM_WRITE ? '-' : '-',
-		   flags & VM_EXEC ? '-' : '-',
-		   flags & VM_MAYSHARE ? 's' : 'p',
-		   pgoff,
-		   MAJOR(dev), MINOR(dev), ino);
-}
-
-#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-extern void susfs_sus_ino_for_show_map_vma(unsigned long ino, dev_t *out_dev, unsigned long *out_ino);
-#endif
-
 static void
 show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 {
@@ -410,14 +389,13 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	unsigned long ino = 0;
 	unsigned long long pgoff = 0;
 	unsigned long start, end;
-	struct dentry *dentry = file->f_path.dentry;
 	dev_t dev = 0;
 	const char *name = NULL;
-
+	
 	if (file) {
 		struct inode *inode = file_inode(vma->vm_file);
 #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
-		if (unlikely(inode->i_state & INODE_STATE_SUS_KSTAT)) {
+		if (unlikely(inode->i_state & 67108864)) {
 			susfs_sus_ino_for_show_map_vma(inode->i_ino, &dev, &ino);
 			goto bypass_orig_flow;
 		}
@@ -428,13 +406,14 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 bypass_orig_flow:
 #endif
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
+	struct dentry *dentry = file->f_path.dentry;
         if (dentry) {
         	const char *path = (const char *)dentry->d_name.name; 
-            	if (strstr(path, "lineage")) { 
+            	if (strstr(path, "lineage") || strstr(path, "boot.oat")) {
 	  	start = vma->vm_start;
 		end = vma->vm_end;
-		show_vma_header_prefix_fake(m, start, end, flags, pgoff, dev, ino);
-            	name = "/system/framework/framework-res.apk";
+		show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
+            	name = "/dev/ashmem (deleted)";
 		goto done;
             	 	}
             	}
@@ -442,6 +421,7 @@ bypass_orig_flow:
 
 	start = vma->vm_start;
 	end = vma->vm_end;
+
 	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
 
 	/*
