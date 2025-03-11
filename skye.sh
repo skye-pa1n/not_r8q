@@ -15,17 +15,17 @@ rm -rf /home/skye/bomb/dtbo.img
 rm -rf .version
 rm -rf .local
 make O=/home/skye/bomb/out clean
-make O=/home/skye/bomb/out $BUILD_ENV vendor/kona-not_defconfig vendor/samsung/r8q.config vendor/debugfs.config
+make O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV vendor/kona-not_defconfig vendor/samsung/r8q.config vendor/debugfs.config
 
-make -j12 O=/home/skye/bomb/out $BUILD_ENV dtbs
+make -j12 O=/home/skye/bomb/out ARCH=arm64 $BUILD_ENV dtbs
 DTB_OUT="/home/skye/bomb/out/arch/arm64/boot/dts/vendor/qcom"
 cat $DTB_OUT/*.dtb > /home/skye/bomb/AnyKernel3/aosp.dtb
 
-make -j12 O=/home/skye/bomb/out $KERNEL_MAKE_ENV $BUILD_ENV dtbo.img
+make -j12 O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV dtbo.img
 DTBO_OUT="/home/skye/bomb/out/arch/arm64/boot"
 cp $DTBO_OUT/dtbo.img /home/skye/bomb/dtbo.img
 
-make -j12 O=/home/skye/bomb/out $KERNEL_MAKE_ENV $BUILD_ENV Image
+make -j12 O=/home/skye/bomb/out ARCH=arm64 $KERNEL_MAKE_ENV $BUILD_ENV Image
 IMAGE="/home/skye/bomb/out/arch/arm64/boot/Image"
 cp $IMAGE /home/skye/bomb/AnyKernel3/AOSP
 
