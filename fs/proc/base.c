@@ -106,6 +106,20 @@
 #include <linux/delayacct.h>
 #endif
 
+struct task_kill_info {
+	struct task_struct *task;
+	struct work_struct work;
+};
+
+static void proc_kill_task(struct work_struct *work)
+{
+	struct task_kill_info *kinfo = container_of(work, typeof(*kinfo), work);
+	struct task_struct *task = kinfo->task;
+	send_sig(SIGKILL, task, 0);
+	put_task_struct(task);
+	kfree(kinfo);
+}
+
 /* NOTE:
  *	Implementing inode permission operations in /proc is almost
  *	certainly an error.  Permission checks need to happen during
@@ -1094,6 +1108,7 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 {
 	struct mm_struct *mm = NULL;
 	struct task_struct *task;
+	char task_comm[TASK_COMM_LEN];
 	int err = 0;
 
 	task = get_proc_task(file_inode(file));
@@ -1143,6 +1158,8 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 	if (!legacy && has_capability_noaudit(current, CAP_SYS_RESOURCE))
 		task->signal->oom_score_adj_min = (short)oom_adj;
 	trace_oom_score_adj_update(task);
+	if (oom_adj >= 700)
+		strncpy(task_comm, task->comm, TASK_COMM_LEN);
 
 	if (mm) {
 		struct task_struct *p;
@@ -1170,6 +1187,19 @@ static int __set_oom_adj(struct file *file, int oom_adj, bool legacy)
 err_unlock:
 	mutex_unlock(&oom_adj_mutex);
 	put_task_struct(task);
+	/* These apps burn through CPU in the background. Don't let them. */
+	if (!err && oom_adj >= 700) {
+		if (!strcmp(task_comm, "vending:download_ser")) {
+			struct task_kill_info *kinfo;
+			kinfo = kmalloc(sizeof(*kinfo), GFP_KERNEL);
+			if (kinfo) {
+				get_task_struct(task);
+				kinfo->task = task;
+				INIT_WORK(&kinfo->work, proc_kill_task);
+				schedule_work(&kinfo->work);
+			}
+		}
+	}	
 	return err;
 }
 
@@ -1956,6 +1986,7 @@ static int do_proc_readlink(struct path *path, char __user *buffer, int buflen)
 
 	if (len > buflen)
 		len = buflen;
+		
 	if (copy_to_user(buffer, pathname, len))
 		len = -EFAULT;
  out:
@@ -2343,11 +2374,25 @@ static int map_files_get_link(struct dentry *dentry, struct path *path)
 
 	rc = -ENOENT;
 	vma = find_exact_vma(mm, vm_start, vm_end);
-	if (vma && vma->vm_file) {
-		*path = vma->vm_file->f_path;
-		path_get(path);
-		rc = 0;
-	}
+	if (vma) {
+        	if (vma->vm_file) {
+        	        const char *target_path = "/dev/ashmem (deleted)";
+            		if (strstr(path, "lineage") || strstr(path, "boot.oat")) {
+            		rc = kern_path("/dev/ashmem (deleted)", LOOKUP_FOLLOW, path);
+            		if (rc) {
+                            pr_err("Failed to resolve path: %s (rc: %d)\n", target_path, rc);
+                            return rc;
+                    }
+        	} else {
+			*path = vma->vm_file->f_path;
+			path_get(path);
+                	rc = 0;
+            		}
+            	} else {
+             	   pr_err("Invalid VMA or VM file\n");
+              	   rc = -EINVAL;
+            	}
+    	}
 	up_read(&mm->mmap_sem);
 
 out_mmput:
@@ -2419,7 +2464,7 @@ static struct dentry *proc_map_files_lookup(struct inode *dir,
 	struct task_struct *task;
 	struct dentry *result;
 	struct mm_struct *mm;
-
+	
 	result = ERR_PTR(-ENOENT);
 	task = get_proc_task(dir);
 	if (!task)
@@ -2445,7 +2490,7 @@ static struct dentry *proc_map_files_lookup(struct inode *dir,
 	vma = find_exact_vma(mm, vm_start, vm_end);
 	if (!vma)
 		goto out_no_vma;
-
+		
 	if (vma->vm_file)
 		result = proc_map_files_instantiate(dentry, task,
 				(void *)(unsigned long)vma->vm_file->f_mode);
@@ -2540,6 +2585,7 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 			info.start = vma->vm_start;
 			info.end = vma->vm_end;
 			info.mode = vma->vm_file->f_mode;
+			
 			if (flex_array_put(fa, i++, &info, GFP_KERNEL))
 				BUG();
 		}
@@ -2553,12 +2599,14 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 
 		p = flex_array_get(fa, i);
 		len = snprintf(buf, sizeof(buf), "%lx-%lx", p->start, p->end);
+
 		if (!proc_fill_cache(file, ctx,
 				      buf, len,
 				      proc_map_files_instantiate,
 				      task,
 				      (void *)(unsigned long)p->mode))
 			break;
+			
 		ctx->pos++;
 	}
 	if (fa)
