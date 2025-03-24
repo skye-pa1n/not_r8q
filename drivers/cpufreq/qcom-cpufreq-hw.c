@@ -434,7 +434,20 @@ static int qcom_cpufreq_hw_read_lut(struct platform_device *pdev,
 				continue;
 			dev_pm_opp_add(cpu_dev, c->table[i].frequency * 1000,
 							volt);
-			dev_info(dev, "cpu=%lu, index=%d, freq=%d, src=%d, lval=%d, volt=%d\n",
+			if (cpu == 0) {
+			dev_pm_opp_add(cpu_dev, c->table[0].frequency * 1000,
+							467000);
+				c->table[0].frequency = 912000;
+                        } else if (cpu == 4) {
+                        dev_pm_opp_add(cpu_dev, c->table[0].frequency * 1000,
+							500000);
+				c->table[0].frequency = 912000;
+			} else if (cpu == 7) {
+			dev_pm_opp_add(cpu_dev, c->table[0].frequency * 1000,
+							500000);
+				c->table[0].frequency = 912000;
+			}
+                        dev_info(dev, "cpu=%lu, index=%d, freq=%d, src=%d, lval=%d, volt=%d\n",
 		    	cpu, i, c->table[i].frequency,
 		    	src, lval, volt);
 		}
