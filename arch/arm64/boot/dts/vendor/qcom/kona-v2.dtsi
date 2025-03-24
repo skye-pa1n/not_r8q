@@ -396,8 +396,6 @@
 	interrupt-names = "dcvsh0_int", "dcvsh1_int", "dcvsh2_int";
 
 	qcom,cpufreq-table-0 =
-		        < 403200>,
-		        < 691200>,
 			< 979200>,
 			<1344000>,
 			<1516800>,
