@@ -21,13 +21,16 @@ make -j12 O=/home/skye/bomb/out $BUILD_ENV dtbs
 DTB_OUT="/home/skye/bomb/out/arch/arm64/boot/dts/vendor/qcom"
 cat $DTB_OUT/*.dtb > /home/skye/bomb/AnyKernel3/aosp.dtb
 
-make -j12 O=/home/skye/bomb/out $KERNEL_MAKE_ENV $BUILD_ENV dtbo.img
+#make -j12 O=/home/skye/bomb/out $KERNEL_MAKE_ENV $BUILD_ENV dtbo.img
 DTBO_OUT="/home/skye/bomb/out/arch/arm64/boot"
-cp $DTBO_OUT/dtbo.img /home/skye/bomb/dtbo.img
+#cp $DTBO_OUT/dtbo.img /home/skye/bomb/dtbo.img
 
 make -j12 O=/home/skye/bomb/out $KERNEL_MAKE_ENV $BUILD_ENV Image
 IMAGE="/home/skye/bomb/out/arch/arm64/boot/Image"
-cp $IMAGE /home/skye/bomb/AnyKernel3/AOSP
+echo "**Build outputs**"
+ls /home/skye/bomb/out/arch/arm64/boot
+echo "**Build outputs**"
+cp $IMAGE /home/skye/bomb/AnyKernel3/Image
 
 cd /home/skye/bomb/AnyKernel3
 rm *.zip
