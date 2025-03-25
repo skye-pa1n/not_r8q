@@ -1,29 +1,31 @@
 /*
  * CPU Frequency Governor: Pulnice (Safe Threshold Governor)
- * - Basic threshold-based scaling
- * - SysFS tunables with proper locking
- * - Built-in utilization tracking
+ * - Uses 3rd lowest frequency in passive state
+ * - SysFS tunables with mutex protection
+ * - Robust frequency table handling
  */
 
 #include <linux/cpufreq.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/spinlock.h>
-#include <linux/ktime.h>  // Fix for ktime_get_us
-#include <linux/time.h>
+#include <linux/mutex.h>
+#include <linux/ktime.h>
+#include <linux/sort.h>
 
 struct pulnice_policy {
     struct cpufreq_policy *policy;
-    spinlock_t lock;
+    struct mutex lock;
     
     // Tunables
     unsigned int util_high;
     unsigned int util_low;
     unsigned int rate_limit_us;
-    u64 last_update;      // Track last update time
+    u64 last_update;
+    
+    // Frequency management
+    unsigned int passive_freq;  // 3rd lowest freq
 };
-
 
 /* Default tunables */
 #define DEFAULT_UTIL_HIGH      70
@@ -48,9 +50,9 @@ static ssize_t store_util_high(struct cpufreq_policy *policy, const char *buf,
     if (kstrtouint(buf, 0, &value) || value > 100)
         return -EINVAL;
     
-    spin_lock(&pn->lock);
+    mutex_lock(&pn->lock);
     pn->util_high = value;
-    spin_unlock(&pn->lock);
+    mutex_unlock(&pn->lock);
     return count;
 }
 
@@ -69,9 +71,9 @@ static ssize_t store_util_low(struct cpufreq_policy *policy, const char *buf,
     if (kstrtouint(buf, 0, &value) || value > 100)
         return -EINVAL;
     
-    spin_lock(&pn->lock);
+    mutex_lock(&pn->lock);
     pn->util_low = value;
-    spin_unlock(&pn->lock);
+    mutex_unlock(&pn->lock);
     return count;
 }
 
@@ -90,9 +92,9 @@ static ssize_t store_rate_limit(struct cpufreq_policy *policy, const char *buf,
     if (kstrtouint(buf, 0, &value))
         return -EINVAL;
     
-    spin_lock(&pn->lock);
+    mutex_lock(&pn->lock);
     pn->rate_limit_us = value;
-    spin_unlock(&pn->lock);
+    mutex_unlock(&pn->lock);
     return count;
 }
 
@@ -114,6 +116,56 @@ static struct attribute_group pulnice_attr_group = {
 };
 
 /*********************
+ * Frequency Helpers
+ *********************/
+static int compare_freq(const void *a, const void *b)
+{
+    return *(unsigned int *)a - *(unsigned int *)b;
+}
+
+static void init_passive_freq(struct pulnice_policy *pn)
+{
+    struct cpufreq_policy *policy = pn->policy;
+    unsigned int *freqs = NULL;
+    int count = 0, i, j;
+
+    // Collect unique valid frequencies
+    for (i = 0; policy->freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
+        unsigned int freq = policy->freq_table[i].frequency;
+        
+        if (freq == CPUFREQ_ENTRY_INVALID)
+            continue;
+            
+        // Check for duplicates
+        for (j = 0; j < count; j++) {
+            if (freqs[j] == freq)
+                break;
+        }
+        
+        if (j == count) { // New unique freq
+            unsigned int *new_freqs = krealloc(freqs, (count + 1) * sizeof(*freqs),
+                                             GFP_KERNEL);
+            if (!new_freqs) {
+                kfree(freqs);
+                return;
+            }
+            freqs = new_freqs;
+            freqs[count++] = freq;
+        }
+    }
+
+    // Sort and select 3rd lowest
+    if (count > 0) {
+        sort(freqs, count, sizeof(*freqs), compare_freq, NULL);
+        pn->passive_freq = (count >= 3) ? freqs[2] : freqs[count - 1];
+    } else {
+        pn->passive_freq = policy->min;
+    }
+    
+    kfree(freqs);
+}
+
+/*********************
  * Core Logic
  *********************/
 static unsigned int get_util(struct cpufreq_policy *policy)
@@ -126,17 +178,18 @@ static void update_policy(struct pulnice_policy *pn)
 {
     struct cpufreq_policy *policy;
     unsigned int util, new_freq;
-    unsigned long flags;
     u64 now;
 
-    spin_lock_irqsave(&pn->lock, flags);
+    mutex_lock(&pn->lock);
     
     policy = pn->policy;
-    now = ktime_get_ns() / NSEC_PER_USEC;
+    now = ktime_to_us(ktime_get());
     
     /* Rate limiting */
-    if (now < pn->last_update + pn->rate_limit_us)
-        goto out_unlock;
+    if (now < pn->last_update + pn->rate_limit_us) {
+        mutex_unlock(&pn->lock);
+        return;
+    }
     
     util = get_util(policy);
     
@@ -144,20 +197,16 @@ static void update_policy(struct pulnice_policy *pn)
         new_freq = policy->max;
     } else if (util <= pn->util_low) {
         new_freq = policy->min;
-    } else {
-        goto out_unlock;
+    } else {  // Passive state
+        new_freq = pn->passive_freq;
     }
     
     if (new_freq != policy->cur) {
         pn->last_update = now;
-        spin_unlock_irqrestore(&pn->lock, flags);
-        
         __cpufreq_driver_target(policy, new_freq, CPUFREQ_RELATION_C);
-        return;
     }
-
-out_unlock:
-    spin_unlock_irqrestore(&pn->lock, flags);
+    
+    mutex_unlock(&pn->lock);
 }
 
 /*********************
@@ -172,8 +221,12 @@ static int pulnice_init(struct cpufreq_policy *policy)
         return -ENOMEM;
     
     pn->policy = policy;
-    spin_lock_init(&pn->lock);
+    mutex_init(&pn->lock);
     
+    // Initialize frequencies
+    init_passive_freq(pn);
+    
+    // Set defaults
     pn->util_high = DEFAULT_UTIL_HIGH;
     pn->util_low = DEFAULT_UTIL_LOW;
     pn->rate_limit_us = DEFAULT_RATE_LIMIT_US;
@@ -209,16 +262,6 @@ static void pulnice_stop(struct cpufreq_policy *policy)
 static void pulnice_limits(struct cpufreq_policy *policy)
 {
     struct pulnice_policy *pn = policy->governor_data;
-    unsigned long flags;
-
-    if (!policy->fast_switch_enabled) {
-        spin_lock_irqsave(&policy->transition_lock, flags);
-        cpufreq_verify_within_limits(policy, 
-            policy->cpuinfo.min_freq, 
-            policy->cpuinfo.max_freq);
-        spin_unlock_irqrestore(&policy->transition_lock, flags);
-    }
-
     update_policy(pn);
 }
 
